@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>MyGps Admin</title>
+  <style>
+    :root{--bg:#0f172a;--card:#111827;--muted:#94a3b8;--text:#e5e7eb;--accent:#22c55e;--danger:#ef4444;--border:#1f2937;--blue:#2563eb}
+    *{box-sizing:border-box} body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text)}
+    .wrap{max-width:1200px;margin:0 auto;padding:16px}.card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:16px;margin-bottom:16px}
+    h1,h2,p{margin:0}.sub{color:var(--muted);margin-top:6px;line-height:1.6}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px}
+    .stat{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:14px;padding:12px}.label{color:var(--muted);font-size:13px;margin-bottom:6px}
+    .value{font-size:18px;font-weight:700;line-height:1.2;word-break:break-word}.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}
+    input,button{font:inherit} input{padding:12px 14px;border-radius:12px;border:1px solid var(--border);background:#0b1220;color:var(--text);min-width:200px}
+    button{border:0;border-radius:12px;padding:10px 14px;font-weight:600;cursor:pointer;color:white;background:var(--blue)}
+    button.secondary{background:#374151} button.warn{background:#b45309} button.danger{background:#b91c1c} button.success{background:#15803d}
+    .pill{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;border:1px solid var(--border);background:rgba(255,255,255,.03);color:var(--text);font-size:14px}
+    .dot{width:10px;height:10px;border-radius:50%;display:inline-block}.ok{background:var(--accent)} .hidden{display:none !important}
+    table{width:100%;border-collapse:collapse;margin-top:12px;font-size:14px} th,td{border-bottom:1px solid var(--border);padding:10px 8px;text-align:left;vertical-align:top} th{color:var(--muted)}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;word-break:break-all}.notice{padding:12px;border-radius:14px;border:1px solid var(--border);background:rgba(255,255,255,.03);margin-top:12px;line-height:1.6}
+    @media (max-width:900px){.grid{grid-template-columns:1fr}input{min-width:unset;width:100%}.row>*{width:100%}}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>MyGps Admin</h1>
+    <p class="sub">Закрытая админка для истории, live-сессий и ручной очистки. Доступ только для UID, который добавлен в <span class="mono">admins/{uid}: true</span>.</p>
+  </div>
+
+  <div class="card" id="authCard">
+    <h2>Вход</h2>
+    <div class="row"><button id="googleBtn">Войти через Google</button></div>
+    <div class="row"><input id="emailInput" type="email" placeholder="Email" /><input id="passwordInput" type="password" placeholder="Пароль" /></div>
+    <div class="row"><button id="emailLoginBtn" class="secondary">Войти по Email</button><button id="emailRegisterBtn" class="success">Создать Email-аккаунт</button></div>
+    <div class="notice" id="authMessage">Сначала войди. Если после входа страница пишет, что доступа нет, добавь свой UID в Firebase.</div>
+  </div>
+
+  <div id="adminPanel" class="hidden">
+    <div class="card">
+      <div class="row"><div class="pill"><span class="dot ok"></span><span id="userInfo">Вы вошли</span></div><button id="logoutBtn" class="secondary">Выйти</button></div>
+    </div>
+
+    <div class="card">
+      <h2>Сводка</h2>
+      <div class="grid">
+        <div class="stat"><div class="label">Точек за период</div><div class="value" id="pointsCount">0</div></div>
+        <div class="stat"><div class="label">Километраж</div><div class="value" id="distanceValue">0 км</div></div>
+        <div class="stat"><div class="label">Средняя скорость</div><div class="value" id="avgSpeedValue">0 км/ч</div></div>
+        <div class="stat"><div class="label">Максимальная скорость</div><div class="value" id="maxSpeedValue">0 км/ч</div></div>
+      </div>
+      <div class="row"><input id="fromInput" type="datetime-local" /><input id="toInput" type="datetime-local" /></div>
+      <div class="row"><button id="todayBtn">Сегодня</button><button id="yesterdayBtn" class="secondary">Вчера</button><button id="weekBtn" class="secondary">Неделя</button></div>
+      <div class="row"><button id="refreshHistoryBtn">Обновить историю</button><button id="exportJsonBtn" class="secondary">Экспорт JSON</button><button id="exportCsvBtn" class="secondary">Экспорт CSV</button><button id="deleteRangeBtn" class="danger">Удалить период</button></div>
+    </div>
+
+    <div class="card">
+      <h2>Live-сессии</h2>
+      <div class="row"><button id="refreshSessionsBtn">Обновить live-сессии</button><button id="cleanupSessionsBtn" class="warn">Очистить истёкшие сессии</button></div>
+      <div style="overflow:auto"><table><thead><tr><th>Token</th><th>Статус</th><th>Истекает</th><th>Открытия</th><th>Первое / Последнее</th><th>Действия</th></tr></thead><tbody id="sessionsTbody"></tbody></table></div>
+    </div>
+
+    <div class="card">
+      <h2>История точек</h2>
+      <div style="overflow:auto"><table><thead><tr><th>Время</th><th>Координаты</th><th>Точность</th><th>Скорость</th></tr></thead><tbody id="historyTbody"></tbody></table></div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+import { getDatabase, ref, get, onValue, remove, update } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCXNCY-IpkhAXb8jNPhN8gf2UdOfPBc5gM",
+  authDomain: "mygpslive-57196.firebaseapp.com",
+  databaseURL: "https://mygpslive-57196-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "mygpslive-57196",
+  storageBucket: "mygpslive-57196.firebasestorage.app",
+  messagingSenderId: "20781107701",
+  appId: "1:20781107701:web:bd47061b9aca13abbeb8bc",
+  measurementId: "G-BSCVNY9LH0"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getDatabase(app);
+const provider = new GoogleAuthProvider();
+
+const authCard = document.getElementById("authCard");
+const adminPanel = document.getElementById("adminPanel");
+const authMessage = document.getElementById("authMessage");
+const userInfo = document.getElementById("userInfo");
+const emailInput = document.getElementById("emailInput");
+const passwordInput = document.getElementById("passwordInput");
+const pointsCount = document.getElementById("pointsCount");
+const distanceValue = document.getElementById("distanceValue");
+const avgSpeedValue = document.getElementById("avgSpeedValue");
+const maxSpeedValue = document.getElementById("maxSpeedValue");
+const fromInput = document.getElementById("fromInput");
+const toInput = document.getElementById("toInput");
+const sessionsTbody = document.getElementById("sessionsTbody");
+const historyTbody = document.getElementById("historyTbody");
+
+let allHistoryPoints = [];
+let allSessions = {};
+
+function toLocalDateTimeValue(date){
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+function setDefaultPeriodToday(){
+  const now = new Date(); const start = new Date(); start.setHours(0,0,0,0);
+  fromInput.value = toLocalDateTimeValue(start); toInput.value = toLocalDateTimeValue(now);
+}
+function parseLocalInput(v){ return v ? new Date(v).getTime() : null; }
+function fmtTime(v){ return v ? new Date(v).toLocaleString("ru-RU") : "—"; }
+function distanceMeters(a,b){
+  const toRad = (v) => v * Math.PI / 180, R = 6371000;
+  const dLat = toRad(b.latitude - a.latitude), dLon = toRad(b.longitude - a.longitude);
+  const lat1 = toRad(a.latitude), lat2 = toRad(b.latitude);
+  const x = Math.sin(dLat/2)**2 + Math.sin(dLon/2)**2 * Math.cos(lat1) * Math.cos(lat2);
+  return R * (2 * Math.atan2(Math.sqrt(x), Math.sqrt(1-x)));
+}
+function filteredHistory(){
+  const from = parseLocalInput(fromInput.value), to = parseLocalInput(toInput.value);
+  return allHistoryPoints.filter((p) => {
+    const t = Number(p.timestamp || 0);
+    if (from && t < from) return false;
+    if (to && t > to) return false;
+    return true;
+  });
+}
+function computeSummary(points){
+  if (!points.length) return {count:0, km:0, avgSpeed:0, maxSpeed:0};
+  let meters = 0; for (let i=1;i<points.length;i++) meters += distanceMeters(points[i-1], points[i]);
+  const speeds = points.map(p => Number(p.speed || 0)).filter(v => Number.isFinite(v) && v > 0);
+  const avgSpeed = speeds.length ? speeds.reduce((a,b)=>a+b,0)/speeds.length : 0;
+  const maxSpeed = speeds.length ? Math.max(...speeds) : 0;
+  return {count: points.length, km: meters/1000, avgSpeed, maxSpeed};
+}
+function renderHistory(){
+  const pts = filteredHistory(), s = computeSummary(pts);
+  pointsCount.textContent = String(s.count);
+  distanceValue.textContent = `${s.km.toFixed(2)} км`;
+  avgSpeedValue.textContent = `${s.avgSpeed.toFixed(1)} км/ч`;
+  maxSpeedValue.textContent = `${s.maxSpeed.toFixed(1)} км/ч`;
+  historyTbody.innerHTML = "";
+  pts.slice().reverse().slice(0,300).forEach((p) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${fmtTime(p.timestamp)}</td><td class="mono">${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}</td><td>${p.accuracy ?? "—"}</td><td>${p.speed != null ? Number(p.speed).toFixed(1) + " км/ч" : "—"}</td>`;
+    historyTbody.appendChild(tr);
+  });
+}
+function downloadText(name, content, type){
+  const blob = new Blob([content], {type}); const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = url; a.download = name; a.click(); URL.revokeObjectURL(url);
+}
+async function loadHistory(){
+  const snap = await get(ref(db, "history/default"));
+  const raw = snap.val() || {};
+  allHistoryPoints = Object.values(raw).filter(Boolean).sort((a,b) => Number(a.timestamp || 0) - Number(b.timestamp || 0));
+  renderHistory();
+}
+function exportJson(){ downloadText("history_export.json", JSON.stringify(filteredHistory(), null, 2), "application/json"); }
+function exportCsv(){
+  const pts = filteredHistory(); const lines = ["timestamp,latitude,longitude,accuracy,speed"];
+  pts.forEach((p)=>lines.push([p.timestamp ?? "", p.latitude ?? "", p.longitude ?? "", p.accuracy ?? "", p.speed ?? ""].join(",")));
+  downloadText("history_export.csv", lines.join("\n"), "text/csv");
+}
+async function deleteRange(){
+  const pts = filteredHistory();
+  if (!pts.length) return alert("Нет точек в выбранном диапазоне.");
+  if (!confirm(`Удалить ${pts.length} точек за выбранный период?`)) return;
+  const updates = {}; pts.forEach((p) => updates[`history/default/${String(p.timestamp)}`] = null);
+  await update(ref(db), updates); await loadHistory(); alert("Период удалён.");
+}
+function renderSessions(){
+  sessionsTbody.innerHTML = "";
+  const entries = Object.entries(allSessions).filter(([k]) => k !== "_init").sort((a,b) => Number((b[1]?.meta?.createdAt || 0)) - Number((a[1]?.meta?.createdAt || 0)));
+  if (!entries.length) { sessionsTbody.innerHTML = '<tr><td colspan="6">Сессий пока нет</td></tr>'; return; }
+  entries.forEach(([token, session]) => {
+    const meta = session?.meta || {}, stats = session?.viewStats || {};
+    const active = !!meta.active, expiresAt = Number(meta.expiresAt || 0), now = Date.now();
+    let statusText = "завершена"; if (active && expiresAt > now) statusText = "активна"; else if (active && expiresAt <= now) statusText = "истекла";
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td class="mono">${token}</td><td>${statusText}</td><td>${fmtTime(expiresAt)}</td><td>${stats.openCount || 0}</td><td>${fmtTime(stats.firstOpenAt)}<br>${fmtTime(stats.lastOpenAt)}</td><td><div class="row"><button class="secondary" data-copy="${token}">Копировать ссылку</button><button class="danger" data-delete="${token}">Удалить</button></div></td>`;
+    sessionsTbody.appendChild(tr);
+  });
+  sessionsTbody.querySelectorAll("button[data-copy]").forEach((b) => b.onclick = async () => { await navigator.clipboard.writeText(`https://mygpstrack.github.io/mygps/live.html?session=${b.dataset.copy}`); alert("Ссылка скопирована"); });
+  sessionsTbody.querySelectorAll("button[data-delete]").forEach((b) => b.onclick = async () => { if (!confirm(`Удалить live-сессию ${b.dataset.delete}?`)) return; await remove(ref(db, `liveSessions/${b.dataset.delete}`)); });
+}
+async function loadSessions(){ const snap = await get(ref(db, "liveSessions")); allSessions = snap.val() || {}; renderSessions(); }
+async function cleanupExpiredSessions(){
+  const now = Date.now(), updates = {}; let count = 0;
+  Object.entries(allSessions).forEach(([token, session]) => {
+    if (token === "_init") return;
+    const meta = session?.meta || {}, expiresAt = Number(meta.expiresAt || 0), active = !!meta.active;
+    if (!active || (expiresAt && expiresAt < now)) { updates[`liveSessions/${token}`] = null; count++; }
+  });
+  if (!count) return alert("Истёкших сессий не найдено.");
+  if (!confirm(`Удалить ${count} старых/завершённых live-сессий?`)) return;
+  await update(ref(db), updates); await loadSessions(); alert("Очистка завершена.");
+}
+document.getElementById("googleBtn").onclick = async () => { try { await signInWithPopup(auth, provider); } catch (e) { alert("Ошибка Google-входа: " + (e.message || e)); } };
+document.getElementById("emailLoginBtn").onclick = async () => { try { await signInWithEmailAndPassword(auth, emailInput.value.trim(), passwordInput.value); } catch (e) { alert("Ошибка входа по email: " + (e.message || e)); } };
+document.getElementById("emailRegisterBtn").onclick = async () => { try { await createUserWithEmailAndPassword(auth, emailInput.value.trim(), passwordInput.value); } catch (e) { alert("Ошибка создания email-аккаунта: " + (e.message || e)); } };
+document.getElementById("logoutBtn").onclick = async () => { await signOut(auth); };
+document.getElementById("todayBtn").onclick = () => { const now = new Date(), start = new Date(); start.setHours(0,0,0,0); fromInput.value = toLocalDateTimeValue(start); toInput.value = toLocalDateTimeValue(now); renderHistory(); };
+document.getElementById("yesterdayBtn").onclick = () => { const start = new Date(); start.setDate(start.getDate()-1); start.setHours(0,0,0,0); const end = new Date(start); end.setHours(23,59,59,999); fromInput.value = toLocalDateTimeValue(start); toInput.value = toLocalDateTimeValue(end); renderHistory(); };
+document.getElementById("weekBtn").onclick = () => { const now = new Date(), start = new Date(); start.setDate(start.getDate()-7); fromInput.value = toLocalDateTimeValue(start); toInput.value = toLocalDateTimeValue(now); renderHistory(); };
+document.getElementById("refreshHistoryBtn").onclick = loadHistory;
+document.getElementById("exportJsonBtn").onclick = exportJson;
+document.getElementById("exportCsvBtn").onclick = exportCsv;
+document.getElementById("deleteRangeBtn").onclick = deleteRange;
+document.getElementById("refreshSessionsBtn").onclick = loadSessions;
+document.getElementById("cleanupSessionsBtn").onclick = cleanupExpiredSessions;
+
+onAuthStateChanged(auth, async (user) => {
+  if (!user) {
+    authCard.classList.remove("hidden"); adminPanel.classList.add("hidden");
+    authMessage.innerHTML = 'Сначала войди. Если после входа страница пишет, что доступа нет, добавь свой UID в Firebase во вкладке Data: <div class="mono">admins/ТВОЙ_UID = true</div>';
+    return;
+  }
+  const adminSnap = await get(ref(db, `admins/${user.uid}`));
+  const allowed = adminSnap.val() === true;
+  if (!allowed) {
+    authCard.classList.remove("hidden"); adminPanel.classList.add("hidden");
+    authMessage.innerHTML = `Ты вошёл, но ещё не добавлен как админ.<br><br>Добавь в Firebase во вкладке Data:<br><span class="mono">admins/${user.uid} = true</span><br><br>Потом обнови страницу.`;
+    return;
+  }
+  authCard.classList.add("hidden"); adminPanel.classList.remove("hidden");
+  userInfo.textContent = `${user.email || "Google user"} • UID: ${user.uid}`;
+  setDefaultPeriodToday(); await loadHistory(); await loadSessions();
+  onValue(ref(db, "liveSessions"), (snap) => { allSessions = snap.val() || {}; renderSessions(); });
+  onValue(ref(db, "history/default"), (snap) => { const raw = snap.val() || {}; allHistoryPoints = Object.values(raw).filter(Boolean).sort((a,b) => Number(a.timestamp || 0) - Number(b.timestamp || 0)); renderHistory(); });
+});
+</script>
+</body>
+</html>
