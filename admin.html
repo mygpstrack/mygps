@@ -11,6 +11,7 @@
     .wrap{max-width:1280px;margin:0 auto;padding:16px}.card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:16px;margin-bottom:16px}
     h1,h2,p{margin:0}.sub{color:var(--muted);margin-top:6px;line-height:1.6}
     .grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:12px}
+    .grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px}
     .stat{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:14px;padding:12px}.label{color:var(--muted);font-size:13px;margin-bottom:6px}
     .value{font-size:18px;font-weight:700;line-height:1.2;word-break:break-word}.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}
     .tabs{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.tab-btn{background:#1f2937}.tab-btn.active{background:var(--blue)}.hidden{display:none!important}
@@ -18,12 +19,15 @@
     button{border:0;border-radius:12px;padding:10px 14px;font-weight:600;cursor:pointer;color:white;background:var(--blue)}
     button.secondary{background:#374151} button.warn{background:#b45309} button.danger{background:#b91c1c} button.success{background:#15803d} button.small{padding:6px 10px;font-size:13px}
     .pill{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;border:1px solid var(--border);background:rgba(255,255,255,.03);font-size:14px}
-    .dot{width:10px;height:10px;border-radius:50%;display:inline-block}.ok{background:var(--accent)}.notice,.address-box,.error{padding:12px;border-radius:14px;border:1px solid var(--border);background:rgba(255,255,255,.03);margin-top:12px;line-height:1.6}
+    .dot{width:10px;height:10px;border-radius:50%;display:inline-block}.ok{background:var(--accent)}
+    .notice,.address-box,.error{padding:12px;border-radius:14px;border:1px solid var(--border);background:rgba(255,255,255,.03);margin-top:12px;line-height:1.6}
     .error{border-color:#7f1d1d;background:rgba(127,29,29,.25);color:#fecaca}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;word-break:break-all}
     table{width:100%;border-collapse:collapse;margin-top:12px;font-size:14px} th,td{border-bottom:1px solid var(--border);padding:10px 8px;text-align:left;vertical-align:top} th{color:var(--muted)}
     tr.clickable{cursor:pointer} tr.clickable:hover{background:rgba(255,255,255,.04)}
     #historyMap,#liveMap{width:100%;height:420px;border-radius:16px;overflow:hidden;border:1px solid var(--border);margin-top:12px}
-    @media (max-width:1000px){.grid4{grid-template-columns:repeat(2,minmax(0,1fr))}}
+    .chartWrap{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:16px;padding:12px}
+    canvas{max-width:100%}
+    @media (max-width:1000px){.grid4{grid-template-columns:repeat(2,minmax(0,1fr))}.grid2{grid-template-columns:1fr}}
     @media (max-width:900px){.grid4{grid-template-columns:1fr} input{min-width:unset;width:100%} .row>*{width:100%} #historyMap,#liveMap{height:320px}}
   </style>
 </head>
@@ -31,7 +35,7 @@
 <div class="wrap">
   <div class="card">
     <h1>MyGps Admin</h1>
-    <p class="sub">История, live-сессии, карта, экспорт и удаление точек.</p>
+    <p class="sub">История, live-сессии, карта, экспорт, графики и оценка объёма данных.</p>
   </div>
 
   <div class="card" id="authCard">
@@ -49,6 +53,8 @@
       <div class="tabs">
         <button class="tab-btn active" data-tab="nowPanel">Сейчас</button>
         <button class="tab-btn" data-tab="historyPanel">История</button>
+        <button class="tab-btn" data-tab="reportsPanel">Отчёты и графики</button>
+        <button class="tab-btn" data-tab="usagePanel">Объём данных</button>
         <button class="tab-btn" data-tab="sessionsPanel">Live-сессии</button>
       </div>
     </div>
@@ -114,6 +120,30 @@
       </div>
     </div>
 
+    <div id="reportsPanel" class="hidden">
+      <div class="card">
+        <h2>Отчёты и графики</h2>
+        <div class="grid2">
+          <div class="chartWrap"><h3>Скорость по точкам</h3><canvas id="speedChart" height="200"></canvas></div>
+          <div class="chartWrap"><h3>Пробег по дням</h3><canvas id="distanceChart" height="200"></canvas></div>
+        </div>
+        <div class="notice">Графики строятся по выбранному периоду из вкладки «История».</div>
+      </div>
+    </div>
+
+    <div id="usagePanel" class="hidden">
+      <div class="card">
+        <h2>Объём данных</h2>
+        <div class="grid4">
+          <div class="stat"><div class="label">Оценка history/default</div><div class="value" id="historySize">—</div></div>
+          <div class="stat"><div class="label">Оценка liveSessions</div><div class="value" id="sessionsSize">—</div></div>
+          <div class="stat"><div class="label">Всего в базе</div><div class="value" id="totalSize">—</div></div>
+          <div class="stat"><div class="label">Точек в истории</div><div class="value" id="historyCount">0</div></div>
+        </div>
+        <div class="notice">Это оценка текущего объёма данных по содержимому базы. Точное дневное потребление и официальные лимиты смотри в Firebase Console → Usage and billing / Realtime Database → Usage.</div>
+      </div>
+    </div>
+
     <div id="sessionsPanel" class="hidden">
       <div class="card">
         <h2>Live-сессии</h2>
@@ -132,6 +162,7 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
@@ -160,8 +191,9 @@ const pointsCount=qs("pointsCount"), distanceValue=qs("distanceValue"), avgSpeed
 const fromInput=qs("fromInput"), toInput=qs("toInput"), sessionsTbody=qs("sessionsTbody"), historyTbody=qs("historyTbody");
 const nowStatus=qs("nowStatus"), nowSpeed=qs("nowSpeed"), nowAccuracy=qs("nowAccuracy"), nowUpdated=qs("nowUpdated"), nowBearing=qs("nowBearing"), nowIdle=qs("nowIdle"), nowToken=qs("nowToken"), nowAddress=qs("nowAddress");
 const startAddress=qs("startAddress"), endAddress=qs("endAddress"), selectedAddress=qs("selectedAddress");
+const historySize=qs("historySize"), sessionsSize=qs("sessionsSize"), totalSize=qs("totalSize"), historyCount=qs("historyCount");
 
-let allHistoryPoints=[], allSessions={}, liveAutoCenter=true, activeLiveUnsub=null;
+let allHistoryPoints=[], allSessions={}, liveAutoCenter=true, activeLiveUnsub=null, speedChart=null, distanceChart=null;
 const geocodeCache = new Map();
 
 const historyMap = L.map("historyMap").setView([56.95,24.10],12);
@@ -181,10 +213,10 @@ function hideError(){ errorBox.classList.add("hidden"); errorBox.textContent="";
 document.querySelectorAll(".tab-btn").forEach(btn=>{
   btn.onclick=()=>{
     document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
-    document.querySelectorAll("#nowPanel,#historyPanel,#sessionsPanel").forEach(p=>p.classList.add("hidden"));
+    document.querySelectorAll("#nowPanel,#historyPanel,#reportsPanel,#usagePanel,#sessionsPanel").forEach(p=>p.classList.add("hidden"));
     btn.classList.add("active");
     qs(btn.dataset.tab).classList.remove("hidden");
-    setTimeout(()=>{historyMap.invalidateSize(); liveMap.invalidateSize();}, 50);
+    setTimeout(()=>{historyMap.invalidateSize(); liveMap.invalidateSize(); speedChart?.resize(); distanceChart?.resize();}, 50);
   };
 });
 
@@ -242,6 +274,45 @@ async function focusPoint(p){
   historyMap.setView([lat,lon],17);
   selectedAddress.textContent = await reverseGeocode(lat,lon);
 }
+function formatSize(bytes){
+  if(bytes < 1024) return `${bytes} B`;
+  if(bytes < 1024*1024) return `${(bytes/1024).toFixed(1)} KB`;
+  return `${(bytes/(1024*1024)).toFixed(2)} MB`;
+}
+function updateUsage(){
+  const historyObj = Object.fromEntries(allHistoryPoints.map(p => [String(p.timestamp), p]));
+  const historyBytes = new Blob([JSON.stringify(historyObj)]).size;
+  const sessionsBytes = new Blob([JSON.stringify(allSessions || {})]).size;
+  historySize.textContent = formatSize(historyBytes);
+  sessionsSize.textContent = formatSize(sessionsBytes);
+  totalSize.textContent = formatSize(historyBytes + sessionsBytes);
+  historyCount.textContent = String(allHistoryPoints.length);
+}
+function updateCharts(points){
+  const speedLabels = points.slice(-80).map(p => new Date(Number(p.timestamp||0)).toLocaleTimeString("ru-RU", {hour:"2-digit", minute:"2-digit"}));
+  const speedData = points.slice(-80).map(p => Number(p.speed || 0));
+  if(speedChart) speedChart.destroy();
+  speedChart = new Chart(qs("speedChart"), {
+    type: "line",
+    data: { labels: speedLabels, datasets: [{ label: "Скорость, км/ч", data: speedData, tension: 0.25 }] },
+    options: { responsive: true, plugins: { legend: { display: false } } }
+  });
+
+  const byDay = {};
+  for(let i=1;i<points.length;i++){
+    const prev = points[i-1], cur = points[i];
+    const day = new Date(Number(cur.timestamp||0)).toLocaleDateString("ru-RU");
+    byDay[day] = (byDay[day] || 0) + distanceMeters(prev, cur) / 1000;
+  }
+  const dayLabels = Object.keys(byDay);
+  const dayValues = dayLabels.map(d => Number(byDay[d].toFixed(2)));
+  if(distanceChart) distanceChart.destroy();
+  distanceChart = new Chart(qs("distanceChart"), {
+    type: "bar",
+    data: { labels: dayLabels, datasets: [{ label: "Пробег, км", data: dayValues }] },
+    options: { responsive: true, plugins: { legend: { display: false } } }
+  });
+}
 function renderHistory(){
   const pts=filteredHistory(), s=computeSummary(pts);
   pointsCount.textContent=String(s.count); distanceValue.textContent=`${s.km.toFixed(2)} км`; avgSpeedValue.textContent=`${s.avgSpeed.toFixed(1)} км/ч`; maxSpeedValue.textContent=`${s.maxSpeed.toFixed(1)} км/ч`;
@@ -254,9 +325,10 @@ function renderHistory(){
     historyTbody.appendChild(tr);
   });
   updateHistoryMap(pts);
+  updateCharts(pts);
 }
 function downloadText(name,content,type){ const blob=new Blob([content],{type}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=name; a.click(); URL.revokeObjectURL(url); }
-async function loadHistory(){ const snap=await get(ref(db, "history/default")); const raw=snap.val()||{}; allHistoryPoints=Object.values(raw).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0)); renderHistory(); }
+async function loadHistory(){ const snap=await get(ref(db, "history/default")); const raw=snap.val()||{}; allHistoryPoints=Object.values(raw).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0)); updateUsage(); renderHistory(); }
 function exportJson(){ downloadText("history_export.json", JSON.stringify(filteredHistory(), null, 2), "application/json"); }
 function exportCsv(){ const pts=filteredHistory(); const lines=["timestamp,latitude,longitude,accuracy,speed"]; pts.forEach(p=>lines.push([p.timestamp??"",p.latitude??"",p.longitude??"",p.accuracy??"",p.speed??""].join(","))); downloadText("history_export.csv", lines.join("\\n"), "text/csv"); }
 function exportGpx(){ const pts=filteredHistory(); const lines=['<?xml version="1.0" encoding="UTF-8"?>','<gpx version="1.1" creator="MyGps Admin" xmlns="http://www.topografix.com/GPX/1/1">','<trk><name>History Export</name><trkseg>']; pts.forEach(p=>lines.push(`<trkpt lat="${p.latitude}" lon="${p.longitude}"><time>${new Date(Number(p.timestamp||0)).toISOString()}</time></trkpt>`)); lines.push('</trkseg></trk></gpx>'); downloadText("history_export.gpx", lines.join(""), "application/gpx+xml"); }
@@ -290,7 +362,7 @@ function renderSessions(){
   sessionsTbody.querySelectorAll("button[data-copy]").forEach((b)=>b.onclick=async()=>{ await navigator.clipboard.writeText(`https://mygpstrack.github.io/mygps/live.html?session=${b.dataset.copy}`); alert("Ссылка скопирована"); });
   sessionsTbody.querySelectorAll("button[data-delete]").forEach((b)=>b.onclick=async()=>{ if(!confirm(`Удалить live-сессию ${b.dataset.delete}?`)) return; await remove(ref(db, `liveSessions/${b.dataset.delete}`)); });
 }
-async function loadSessions(){ const snap=await get(ref(db, "liveSessions")); allSessions=snap.val()||{}; renderSessions(); updateNowFromSessions(); }
+async function loadSessions(){ const snap=await get(ref(db, "liveSessions")); allSessions=snap.val()||{}; updateUsage(); renderSessions(); updateNowFromSessions(); }
 function updateLiveView(token, session){
   const meta=session?.meta||{}, lp=session?.lastPoint||{}, recent=session?.recentPoints||{};
   const pts=Object.values(recent).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
@@ -361,8 +433,8 @@ onAuthStateChanged(auth, async(user)=>{
   userInfo.textContent=user.email||"Google user";
   setDefaultPeriodToday();
   await loadHistory(); await loadSessions();
-  onValue(ref(db, "liveSessions"), (snap)=>{ allSessions=snap.val()||{}; renderSessions(); updateNowFromSessions(); });
-  onValue(ref(db, "history/default"), (snap)=>{ const raw=snap.val()||{}; allHistoryPoints=Object.values(raw).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0)); renderHistory(); });
+  onValue(ref(db, "liveSessions"), (snap)=>{ allSessions=snap.val()||{}; updateUsage(); renderSessions(); updateNowFromSessions(); });
+  onValue(ref(db, "history/default"), (snap)=>{ const raw=snap.val()||{}; allHistoryPoints=Object.values(raw).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0)); updateUsage(); renderHistory(); });
 });
 </script>
 </body>
