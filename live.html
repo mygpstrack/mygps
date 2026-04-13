@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>MyGps Live</title>
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+  <style>
+    :root{
+      --bg:#0f172a;
+      --card:#111827;
+      --muted:#94a3b8;
+      --text:#e5e7eb;
+      --accent:#22c55e;
+      --warn:#eab308;
+      --danger:#ef4444;
+      --border:#1f2937;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+      background:var(--bg);
+      color:var(--text);
+    }
+    .wrap{
+      max-width:1100px;
+      margin:0 auto;
+      padding:16px;
+    }
+    .top{
+      display:grid;
+      grid-template-columns:1.3fr .7fr;
+      gap:16px;
+    }
+    .card{
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius:20px;
+      padding:16px;
+      box-shadow:0 8px 30px rgba(0,0,0,.18);
+    }
+    h1,h2,p{margin:0}
+    .sub{color:var(--muted); margin-top:6px; line-height:1.6}
+    #map{
+      width:100%;
+      height:65vh;
+      border-radius:16px;
+      overflow:hidden;
+      margin-top:16px;
+      border:1px solid var(--border);
+    }
+    .grid{
+      display:grid;
+      grid-template-columns:repeat(2,minmax(0,1fr));
+      gap:12px;
+      margin-top:12px;
+    }
+    .stat{
+      background:rgba(255,255,255,.03);
+      border:1px solid var(--border);
+      border-radius:14px;
+      padding:12px;
+    }
+    .label{
+      color:var(--muted);
+      font-size:13px;
+      margin-bottom:6px;
+    }
+    .value{
+      font-size:18px;
+      font-weight:700;
+      line-height:1.2;
+      word-break:break-word;
+    }
+    .row{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      flex-wrap:wrap;
+      margin-top:12px;
+    }
+    .pill{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:8px 12px;
+      border-radius:999px;
+      border:1px solid var(--border);
+      background:rgba(255,255,255,.03);
+      color:var(--text);
+      font-size:14px;
+    }
+    .dot{
+      width:10px;
+      height:10px;
+      border-radius:50%;
+      display:inline-block;
+    }
+    .ok{background:var(--accent)}
+    .warn{background:var(--warn)}
+    .bad{background:var(--danger)}
+    .btn{
+      border:0;
+      border-radius:12px;
+      padding:10px 14px;
+      font-weight:600;
+      cursor:pointer;
+      background:#1d4ed8;
+      color:white;
+    }
+    .btn.secondary{ background:#374151; }
+    .footer{
+      margin-top:16px;
+      color:var(--muted);
+      font-size:13px;
+    }
+    code{
+      background:rgba(255,255,255,.05);
+      padding:2px 6px;
+      border-radius:8px;
+      word-break:break-all;
+    }
+    @media (max-width: 800px){
+      .top{grid-template-columns:1fr}
+      #map{height:55vh}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div class="card">
+        <h1>MyGps Live</h1>
+        <p class="sub">Публичная страница live-трансляции. Читает данные из Firebase по параметру <code>?session=...</code>.</p>
+
+        <div class="row">
+          <div class="pill"><span class="dot warn" id="liveDot"></span><span id="liveStatus">Проверка статуса…</span></div>
+          <div class="pill">Session: <strong id="sessionText">—</strong></div>
+        </div>
+
+        <div class="grid">
+          <div class="stat">
+            <div class="label">Последняя точка</div>
+            <div class="value" id="lastPoint">—</div>
+          </div>
+          <div class="stat">
+            <div class="label">Последнее обновление</div>
+            <div class="value" id="lastUpdate">—</div>
+          </div>
+          <div class="stat">
+            <div class="label">Осталось времени</div>
+            <div class="value" id="remain">—</div>
+          </div>
+          <div class="stat">
+            <div class="label">Открытий ссылки</div>
+            <div class="value" id="openCount">0</div>
+          </div>
+          <div class="stat">
+            <div class="label">Первое открытие</div>
+            <div class="value" id="firstOpen">—</div>
+          </div>
+          <div class="stat">
+            <div class="label">Последнее открытие</div>
+            <div class="value" id="lastOpen">—</div>
+          </div>
+        </div>
+
+        <div class="row">
+          <button class="btn" id="fitBtn">Показать весь маршрут</button>
+          <button class="btn secondary" id="lastBtn">К последней точке</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Как открывать</h2>
+        <div class="sub">
+          Ссылка будет такого вида:<br>
+          <code>https://mygpstrack.github.io/mygps/live.html?session=TOKEN</code><br><br>
+          Файл нужно загрузить в корень репозитория <code>mygps</code>.
+        </div>
+      </div>
+    </div>
+
+    <div id="map"></div>
+
+    <div class="footer">
+      Если <code>session</code> не передан в URL или сессия не найдена, страница покажет пустую карту и статус ошибки.
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""></script>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+    import { getDatabase, ref, onValue, runTransaction, get } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCXNCY-IpkhAXb8jNPhN8gf2UdOfPBc5gM",
+      authDomain: "mygpslive-57196.firebaseapp.com",
+      databaseURL: "https://mygpslive-57196-default-rtdb.europe-west1.firebasedatabase.app",
+      projectId: "mygpslive-57196",
+      storageBucket: "mygpslive-57196.firebasestorage.app",
+      messagingSenderId: "20781107701",
+      appId: "1:20781107701:web:bd47061b9aca13abbeb8bc",
+      measurementId: "G-BSCVNY9LH0"
+    };
+
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get("session") || "";
+    document.getElementById("sessionText").textContent = sessionId || "нет";
+
+    const map = L.map("map").setView([56.95, 24.10], 12);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "&copy; OpenStreetMap"
+    }).addTo(map);
+
+    const polyline = L.polyline([], { weight: 5 }).addTo(map);
+    const marker = L.circleMarker([56.95, 24.10], {
+      radius: 8,
+      color: "#22c55e",
+      fillColor: "#22c55e",
+      fillOpacity: 1
+    }).addTo(map);
+
+    function fmtTime(value){
+      if(!value) return "—";
+      return new Date(value).toLocaleString("ru-RU");
+    }
+
+    function fmtRemain(ms){
+      if(ms == null) return "—";
+      const sec = Math.max(0, Math.floor(ms / 1000));
+      const h = Math.floor(sec / 3600);
+      const m = Math.floor((sec % 3600) / 60);
+      const s = sec % 60;
+      return h > 0
+        ? `${h}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`
+        : `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+    }
+
+    function setStatus(text, cls){
+      document.getElementById("liveStatus").textContent = text;
+      const dot = document.getElementById("liveDot");
+      dot.className = "dot " + cls;
+    }
+
+    document.getElementById("fitBtn").onclick = () => {
+      const latlngs = polyline.getLatLngs();
+      if (latlngs.length) map.fitBounds(polyline.getBounds(), { padding: [30,30] });
+    };
+
+    document.getElementById("lastBtn").onclick = () => {
+      map.setView(marker.getLatLng(), 16);
+    };
+
+    if (!sessionId) {
+      setStatus("Нет session в ссылке", "warn");
+    } else {
+      const app = initializeApp(firebaseConfig);
+      const db = getDatabase(app);
+
+      const baseRef = ref(db, `liveSessions/${sessionId}`);
+      const metaRef = ref(db, `liveSessions/${sessionId}/meta`);
+      const lastPointRef = ref(db, `liveSessions/${sessionId}/lastPoint`);
+      const recentPointsRef = ref(db, `liveSessions/${sessionId}/recentPoints`);
+      const statsRef = ref(db, `liveSessions/${sessionId}/viewStats`);
+
+      runTransaction(statsRef, (current) => {
+        const now = Date.now();
+        const value = current || {};
+        return {
+          status: "opened",
+          openCount: (value.openCount || 0) + 1,
+          firstOpenAt: value.firstOpenAt || now,
+          lastOpenAt: now
+        };
+      }).catch((err) => console.error("viewStats update error", err));
+
+      onValue(metaRef, (snap) => {
+        const data = snap.val();
+        if (!data) {
+          setStatus("Сессия не найдена", "bad");
+          return;
+        }
+
+        const active = !!data.active;
+        const expiresAt = Number(data.expiresAt || 0);
+        const now = Date.now();
+        const remainingMs = Math.max(0, expiresAt - now);
+
+        if (active && expiresAt > now) setStatus("Трансляция активна", "ok");
+        else if (!active) setStatus("Трансляция завершена", "bad");
+        else setStatus("Ссылка истекла", "warn");
+
+        document.getElementById("remain").textContent = fmtRemain(remainingMs);
+      });
+
+      onValue(lastPointRef, (snap) => {
+        const p = snap.val();
+        if (!p || p.latitude == null || p.longitude == null) return;
+
+        const lat = Number(p.latitude);
+        const lon = Number(p.longitude);
+
+        marker.setLatLng([lat, lon]);
+        document.getElementById("lastPoint").textContent = `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+        document.getElementById("lastUpdate").textContent = fmtTime(p.timestamp);
+      });
+
+      onValue(statsRef, (snap) => {
+        const stats = snap.val() || {};
+        document.getElementById("openCount").textContent = String(stats.openCount || 0);
+        document.getElementById("firstOpen").textContent = fmtTime(stats.firstOpenAt);
+        document.getElementById("lastOpen").textContent = fmtTime(stats.lastOpenAt);
+      });
+
+      onValue(recentPointsRef, (snap) => {
+        const raw = snap.val() || {};
+        const pts = Object.values(raw)
+          .filter(Boolean)
+          .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))
+          .map((p) => [Number(p.latitude), Number(p.longitude)]);
+
+        polyline.setLatLngs(pts);
+
+        if (pts.length) {
+          marker.setLatLng(pts[pts.length - 1]);
+          map.fitBounds(polyline.getBounds(), { padding: [30,30] });
+        }
+      });
+
+      get(baseRef).then((snap) => {
+        if (!snap.exists()) setStatus("Сессия не найдена", "bad");
+      }).catch((err) => {
+        console.error(err);
+        setStatus("Ошибка чтения Firebase", "bad");
+      });
+    }
+  </script>
+</body>
+</html>
