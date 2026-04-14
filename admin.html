@@ -19,7 +19,7 @@
     }
     *{box-sizing:border-box}
     body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text)}
-    .wrap{max-width:1360px;margin:0 auto;padding:16px}
+    .wrap{max-width:1440px;margin:0 auto;padding:16px}
     .card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:16px;margin-bottom:16px}
     h1,h2,h3,p{margin:0}
     .sub{color:var(--muted);margin-top:6px;line-height:1.6}
@@ -46,7 +46,7 @@
       color:var(--text);
       min-width:120px
     }
-    textarea{width:100%;min-height:84px;resize:vertical}
+    textarea{width:100%;min-height:90px;resize:vertical}
     button{border:0;border-radius:12px;padding:10px 14px;font-weight:600;cursor:pointer;color:white;background:var(--blue)}
     button.secondary{background:#374151}
     button.warn{background:#b45309}
@@ -64,10 +64,16 @@
     th{color:var(--muted)}
     tr.clickable{cursor:pointer}
     tr.clickable:hover{background:rgba(255,255,255,.04)}
+    tr.day-separator td{background:rgba(255,255,255,.04);font-weight:700;color:#cbd5e1}
     #historyMap,#liveMap,#sessionMap{width:100%;height:420px;border-radius:16px;overflow:hidden;border:1px solid var(--border);margin-top:12px}
     .chartWrap{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:16px;padding:12px}
     .tag{display:inline-block;padding:3px 8px;border-radius:999px;border:1px solid var(--border);font-size:12px;margin-right:6px;margin-bottom:6px}
     .sessionLinkBox{margin-top:12px}
+    .muted{color:var(--muted)}
+    .checkboxRow{display:flex;align-items:center;gap:8px}
+    .checkboxRow input{width:auto;min-width:auto}
+    .settingsBlock{margin-top:16px}
+    .kbd{display:inline-block;padding:2px 8px;border-radius:8px;border:1px solid var(--border);background:rgba(255,255,255,.03)}
     @media (max-width:1200px){.grid6{grid-template-columns:repeat(3,minmax(0,1fr))}}
     @media (max-width:1000px){.grid4{grid-template-columns:repeat(2,minmax(0,1fr))}.grid3,.grid2{grid-template-columns:1fr}}
     @media (max-width:900px){
@@ -83,7 +89,7 @@
   <div class="card">
     <h1>MyGps Admin</h1>
     <div id="pageDateTime" class="headerTime">—</div>
-    <p class="sub">История, live-сессии, карта, экспорт, графики и оценка объёма данных.</p>
+    <p class="sub">История, live-сессии, карта, экспорт, графики, backup и диагностика. Настройки админки сохраняются локально в браузере, чтобы не тратить Firebase.</p>
   </div>
 
   <div class="card" id="authCard">
@@ -105,20 +111,40 @@
     <div class="card">
       <div class="row">
         <div class="pill"><span class="dot ok"></span><span id="userInfo">Вы вошли</span></div>
+        <div class="pill">Карта: <span id="mapStyleCurrentLabel">OSM Standard</span></div>
         <button id="logoutBtn" class="secondary">Выйти</button>
       </div>
       <div class="tabs">
-        <button class="tab-btn active" data-tab="nowPanel">Сейчас</button>
+        <button class="tab-btn active" data-tab="healthPanel">Здоровье системы</button>
+        <button class="tab-btn" data-tab="nowPanel">Сейчас</button>
         <button class="tab-btn" data-tab="historyPanel">История</button>
         <button class="tab-btn" data-tab="reportsPanel">Отчёты и графики</button>
         <button class="tab-btn" data-tab="tripsPanel">Поездки</button>
-        <button class="tab-btn" data-tab="usagePanel">Объём данных</button>
+        <button class="tab-btn" data-tab="usagePanel">Объём данных и backup</button>
         <button class="tab-btn" data-tab="sessionsPanel">Live-сессии</button>
-        <button class="tab-btn" data-tab="deletionsPanel">Журнал удалений</button>
+        <button class="tab-btn" data-tab="journalPanel">Журнал действий</button>
+        <button class="tab-btn" data-tab="settingsPanel">Настройки</button>
       </div>
     </div>
 
-    <div id="nowPanel">
+    <div id="healthPanel">
+      <div class="card">
+        <h2>Здоровье системы</h2>
+        <div class="grid4">
+          <div class="stat"><div class="label">Последняя точка</div><div class="value" id="healthLastPointTime">—</div></div>
+          <div class="stat"><div class="label">Возраст последней точки</div><div class="value" id="healthLastPointAge">—</div></div>
+          <div class="stat"><div class="label">Точек сегодня</div><div class="value" id="healthPointsToday">0</div></div>
+          <div class="stat"><div class="label">Точек за 24 часа</div><div class="value" id="healthPoints24h">0</div></div>
+          <div class="stat"><div class="label">Активных live-сессий</div><div class="value" id="healthActiveSessions">0</div></div>
+          <div class="stat"><div class="label">Истёкших live-сессий</div><div class="value" id="healthExpiredSessions">0</div></div>
+          <div class="stat"><div class="label">Подозрительных точек за 24 часа</div><div class="value" id="healthSuspicious24h">0</div></div>
+          <div class="stat"><div class="label">Источник текущего live</div><div class="value" id="healthLiveSource">—</div></div>
+        </div>
+        <div class="notice" id="healthNotice">Состояние системы будет показано здесь.</div>
+      </div>
+    </div>
+
+    <div id="nowPanel" class="hidden">
       <div class="card">
         <h2>Сейчас</h2>
         <div class="grid4">
@@ -155,15 +181,42 @@
           <button id="todayBtn">Сегодня</button>
           <button id="yesterdayBtn" class="secondary">Вчера</button>
           <button id="weekBtn" class="secondary">Неделя</button>
+          <button id="range30mBtn" class="secondary">30 мин</button>
+          <button id="range1hBtn" class="secondary">1 час</button>
+          <button id="range6hBtn" class="secondary">6 часов</button>
+          <button id="range24hBtn" class="secondary">24 часа</button>
           <input id="jumpDate" type="date"/>
           <button id="jumpDateBtn" class="secondary">Перейти к дате</button>
         </div>
 
+        <div class="grid4">
+          <div>
+            <div class="label">Макс. accuracy, м</div>
+            <input id="maxAccuracyFilter" type="number" min="0" step="1" placeholder="Макс. accuracy, м"/>
+          </div>
+          <div>
+            <div class="label">Скорость от, км/ч</div>
+            <input id="minSpeedFilter" type="number" min="0" step="0.1" placeholder="Скорость от, км/ч"/>
+          </div>
+          <div>
+            <div class="label">Скорость до, км/ч</div>
+            <input id="maxSpeedFilter" type="number" min="0" step="0.1" placeholder="Скорость до, км/ч"/>
+          </div>
+          <div>
+            <div class="label">Режим движения</div>
+            <select id="movementFilter">
+              <option value="all">Все точки</option>
+              <option value="moving">Только движение</option>
+              <option value="stops">Только стоянки</option>
+              <option value="junk">Только мусорные</option>
+            </select>
+          </div>
+        </div>
+
         <div class="row">
-          <input id="maxAccuracyFilter" type="number" min="0" step="1" placeholder="Макс. accuracy, м"/>
-          <input id="minSpeedFilter" type="number" min="0" step="0.1" placeholder="Скорость от, км/ч"/>
-          <input id="maxSpeedFilter" type="number" min="0" step="0.1" placeholder="Скорость до, км/ч"/>
-          <label class="pill"><input id="hideJunkToggle" type="checkbox" style="width:auto;min-width:auto"/> Скрыть мусорные точки</label>
+          <label class="pill checkboxRow"><input id="hideJunkToggle" type="checkbox"/> Скрыть мусорные точки</label>
+          <label class="pill checkboxRow"><input id="backupBeforeDeleteToggle" type="checkbox" checked/> Backup перед удалением периода</label>
+          <label class="pill checkboxRow"><input id="showStopsOnMapToggle" type="checkbox" checked/> Показывать стоянки на карте</label>
           <button id="applyFiltersBtn" class="secondary">Применить фильтры</button>
           <button id="resetFiltersBtn" class="secondary">Сбросить фильтры</button>
         </div>
@@ -175,6 +228,7 @@
           <button id="exportCsvBtn" class="secondary">Экспорт CSV</button>
           <button id="exportGpxBtn" class="secondary">Экспорт GPX</button>
           <button id="exportPdfBtn" class="secondary">Экспорт PDF</button>
+          <button id="deleteVisibleJunkBtn" class="warn">Удалить мусорные точки</button>
           <button id="deleteRangeBtn" class="danger">Удалить период</button>
         </div>
       </div>
@@ -200,6 +254,16 @@
           <div><strong>Старт:</strong> <span id="startAddress">—</span></div>
           <div><strong>Финиш:</strong> <span id="endAddress">—</span></div>
           <div><strong>Выбранная точка:</strong> <span id="selectedAddress">—</span></div>
+        </div>
+        <div class="row">
+          <div>
+            <div class="label">Стиль карты</div>
+            <select id="mapStyleSelect">
+              <option value="osm">OSM Standard</option>
+              <option value="dark">Carto Dark</option>
+              <option value="topo">OpenTopo</option>
+            </select>
+          </div>
         </div>
         <div id="historyMap"></div>
       </div>
@@ -246,7 +310,7 @@
     <div id="tripsPanel" class="hidden">
       <div class="card">
         <h2>Поездки</h2>
-        <div class="notice">История автоматически разбивается на поездки, если между точками большой перерыв по времени.</div>
+        <div class="notice">История автоматически разбивается на поездки по настраиваемому порогу разрыва во вкладке “Настройки”.</div>
         <div style="overflow:auto">
           <table>
             <thead><tr><th>#</th><th>Старт</th><th>Финиш</th><th>Длительность</th><th>Пробег</th><th>Действие</th></tr></thead>
@@ -265,7 +329,17 @@
           <div class="stat"><div class="label">Всего в базе</div><div class="value" id="totalSize">—</div></div>
           <div class="stat"><div class="label">Точек в истории</div><div class="value" id="historyCount">0</div></div>
         </div>
-        <div class="notice">Это оценка текущего объёма данных по содержимому базы. Точное дневное потребление и официальные лимиты смотри в Firebase Console → Usage and billing / Realtime Database → Usage.</div>
+        <div class="notice">Это оценка по содержимому базы на клиенте. Для бесплатного Firebase следи за количеством чтений/записей и включай автосинхронизацию live-сессий только когда нужно.</div>
+      </div>
+
+      <div class="card">
+        <h2>Backup и экспорт служебных данных</h2>
+        <div class="row">
+          <button id="exportFullDbBtn">Экспорт всей базы</button>
+          <button id="exportLiveSessionsBackupBtn" class="secondary">Экспорт liveSessions</button>
+          <button id="exportAdminLogsBackupBtn" class="secondary">Экспорт adminLogs</button>
+        </div>
+        <div class="notice">Backup выгружается локально в JSON. Это не пишет ничего в Firebase и не требует платного тарифа.</div>
       </div>
     </div>
 
@@ -321,11 +395,44 @@
       </div>
 
       <div class="card">
-        <h2>Live-сессии</h2>
+        <h2>Управление live-сессиями</h2>
+        <div class="grid4">
+          <div>
+            <div class="label">Поиск по token</div>
+            <input id="sessionSearchInput" placeholder="Начни вводить token"/>
+          </div>
+          <div>
+            <div class="label">Статус</div>
+            <select id="sessionStatusFilter">
+              <option value="all">Все</option>
+              <option value="active">Активные</option>
+              <option value="expired">Истёкшие</option>
+              <option value="ended">Завершённые</option>
+            </select>
+          </div>
+          <div>
+            <div class="label">Автосинхронизация active-сессий</div>
+            <select id="autoSyncIntervalSelect">
+              <option value="0">Выключена</option>
+              <option value="30">Каждые 30 сек</option>
+              <option value="60" selected>Каждые 60 сек</option>
+              <option value="120">Каждые 2 мин</option>
+              <option value="300">Каждые 5 мин</option>
+            </select>
+          </div>
+          <div>
+            <div class="label">Продлить выбранную сессию</div>
+            <input id="extendSessionMinutesInput" type="number" min="1" step="1" value="60" placeholder="Минуты"/>
+          </div>
+        </div>
+
         <div class="row">
           <button id="refreshSessionsBtn">Обновить live-сессии</button>
+          <button id="syncActiveSessionsBtn" class="secondary">Синхронизировать active из live/default</button>
+          <button id="endAllActiveSessionsBtn" class="warn">Остановить все активные</button>
           <button id="cleanupSessionsBtn" class="warn">Очистить истёкшие сессии</button>
         </div>
+
         <div style="overflow:auto">
           <table>
             <thead><tr><th>Token</th><th>Статус</th><th>Истекает</th><th>Открытия</th><th>Первое / Последнее</th><th>Действия</th></tr></thead>
@@ -336,14 +443,58 @@
       </div>
     </div>
 
-    <div id="deletionsPanel" class="hidden">
+    <div id="journalPanel" class="hidden">
       <div class="card">
-        <h2>Журнал удалений</h2>
+        <h2>Журнал действий</h2>
+        <div class="row">
+          <button id="refreshJournalBtn">Обновить журнал</button>
+        </div>
         <div style="overflow:auto">
           <table>
-            <thead><tr><th>Время</th><th>Тип</th><th>Описание</th></tr></thead>
-            <tbody id="deletionsTbody"></tbody>
+            <thead><tr><th>Время</th><th>Тип</th><th>Описание</th><th>Кто</th></tr></thead>
+            <tbody id="journalTbody"></tbody>
           </table>
+        </div>
+      </div>
+    </div>
+
+    <div id="settingsPanel" class="hidden">
+      <div class="card">
+        <h2>Настройки админки</h2>
+        <p class="sub">Эти настройки сохраняются локально в браузере администратора, чтобы не тратить записи в Firebase.</p>
+
+        <div class="settingsBlock">
+          <h3>Пороги и фильтры</h3>
+          <div class="grid4">
+            <div><div class="label">Онлайн-свежесть, мин</div><input id="settingOnlineFreshnessMin" type="number" min="1" step="1"/></div>
+            <div><div class="label">Макс. accuracy для мусора, м</div><input id="settingJunkMaxAccuracy" type="number" min="1" step="1"/></div>
+            <div><div class="label">Скорость “стоит”, км/ч</div><input id="settingStopSpeedThreshold" type="number" min="0" step="0.1"/></div>
+            <div><div class="label">Мин. стоянка, мин</div><input id="settingStopMinMinutes" type="number" min="1" step="1"/></div>
+            <div><div class="label">Разрыв поездки, мин</div><input id="settingTripGapMinutes" type="number" min="1" step="1"/></div>
+            <div><div class="label">Порог телепорта, км/ч</div><input id="settingJunkTeleportSpeed" type="number" min="1" step="1"/></div>
+            <div><div class="label">Макс. вычисл. скорость, км/ч</div><input id="settingJunkMaxCalcSpeed" type="number" min="1" step="1"/></div>
+            <div><div class="label">Строк в истории</div><input id="settingTableMaxRows" type="number" min="50" step="50"/></div>
+          </div>
+        </div>
+
+        <div class="settingsBlock">
+          <h3>Карта и производительность</h3>
+          <div class="grid4">
+            <div><div class="label">Лимит точек на карте history</div><input id="settingMapMaxPoints" type="number" min="200" step="100"/></div>
+            <div><div class="label">Лимит точек live-хвоста</div><input id="settingLiveTrailMaxPoints" type="number" min="50" step="50"/></div>
+            <div><div class="label">Дефолт live-ссылка, мин</div><input id="settingDefaultShareMinutes" type="number" min="1" step="1"/></div>
+            <div><div class="label">Хвост для live-ссылки, точек</div><input id="settingLiveShareDefaultPoints" type="number" min="2" max="500" step="1"/></div>
+          </div>
+        </div>
+
+        <div class="row">
+          <button id="saveSettingsBtn" class="success">Сохранить настройки</button>
+          <button id="resetSettingsBtn" class="secondary">Сбросить настройки</button>
+        </div>
+
+        <div class="notice">
+          <div><strong>Важно:</strong> настройки здесь не пишутся в Firebase и не требуют платного тарифа.</div>
+          <div style="margin-top:8px">Стиль карты “спутник” не добавлял, чтобы не тянуть внешние платные API и ключи.</div>
         </div>
       </div>
     </div>
@@ -388,6 +539,41 @@ const firebaseConfig = {
   measurementId: "G-BSCVNY9LH0"
 };
 
+const SETTINGS_KEY = "mygps_admin_settings_v2";
+
+const DEFAULT_SETTINGS = {
+  onlineFreshnessMin: 3,
+  junkMaxAccuracy: 100,
+  stopSpeedThreshold: 2,
+  stopMinMinutes: 5,
+  tripGapMinutes: 20,
+  junkTeleportSpeed: 30,
+  junkMaxCalcSpeed: 250,
+  mapMaxPoints: 2000,
+  liveTrailMaxPoints: 800,
+  tableMaxRows: 500,
+  defaultShareMinutes: 60,
+  liveShareDefaultPoints: 100,
+  mapStyle: "osm",
+  showStopsOnMap: true
+};
+
+function loadSettings() {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return { ...DEFAULT_SETTINGS, ...parsed };
+  } catch {
+    return { ...DEFAULT_SETTINGS };
+  }
+}
+
+function saveSettingsToStorage(next) {
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
+}
+
+let settings = loadSettings();
+
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getDatabase(app);
@@ -407,20 +593,85 @@ let liveAutoCenter = true;
 let speedChart = null;
 let distanceChart = null;
 let deletionsLog = [];
+let actionLogs = [];
 let currentFiltered = [];
 let currentPointIndex = 0;
 let createdShareUrl = "";
+let currentNowSourceLabel = "—";
+let authSessionLoggedUid = null;
 
 let unsubLiveDefault = null;
 let unsubLiveSessions = null;
 let unsubHistory = null;
 let unsubDeletions = null;
+let unsubActions = null;
 
 let selectedAddressRequestId = 0;
 let liveAddressRequestId = 0;
 let lastLiveAddressKey = "";
+let autoSyncTimer = null;
 
 const geocodeCache = new Map();
+let routeSegments = [];
+let stopMarkers = [];
+
+const historyMap = L.map("historyMap").setView([56.95,24.10],12);
+const liveMap = L.map("liveMap").setView([56.95,24.10],12);
+const sessionMap = L.map("sessionMap").setView([56.95,24.10],12);
+
+const mapStyleDefs = {
+  osm: {
+    label: "OSM Standard",
+    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    attribution: "&copy; OpenStreetMap"
+  },
+  dark: {
+    label: "Carto Dark",
+    url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+    attribution: "&copy; OpenStreetMap &copy; CARTO"
+  },
+  topo: {
+    label: "OpenTopo",
+    url: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
+    attribution: "&copy; OpenStreetMap, SRTM | OpenTopoMap"
+  }
+};
+
+let historyBaseLayer = null;
+let liveBaseLayer = null;
+let sessionBaseLayer = null;
+
+function applyMapStyle(styleKey) {
+  const style = mapStyleDefs[styleKey] || mapStyleDefs.osm;
+  settings.mapStyle = styleKey;
+  saveSettingsToStorage(settings);
+
+  [historyBaseLayer, liveBaseLayer, sessionBaseLayer].forEach((layer, idx) => {
+    if (layer) {
+      const map = idx === 0 ? historyMap : idx === 1 ? liveMap : sessionMap;
+      map.removeLayer(layer);
+    }
+  });
+
+  historyBaseLayer = L.tileLayer(style.url, { attribution: style.attribution }).addTo(historyMap);
+  liveBaseLayer = L.tileLayer(style.url, { attribution: style.attribution }).addTo(liveMap);
+  sessionBaseLayer = L.tileLayer(style.url, { attribution: style.attribution }).addTo(sessionMap);
+
+  qs("mapStyleCurrentLabel").textContent = style.label;
+  qs("mapStyleSelect").value = styleKey;
+}
+
+applyMapStyle(settings.mapStyle);
+
+const startMarker = L.marker([56.95,24.10]).addTo(historyMap).bindTooltip("Старт", {permanent:true, direction:"top"});
+const endMarker = L.marker([56.95,24.10]).addTo(historyMap).bindTooltip("Финиш", {permanent:true, direction:"top"});
+const selectedMarker = L.circleMarker([56.95,24.10], {radius:8,color:"#60a5fa",fillColor:"#60a5fa",fillOpacity:1}).addTo(historyMap);
+
+const liveTrail = L.polyline([], {weight:5}).addTo(liveMap);
+const liveMarker = L.circleMarker([56.95,24.10], {radius:8,color:"#22c55e",fillColor:"#22c55e",fillOpacity:1}).addTo(liveMap);
+
+const sessionTrail = L.polyline([], {weight:5}).addTo(sessionMap);
+const sessionMarker = L.circleMarker([56.95,24.10], {radius:8,color:"#22c55e",fillColor:"#22c55e",fillOpacity:1}).addTo(sessionMap);
 
 function populateTimeSelects() {
   const hourOpts = Array.from({length:24}, (_,i)=>`<option value="${String(i).padStart(2,"0")}">${String(i).padStart(2,"0")}</option>`).join("");
@@ -440,29 +691,59 @@ function renderHeaderTime() {
 setInterval(renderHeaderTime, 1000);
 renderHeaderTime();
 
-const historyMap = L.map("historyMap").setView([56.95,24.10],12);
-const liveMap = L.map("liveMap").setView([56.95,24.10],12);
-const sessionMap = L.map("sessionMap").setView([56.95,24.10],12);
+function applySettingsToUI() {
+  qs("settingOnlineFreshnessMin").value = settings.onlineFreshnessMin;
+  qs("settingJunkMaxAccuracy").value = settings.junkMaxAccuracy;
+  qs("settingStopSpeedThreshold").value = settings.stopSpeedThreshold;
+  qs("settingStopMinMinutes").value = settings.stopMinMinutes;
+  qs("settingTripGapMinutes").value = settings.tripGapMinutes;
+  qs("settingJunkTeleportSpeed").value = settings.junkTeleportSpeed;
+  qs("settingJunkMaxCalcSpeed").value = settings.junkMaxCalcSpeed;
+  qs("settingMapMaxPoints").value = settings.mapMaxPoints;
+  qs("settingLiveTrailMaxPoints").value = settings.liveTrailMaxPoints;
+  qs("settingTableMaxRows").value = settings.tableMaxRows;
+  qs("settingDefaultShareMinutes").value = settings.defaultShareMinutes;
+  qs("settingLiveShareDefaultPoints").value = settings.liveShareDefaultPoints;
+  qs("shareDurationPreset").value = String(settings.defaultShareMinutes);
+  if (!qs("shareDurationPreset").value) {
+    qs("shareDurationPreset").value = "custom";
+    qs("shareDurationCustom").value = settings.defaultShareMinutes;
+  }
+  qs("sharePointsLimit").value = settings.liveShareDefaultPoints;
+  qs("showStopsOnMapToggle").checked = !!settings.showStopsOnMap;
+  qs("mapStyleSelect").value = settings.mapStyle;
+}
+applySettingsToUI();
 
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"&copy; OpenStreetMap"}).addTo(historyMap);
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"&copy; OpenStreetMap"}).addTo(liveMap);
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"&copy; OpenStreetMap"}).addTo(sessionMap);
-
-const startMarker = L.marker([56.95,24.10]).addTo(historyMap).bindTooltip("Старт", {permanent:true, direction:"top"});
-const endMarker = L.marker([56.95,24.10]).addTo(historyMap).bindTooltip("Финиш", {permanent:true, direction:"top"});
-const selectedMarker = L.circleMarker([56.95,24.10], {radius:8,color:"#60a5fa",fillColor:"#60a5fa",fillOpacity:1}).addTo(historyMap);
-
-const liveTrail = L.polyline([], {weight:5}).addTo(liveMap);
-const liveMarker = L.circleMarker([56.95,24.10], {radius:8,color:"#22c55e",fillColor:"#22c55e",fillOpacity:1}).addTo(liveMap);
-
-const sessionTrail = L.polyline([], {weight:5}).addTo(sessionMap);
-const sessionMarker = L.circleMarker([56.95,24.10], {radius:8,color:"#22c55e",fillColor:"#22c55e",fillOpacity:1}).addTo(sessionMap);
-
-let routeSegments = [];
+function readSettingsFromUI() {
+  settings = {
+    ...settings,
+    onlineFreshnessMin: Math.max(1, Number(qs("settingOnlineFreshnessMin").value || DEFAULT_SETTINGS.onlineFreshnessMin)),
+    junkMaxAccuracy: Math.max(1, Number(qs("settingJunkMaxAccuracy").value || DEFAULT_SETTINGS.junkMaxAccuracy)),
+    stopSpeedThreshold: Math.max(0, Number(qs("settingStopSpeedThreshold").value || DEFAULT_SETTINGS.stopSpeedThreshold)),
+    stopMinMinutes: Math.max(1, Number(qs("settingStopMinMinutes").value || DEFAULT_SETTINGS.stopMinMinutes)),
+    tripGapMinutes: Math.max(1, Number(qs("settingTripGapMinutes").value || DEFAULT_SETTINGS.tripGapMinutes)),
+    junkTeleportSpeed: Math.max(1, Number(qs("settingJunkTeleportSpeed").value || DEFAULT_SETTINGS.junkTeleportSpeed)),
+    junkMaxCalcSpeed: Math.max(1, Number(qs("settingJunkMaxCalcSpeed").value || DEFAULT_SETTINGS.junkMaxCalcSpeed)),
+    mapMaxPoints: Math.max(200, Number(qs("settingMapMaxPoints").value || DEFAULT_SETTINGS.mapMaxPoints)),
+    liveTrailMaxPoints: Math.max(50, Number(qs("settingLiveTrailMaxPoints").value || DEFAULT_SETTINGS.liveTrailMaxPoints)),
+    tableMaxRows: Math.max(50, Number(qs("settingTableMaxRows").value || DEFAULT_SETTINGS.tableMaxRows)),
+    defaultShareMinutes: Math.max(1, Number(qs("settingDefaultShareMinutes").value || DEFAULT_SETTINGS.defaultShareMinutes)),
+    liveShareDefaultPoints: Math.max(2, Math.min(500, Number(qs("settingLiveShareDefaultPoints").value || DEFAULT_SETTINGS.liveShareDefaultPoints))),
+    showStopsOnMap: qs("showStopsOnMapToggle").checked,
+    mapStyle: qs("mapStyleSelect").value || DEFAULT_SETTINGS.mapStyle
+  };
+  saveSettingsToStorage(settings);
+}
 
 function clearRouteSegments() {
   routeSegments.forEach(layer => historyMap.removeLayer(layer));
   routeSegments = [];
+}
+
+function clearStopMarkers() {
+  stopMarkers.forEach(marker => historyMap.removeLayer(marker));
+  stopMarkers = [];
 }
 
 function detachRealtimeListeners() {
@@ -470,11 +751,29 @@ function detachRealtimeListeners() {
   unsubLiveSessions?.();
   unsubHistory?.();
   unsubDeletions?.();
+  unsubActions?.();
 
   unsubLiveDefault = null;
   unsubLiveSessions = null;
   unsubHistory = null;
   unsubDeletions = null;
+  unsubActions = null;
+}
+
+function stopAutoSyncTimer() {
+  if (autoSyncTimer) {
+    clearInterval(autoSyncTimer);
+    autoSyncTimer = null;
+  }
+}
+
+function maybeStartAutoSync() {
+  stopAutoSyncTimer();
+  const seconds = Number(qs("autoSyncIntervalSelect").value || 0);
+  if (!seconds || seconds <= 0) return;
+  autoSyncTimer = setInterval(() => {
+    syncActiveSessionsFromLiveDefault(true).catch(console.error);
+  }, seconds * 1000);
 }
 
 function showError(text) {
@@ -516,6 +815,18 @@ function resetNowPanel() {
   liveMarker.setLatLng([56.95,24.10]);
 }
 
+function resetHealthPanel() {
+  qs("healthLastPointTime").textContent = "—";
+  qs("healthLastPointAge").textContent = "—";
+  qs("healthPointsToday").textContent = "0";
+  qs("healthPoints24h").textContent = "0";
+  qs("healthActiveSessions").textContent = "0";
+  qs("healthExpiredSessions").textContent = "0";
+  qs("healthSuspicious24h").textContent = "0";
+  qs("healthLiveSource").textContent = "—";
+  qs("healthNotice").textContent = "Состояние системы будет показано здесь.";
+}
+
 function resetHistoryPanel() {
   currentFiltered = [];
   currentPointIndex = 0;
@@ -538,6 +849,7 @@ function resetHistoryPanel() {
   qs("pointNavigatorLabel").textContent = "—";
 
   clearRouteSegments();
+  clearStopMarkers();
   startMarker.setLatLng([56.95,24.10]);
   endMarker.setLatLng([56.95,24.10]);
   selectedMarker.setLatLng([56.95,24.10]);
@@ -559,14 +871,14 @@ function resetSessionsPanel() {
   hideShareResult();
 }
 
-function resetDeletionsPanel() {
-  qs("deletionsTbody").innerHTML = "";
+function resetJournalPanel() {
+  qs("journalTbody").innerHTML = "";
 }
 
 document.querySelectorAll(".tab-btn").forEach(btn => {
   btn.onclick = () => {
     document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
-    document.querySelectorAll("#nowPanel,#historyPanel,#reportsPanel,#tripsPanel,#usagePanel,#sessionsPanel,#deletionsPanel")
+    document.querySelectorAll("#healthPanel,#nowPanel,#historyPanel,#reportsPanel,#tripsPanel,#usagePanel,#sessionsPanel,#journalPanel,#settingsPanel")
       .forEach(p => p.classList.add("hidden"));
 
     btn.classList.add("active");
@@ -589,6 +901,13 @@ function setDateTimeRange(start, end) {
   qs("toDate").value = end.toISOString().slice(0,10);
   qs("toHour").value = String(end.getHours()).padStart(2,"0");
   qs("toMinute").value = String(end.getMinutes()).padStart(2,"0");
+}
+
+function setRangeFromMinutesBack(minutes) {
+  const now = new Date();
+  const start = new Date(Date.now() - minutes * 60 * 1000);
+  setDateTimeRange(start, now);
+  renderHistory();
 }
 
 function setDefaultPeriodToday() {
@@ -638,15 +957,20 @@ function distanceMeters(a, b) {
 function looksJunk(prev, cur) {
   const acc = Number(cur.accuracy || 0);
   const sp = Number(cur.speed || 0);
-  if (acc > 100) return true;
+  if (acc > settings.junkMaxAccuracy) return true;
+
   if (prev) {
     const dist = distanceMeters(prev, cur);
     const dt = Math.max(1, (Number(cur.timestamp || 0) - Number(prev.timestamp || 0)) / 1000);
     const calcSpeed = dist / dt * 3.6;
-    if (sp <= 0.5 && calcSpeed > 30) return true;
-    if (calcSpeed > 250) return true;
+    if (sp <= 0.5 && calcSpeed > settings.junkTeleportSpeed) return true;
+    if (calcSpeed > settings.junkMaxCalcSpeed) return true;
   }
   return false;
+}
+
+function isStopPoint(point) {
+  return Number(point?.speed || 0) <= settings.stopSpeedThreshold;
 }
 
 function filteredHistory() {
@@ -656,18 +980,25 @@ function filteredHistory() {
   const minSp = Number(qs("minSpeedFilter").value || 0);
   const maxSp = Number(qs("maxSpeedFilter").value || 0);
   const hideJunk = qs("hideJunkToggle").checked;
+  const movementMode = qs("movementFilter").value;
 
   return allHistoryPoints.filter((p, idx, arr) => {
     const t = Number(p.timestamp || 0);
     const sp = Number(p.speed || 0);
     const acc = Number(p.accuracy || 0);
+    const junk = looksJunk(arr[idx - 1], p);
 
     if (from && t < from) return false;
     if (to && t > to) return false;
     if (maxAcc > 0 && acc > maxAcc) return false;
     if (minSp > 0 && sp < minSp) return false;
     if (maxSp > 0 && sp > maxSp) return false;
-    if (hideJunk && looksJunk(arr[idx - 1], p)) return false;
+    if (hideJunk && junk) return false;
+
+    if (movementMode === "moving" && isStopPoint(p)) return false;
+    if (movementMode === "stops" && !isStopPoint(p)) return false;
+    if (movementMode === "junk" && !junk) return false;
+
     return true;
   });
 }
@@ -695,14 +1026,15 @@ function computeSummary(points) {
 function detectStops(points) {
   const stops = [];
   let startIdx = null;
+  const minDurationMs = settings.stopMinMinutes * 60 * 1000;
 
   for (let i = 0; i < points.length; i++) {
-    const sp = Number(points[i].speed || 0);
-    if (sp <= 2) {
+    const stopped = isStopPoint(points[i]);
+    if (stopped) {
       if (startIdx === null) startIdx = i;
     } else if (startIdx !== null) {
       const duration = Number(points[i - 1].timestamp || 0) - Number(points[startIdx].timestamp || 0);
-      if (duration >= 5 * 60 * 1000) {
+      if (duration >= minDurationMs) {
         stops.push({start: points[startIdx], end: points[i - 1], duration});
       }
       startIdx = null;
@@ -711,7 +1043,7 @@ function detectStops(points) {
 
   if (startIdx !== null && points.length) {
     const duration = Number(points[points.length - 1].timestamp || 0) - Number(points[startIdx].timestamp || 0);
-    if (duration >= 5 * 60 * 1000) {
+    if (duration >= minDurationMs) {
       stops.push({start: points[startIdx], end: points[points.length - 1], duration});
     }
   }
@@ -723,10 +1055,11 @@ function splitTrips(points) {
   if (!points.length) return [];
   const trips = [];
   let cur = [points[0]];
+  const gapMs = settings.tripGapMinutes * 60 * 1000;
 
   for (let i = 1; i < points.length; i++) {
     const gap = Number(points[i].timestamp || 0) - Number(points[i - 1].timestamp || 0);
-    if (gap > 20 * 60 * 1000) {
+    if (gap > gapMs) {
       trips.push(cur);
       cur = [points[i]];
     } else {
@@ -763,12 +1096,12 @@ async function reverseGeocode(lat, lon) {
 }
 
 function speedColor(speed) {
-  if (speed <= 5) return "#22c55e";
+  if (speed <= settings.stopSpeedThreshold) return "#22c55e";
   if (speed <= 20) return "#eab308";
   return "#ef4444";
 }
 
-function downsamplePoints(points, maxPoints = 2000) {
+function downsamplePoints(points, maxPoints) {
   if (points.length <= maxPoints) return points;
   const step = Math.ceil(points.length / maxPoints);
   const result = [];
@@ -777,12 +1110,25 @@ function downsamplePoints(points, maxPoints = 2000) {
   return result;
 }
 
-async function updateHistoryMap(points) {
+function renderStopMarkers(stops) {
+  clearStopMarkers();
+  if (!settings.showStopsOnMap || !qs("showStopsOnMapToggle").checked) return;
+
+  stops.forEach((stop, idx) => {
+    if (stop.start?.latitude == null || stop.start?.longitude == null) return;
+    const marker = L.marker([Number(stop.start.latitude), Number(stop.start.longitude)])
+      .addTo(historyMap)
+      .bindPopup(`Стоянка #${idx + 1}<br>Начало: ${fmtTime(stop.start.timestamp)}<br>Конец: ${fmtTime(stop.end.timestamp)}<br>Длительность: ${formatDuration(stop.duration)}`);
+    stopMarkers.push(marker);
+  });
+}
+
+async function updateHistoryMap(points, stops = []) {
   clearRouteSegments();
 
   const mapPoints = downsamplePoints(
     points.filter(p => p.latitude != null && p.longitude != null),
-    2000
+    settings.mapMaxPoints
   );
 
   const latlngs = mapPoints.map(p => [Number(p.latitude), Number(p.longitude)]);
@@ -811,6 +1157,8 @@ async function updateHistoryMap(points) {
     historyMap.fitBounds(L.latLngBounds(latlngs), {padding:[30,30]});
   }
 
+  renderStopMarkers(stops);
+
   qs("startAddress").textContent = await reverseGeocode(Number(first.latitude), Number(first.longitude));
   qs("endAddress").textContent = await reverseGeocode(Number(last.latitude), Number(last.longitude));
 }
@@ -825,7 +1173,7 @@ async function focusPointByIndex(idx) {
 
   selectedMarker
     .setLatLng([lat, lon])
-    .bindPopup(`${lat.toFixed(5)}, ${lon.toFixed(5)}<br>${fmtTime(p.timestamp)}`)
+    .bindPopup(`${lat.toFixed(5)}, ${lon.toFixed(5)}<br>${fmtTime(p.timestamp)}<br>Скорость: ${Number(p.speed || 0).toFixed(1)} км/ч`)
     .openPopup();
 
   historyMap.setView([lat, lon], 17);
@@ -853,6 +1201,44 @@ function updateUsage() {
   qs("sessionsSize").textContent = formatSize(sessionsBytes);
   qs("totalSize").textContent = formatSize(historyBytes + sessionsBytes);
   qs("historyCount").textContent = String(allHistoryPoints.length);
+}
+
+function updateHealthPanel() {
+  const now = Date.now();
+  const lastPoint = allHistoryPoints.length ? allHistoryPoints[allHistoryPoints.length - 1] : null;
+  const todayStart = new Date();
+  todayStart.setHours(0,0,0,0);
+  const dayStartTs = todayStart.getTime();
+  const pointsToday = allHistoryPoints.filter(p => Number(p.timestamp || 0) >= dayStartTs).length;
+  const points24h = allHistoryPoints.filter(p => Number(p.timestamp || 0) >= now - 24 * 60 * 60 * 1000).length;
+  const suspicious24h = allHistoryPoints.filter((p, idx, arr) => {
+    const ts = Number(p.timestamp || 0);
+    return ts >= now - 24 * 60 * 60 * 1000 && looksJunk(arr[idx - 1], p);
+  }).length;
+
+  const entries = Object.entries(allSessions).filter(([k]) => k !== "_init");
+  const active = entries.filter(([,s]) => !!s?.meta?.active && Number(s?.meta?.expiresAt || 0) > now).length;
+  const expired = entries.filter(([,s]) => Number(s?.meta?.expiresAt || 0) <= now).length;
+
+  qs("healthLastPointTime").textContent = fmtTime(lastPoint?.timestamp);
+  qs("healthLastPointAge").textContent = lastPoint?.timestamp ? formatIdle(now - Number(lastPoint.timestamp)) : "—";
+  qs("healthPointsToday").textContent = String(pointsToday);
+  qs("healthPoints24h").textContent = String(points24h);
+  qs("healthActiveSessions").textContent = String(active);
+  qs("healthExpiredSessions").textContent = String(expired);
+  qs("healthSuspicious24h").textContent = String(suspicious24h);
+  qs("healthLiveSource").textContent = currentNowSourceLabel || "—";
+
+  if (!lastPoint) {
+    qs("healthNotice").textContent = "История пока пустая.";
+    return;
+  }
+
+  const freshness = now - Number(lastPoint.timestamp || 0);
+  const freshnessLimit = settings.onlineFreshnessMin * 60 * 1000;
+  qs("healthNotice").textContent = freshness <= freshnessLimit
+    ? "Последняя точка свежая, система выглядит активной."
+    : "Последняя точка старая, проверь приложение или отправку координат.";
 }
 
 function updateCharts(points) {
@@ -954,6 +1340,7 @@ function pointTags(prev, cur) {
   if (looksJunk(prev, cur)) tags.push("мусор");
   if (Number(cur.accuracy || 0) > 50) tags.push("плохой GPS");
   if (Number(cur.speed || 0) > 130) tags.push("аномалия скорости");
+  if (isStopPoint(cur)) tags.push("стоянка");
   return tags;
 }
 
@@ -980,15 +1367,26 @@ function renderHistory() {
   qs("routeDuration").textContent = formatDuration(Number(pts[pts.length - 1].timestamp || 0) - Number(pts[0].timestamp || 0));
   qs("routeStops").textContent = String(stops.length);
   qs("stopsNotice").textContent = stops.length
-    ? `Стоянки: ${stops.map(s => formatDuration(s.duration)).join(", ")}`
+    ? `Стоянки: ${stops.map((s, i) => `#${i + 1} ${formatDuration(s.duration)}`).join(", ")}`
     : "Стоянок не найдено.";
 
   const tbody = qs("historyTbody");
   tbody.innerHTML = "";
 
-  pts.slice().reverse().slice(0, 500).forEach((p, revIdx) => {
+  let lastDay = "";
+  pts.slice().reverse().slice(0, settings.tableMaxRows).forEach((p, revIdx) => {
     const realIdx = pts.length - 1 - revIdx;
     const tags = pointTags(pts[realIdx - 1], p);
+    const day = new Date(Number(p.timestamp || 0)).toLocaleDateString("ru-RU");
+
+    if (day !== lastDay) {
+      const sep = document.createElement("tr");
+      sep.className = "day-separator";
+      sep.innerHTML = `<td colspan="6">${day}</td>`;
+      tbody.appendChild(sep);
+      lastDay = day;
+    }
+
     const tr = document.createElement("tr");
     tr.className = "clickable";
     tr.innerHTML = `
@@ -1012,7 +1410,7 @@ function renderHistory() {
     tbody.appendChild(tr);
   });
 
-  updateHistoryMap(pts);
+  updateHistoryMap(pts, stops);
   updateCharts(pts);
   renderTrips(pts);
   qs("pointNavigatorLabel").textContent = `${currentPointIndex + 1} / ${pts.length}`;
@@ -1028,6 +1426,11 @@ function downloadText(name, content, type) {
   URL.revokeObjectURL(url);
 }
 
+function exportWithTimestamp(prefix, data) {
+  const ts = new Date().toISOString().replace(/[:.]/g, "-");
+  downloadText(`${prefix}_${ts}.json`, JSON.stringify(data, null, 2), "application/json");
+}
+
 async function loadHistory() {
   const snap = await get(ref(db, "history/default"));
   const raw = snap.val() || {};
@@ -1038,17 +1441,24 @@ async function loadHistory() {
   updateUsage();
   renderHistory();
   updateNowFromAvailableSources();
+  updateHealthPanel();
+}
+
+function getPeriodFileSuffix() {
+  const from = `${qs("fromDate").value || "from"}_${qs("fromHour").value || "00"}-${qs("fromMinute").value || "00"}`;
+  const to = `${qs("toDate").value || "to"}_${qs("toHour").value || "00"}-${qs("toMinute").value || "00"}`;
+  return `${from}__${to}`;
 }
 
 function exportJson() {
-  downloadText("history_export.json", JSON.stringify(filteredHistory(), null, 2), "application/json");
+  downloadText(`history_${getPeriodFileSuffix()}.json`, JSON.stringify(filteredHistory(), null, 2), "application/json");
 }
 
 function exportCsv() {
   const pts = filteredHistory();
   const lines = ["timestamp,latitude,longitude,accuracy,speed"];
   pts.forEach(p => lines.push([p.timestamp ?? "", p.latitude ?? "", p.longitude ?? "", p.accuracy ?? "", p.speed ?? ""].join(",")));
-  downloadText("history_export.csv", lines.join("\n"), "text/csv");
+  downloadText(`history_${getPeriodFileSuffix()}.csv`, lines.join("\n"), "text/csv");
 }
 
 function exportGpxFromPoints(pts, filename) {
@@ -1063,7 +1473,7 @@ function exportGpxFromPoints(pts, filename) {
 }
 
 function exportGpx() {
-  exportGpxFromPoints(filteredHistory(), "history_export.gpx");
+  exportGpxFromPoints(filteredHistory(), `history_${getPeriodFileSuffix()}.gpx`);
 }
 
 function exportPdf() {
@@ -1102,12 +1512,44 @@ function exportPdf() {
     styles: {fontSize: 9}
   });
 
-  doc.save("history_report.pdf");
+  doc.save(`history_${getPeriodFileSuffix()}.pdf`);
+}
+
+async function exportFullDbBackup() {
+  const snap = await get(ref(db));
+  exportWithTimestamp("full_db_backup", snap.val() || {});
+}
+
+async function exportLiveSessionsBackup() {
+  const snap = await get(ref(db, "liveSessions"));
+  exportWithTimestamp("liveSessions_backup", snap.val() || {});
+}
+
+async function exportAdminLogsBackup() {
+  const snap = await get(ref(db, "adminLogs"));
+  exportWithTimestamp("adminLogs_backup", snap.val() || {});
 }
 
 async function logDeletion(kind, description) {
   const entryRef = push(ref(db, "adminLogs/deletions"));
-  await set(entryRef, { ts: Date.now(), kind, description });
+  await set(entryRef, {
+    ts: Date.now(),
+    kind,
+    description,
+    uid: auth.currentUser?.uid || null,
+    email: auth.currentUser?.email || null
+  });
+}
+
+async function logAction(kind, description) {
+  const entryRef = push(ref(db, "adminLogs/actions"));
+  await set(entryRef, {
+    ts: Date.now(),
+    kind,
+    description,
+    uid: auth.currentUser?.uid || null,
+    email: auth.currentUser?.email || null
+  });
 }
 
 async function deleteRange() {
@@ -1115,6 +1557,10 @@ async function deleteRange() {
   if (!pts.length) {
     alert("Нет точек в выбранном диапазоне.");
     return;
+  }
+
+  if (qs("backupBeforeDeleteToggle").checked) {
+    downloadText(`backup_before_delete_${getPeriodFileSuffix()}.json`, JSON.stringify(pts, null, 2), "application/json");
   }
 
   if (!confirm(`Удалить ${pts.length} точек за выбранный период?`)) return;
@@ -1129,16 +1575,41 @@ async function deleteRange() {
   alert("Период удалён.");
 }
 
+async function deleteVisibleJunkPoints() {
+  const pts = filteredHistory().filter((p, idx, arr) => looksJunk(arr[idx - 1], p));
+  if (!pts.length) {
+    alert("Мусорных точек в текущем фильтре нет.");
+    return;
+  }
+  if (!confirm(`Удалить ${pts.length} мусорных точек за текущий период?`)) return;
+
+  const updatesObj = {};
+  pts.forEach(p => {
+    updatesObj[`history/default/${String(p.timestamp)}`] = null;
+  });
+
+  await logDeletion("junk_bulk_delete", `${pts.length} точек`);
+  await update(ref(db), updatesObj);
+  alert("Мусорные точки удалены.");
+}
+
 function getSessionStatus(session) {
   const meta = session?.meta || {};
   const active = !!meta.active;
   const expiresAt = Number(meta.expiresAt || 0);
   const now = Date.now();
 
-  if (active && expiresAt > now) return "активна";
-  if (active && expiresAt <= now) return "истекла";
-  if (!active && expiresAt > now) return "завершена вручную";
-  return "истекла";
+  if (active && expiresAt > now) return "active";
+  if (active && expiresAt <= now) return "expired";
+  if (!active && expiresAt > now) return "ended";
+  return "expired";
+}
+
+function getSessionStatusLabel(status) {
+  if (status === "active") return "активна";
+  if (status === "expired") return "истекла";
+  if (status === "ended") return "завершена вручную";
+  return "—";
 }
 
 async function endSession(token) {
@@ -1147,11 +1618,38 @@ async function endSession(token) {
     active: false,
     endedAt: Date.now()
   });
-  await logDeletion("session_end", token);
+  await logAction("session_end", `Завершена live-сессия ${token}`);
+}
+
+async function extendSession(token) {
+  const minutes = Number(qs("extendSessionMinutesInput").value || 0);
+  if (!minutes || minutes <= 0) {
+    alert("Укажи корректное количество минут для продления.");
+    return;
+  }
+
+  const session = allSessions[token];
+  if (!session) {
+    alert("Сессия не найдена.");
+    return;
+  }
+
+  const currentExpires = Number(session?.meta?.expiresAt || Date.now());
+  const base = Math.max(currentExpires, Date.now());
+  const newExpiresAt = base + minutes * 60 * 1000;
+
+  await update(ref(db, `liveSessions/${token}/meta`), {
+    expiresAt: newExpiresAt,
+    active: true,
+    extendedAt: Date.now()
+  });
+
+  await logAction("session_extend", `Продлена live-сессия ${token} на ${minutes} мин`);
+  alert(`Сессия продлена до ${fmtTime(newExpiresAt)}`);
 }
 
 function getRecentSourcePoints(mode, pointsLimit) {
-  const limit = Math.max(2, Math.min(500, Number(pointsLimit || 100)));
+  const limit = Math.max(2, Math.min(500, Number(pointsLimit || settings.liveShareDefaultPoints)));
 
   const livePoints = Object.values(liveDefaultData?.recentPoints || {})
     .filter(Boolean)
@@ -1206,7 +1704,7 @@ async function createLiveSession() {
   }
 
   const sourceMode = qs("shareSource").value;
-  const pointsLimit = Number(qs("sharePointsLimit").value || 100);
+  const pointsLimit = Number(qs("sharePointsLimit").value || settings.liveShareDefaultPoints);
   const sourcePoints = getRecentSourcePoints(sourceMode, pointsLimit);
 
   if (!sourcePoints.length) {
@@ -1250,31 +1748,111 @@ async function createLiveSession() {
   };
 
   await set(ref(db, `liveSessions/${token}`), payload);
-  await logDeletion("session_create", `Создана live-сессия ${token} на ${durationMinutes} мин`);
+  await logAction("session_create", `Создана live-сессия ${token} на ${durationMinutes} мин`);
 
   const url = buildShareUrl(token);
   showShareResult(url, expiresAt);
-  renderSessions();
   alert("Live-ссылка создана.");
+}
+
+async function syncActiveSessionsFromLiveDefault(silent = false) {
+  if (!liveDefaultData?.lastPoint) {
+    if (!silent) alert("Нет live/default для синхронизации.");
+    return;
+  }
+
+  const now = Date.now();
+  const activeEntries = Object.entries(allSessions)
+    .filter(([k, v]) => k !== "_init" && v?.meta?.active && Number(v?.meta?.expiresAt || 0) > now);
+
+  if (!activeEntries.length) {
+    if (!silent) alert("Активных live-сессий нет.");
+    return;
+  }
+
+  const livePoints = Object.values(liveDefaultData.recentPoints || {})
+    .filter(Boolean)
+    .sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0))
+    .slice(-settings.liveShareDefaultPoints);
+
+  const recentPointsObj = {};
+  livePoints.forEach((p) => {
+    recentPointsObj[String(p.timestamp || Date.now() + Math.random())] = p;
+  });
+
+  const updatesObj = {};
+  activeEntries.forEach(([token]) => {
+    updatesObj[`liveSessions/${token}/lastPoint`] = liveDefaultData.lastPoint;
+    updatesObj[`liveSessions/${token}/recentPoints`] = recentPointsObj;
+    updatesObj[`liveSessions/${token}/public/lastPoint`] = liveDefaultData.lastPoint;
+    updatesObj[`liveSessions/${token}/public/recentPoints`] = recentPointsObj;
+    updatesObj[`liveSessions/${token}/meta/lastSyncedAt`] = Date.now();
+  });
+
+  await update(ref(db), updatesObj);
+  if (!silent) {
+    await logAction("session_sync_active", `Синхронизировано активных сессий: ${activeEntries.length}`);
+    alert(`Синхронизировано ${activeEntries.length} active-сессий.`);
+  }
+}
+
+async function endAllActiveSessions() {
+  const now = Date.now();
+  const activeEntries = Object.entries(allSessions)
+    .filter(([k, v]) => k !== "_init" && v?.meta?.active && Number(v?.meta?.expiresAt || 0) > now);
+
+  if (!activeEntries.length) {
+    alert("Активных сессий нет.");
+    return;
+  }
+
+  if (!confirm(`Завершить все активные live-сессии (${activeEntries.length})?`)) return;
+
+  const updatesObj = {};
+  activeEntries.forEach(([token]) => {
+    updatesObj[`liveSessions/${token}/meta/active`] = false;
+    updatesObj[`liveSessions/${token}/meta/endedAt`] = Date.now();
+  });
+
+  await update(ref(db), updatesObj);
+  await logAction("session_end_all", `Завершены все активные сессии: ${activeEntries.length}`);
+  alert("Все активные сессии завершены.");
 }
 
 function renderSessions() {
   const tbody = qs("sessionsTbody");
   tbody.innerHTML = "";
 
+  const search = (qs("sessionSearchInput").value || "").trim().toLowerCase();
+  const statusFilter = qs("sessionStatusFilter").value;
+
   const entries = Object.entries(allSessions)
     .filter(([k]) => k !== "_init")
-    .sort((a, b) => Number((b[1]?.meta?.createdAt || 0)) - Number((a[1]?.meta?.createdAt || 0)));
+    .filter(([token, session]) => {
+      const status = getSessionStatus(session);
+      if (statusFilter !== "all" && status !== statusFilter) return false;
+      if (search && !token.toLowerCase().includes(search)) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      const sa = getSessionStatus(a[1]);
+      const sb = getSessionStatus(b[1]);
+      const weight = (s) => s === "active" ? 0 : s === "ended" ? 1 : 2;
+      const diff = weight(sa) - weight(sb);
+      if (diff !== 0) return diff;
+      return Number((b[1]?.meta?.createdAt || 0)) - Number((a[1]?.meta?.createdAt || 0));
+    });
 
   if (!entries.length) {
-    tbody.innerHTML = '<tr><td colspan="6">Сессий пока нет</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6">Сессий по текущему фильтру нет</td></tr>';
     return;
   }
 
   entries.forEach(([token, session]) => {
     const meta = session?.meta || {};
     const stats = session?.viewStats || {};
-    const statusText = getSessionStatus(session);
+    const status = getSessionStatus(session);
+    const statusText = getSessionStatusLabel(status);
     const expiresAt = Number(meta.expiresAt || 0);
 
     const tr = document.createElement("tr");
@@ -1286,8 +1864,9 @@ function renderSessions() {
       <td>${fmtTime(stats.firstOpenAt)}<br>${fmtTime(stats.lastOpenAt)}</td>
       <td>
         <div class="row">
-          <button class="secondary small" data-copy="${token}">Копировать ссылку</button>
-          <button class="secondary small" data-view="${token}">Показать карту</button>
+          <button class="secondary small" data-copy="${token}">Копировать</button>
+          <button class="secondary small" data-view="${token}">Карта</button>
+          <button class="secondary small" data-extend="${token}">Продлить</button>
           <button class="warn small" data-end="${token}">Завершить</button>
           <button class="danger small" data-delete="${token}">Удалить</button>
         </div>
@@ -1312,7 +1891,7 @@ function renderSessions() {
         .filter(Boolean)
         .sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
 
-      const mapPts = downsamplePoints(pts, 2000);
+      const mapPts = downsamplePoints(pts, settings.mapMaxPoints);
       const latlngs = mapPts
         .filter(p => p.latitude != null && p.longitude != null)
         .map(p => [Number(p.latitude), Number(p.longitude)]);
@@ -1327,6 +1906,10 @@ function renderSessions() {
     };
   });
 
+  tbody.querySelectorAll("button[data-extend]").forEach((b) => {
+    b.onclick = () => extendSession(b.dataset.extend);
+  });
+
   tbody.querySelectorAll("button[data-end]").forEach((b) => {
     b.onclick = () => endSession(b.dataset.end);
   });
@@ -1334,7 +1917,7 @@ function renderSessions() {
   tbody.querySelectorAll("button[data-delete]").forEach((b) => {
     b.onclick = async () => {
       if (!confirm(`Удалить live-сессию ${b.dataset.delete}?`)) return;
-      await logDeletion("session_delete", b.dataset.delete);
+      await logAction("session_delete", `Удалена live-сессия ${b.dataset.delete}`);
       await remove(ref(db, `liveSessions/${b.dataset.delete}`));
     };
   });
@@ -1346,11 +1929,12 @@ async function loadSessions() {
   updateUsage();
   renderSessions();
   updateNowFromAvailableSources();
+  updateHealthPanel();
 }
 
 function findIdleDurationMs(points, lastPoint) {
   if (!lastPoint?.timestamp) return null;
-  if (Number(lastPoint.speed || 0) > 2) return 0;
+  if (Number(lastPoint.speed || 0) > settings.stopSpeedThreshold) return 0;
 
   const ordered = points
     .filter(Boolean)
@@ -1362,7 +1946,7 @@ function findIdleDurationMs(points, lastPoint) {
   for (let i = ordered.length - 1; i >= 0; i--) {
     const p = ordered[i];
     const speed = Number(p.speed || 0);
-    if (speed > 2) break;
+    if (speed > settings.stopSpeedThreshold) break;
     idleStartTs = Number(p.timestamp || idleStartTs);
   }
 
@@ -1370,6 +1954,8 @@ function findIdleDurationMs(points, lastPoint) {
 }
 
 function updateNowUI(point, sourceLabel, recentPoints = []) {
+  currentNowSourceLabel = sourceLabel || "—";
+
   if (point && point.latitude != null && point.longitude != null) {
     const lat = Number(point.latitude);
     const lon = Number(point.longitude);
@@ -1393,7 +1979,7 @@ function updateNowUI(point, sourceLabel, recentPoints = []) {
   }
 
   const freshness = point?.timestamp ? Date.now() - Number(point.timestamp) : null;
-  const isOnline = freshness != null && freshness <= 3 * 60 * 1000;
+  const isOnline = freshness != null && freshness <= settings.onlineFreshnessMin * 60 * 1000;
   const idleMs = recentPoints.length ? findIdleDurationMs(recentPoints, point) : null;
 
   qs("nowStatus").textContent = isOnline ? "Онлайн" : "Оффлайн";
@@ -1411,13 +1997,14 @@ function updateNowFromAvailableSources() {
       .filter(Boolean)
       .sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
 
-    const mapPts = downsamplePoints(pts, 800);
+    const mapPts = downsamplePoints(pts, settings.liveTrailMaxPoints);
     liveTrail.setLatLngs(mapPts
       .filter(p => p.latitude != null && p.longitude != null)
       .map(p => [Number(p.latitude), Number(p.longitude)])
     );
 
     updateNowUI(liveDefaultData.lastPoint, "live/default", pts);
+    updateHealthPanel();
     return;
   }
 
@@ -1432,19 +2019,21 @@ function updateNowFromAvailableSources() {
       .filter(Boolean)
       .sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
 
-    const mapPts = downsamplePoints(sourcePoints, 800);
+    const mapPts = downsamplePoints(sourcePoints, settings.liveTrailMaxPoints);
     liveTrail.setLatLngs(mapPts
       .filter(p => p.latitude != null && p.longitude != null)
       .map(p => [Number(p.latitude), Number(p.longitude)])
     );
 
     updateNowUI(session.lastPoint || session.public?.lastPoint || null, `liveSessions/${token}`, sourcePoints);
+    updateHealthPanel();
     return;
   }
 
   const point = allHistoryPoints.length ? allHistoryPoints[allHistoryPoints.length - 1] : null;
   liveTrail.setLatLngs([]);
   updateNowUI(point, "history/default", allHistoryPoints.slice(-30));
+  updateHealthPanel();
 }
 
 async function cleanupExpiredSessions() {
@@ -1468,17 +2057,28 @@ async function cleanupExpiredSessions() {
 
   if (!confirm(`Удалить ${count} истёкших live-сессий?`)) return;
 
-  await logDeletion("expired_sessions_cleanup", `${count} сессий`);
+  await logAction("expired_sessions_cleanup", `Удалено истёкших сессий: ${count}`);
   await update(ref(db), updatesObj);
   alert("Очистка завершена.");
 }
 
-function renderDeletions() {
-  const tbody = qs("deletionsTbody");
+function renderJournal() {
+  const tbody = qs("journalTbody");
   tbody.innerHTML = "";
-  deletionsLog.slice().reverse().slice(0, 300).forEach(item => {
+
+  const combined = [
+    ...deletionsLog.map(item => ({...item, _type: item.kind || "deletion"})),
+    ...actionLogs.map(item => ({...item, _type: item.kind || "action"}))
+  ].sort((a,b)=>Number(b.ts || 0) - Number(a.ts || 0));
+
+  combined.slice(0, 500).forEach(item => {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${fmtTime(item.ts)}</td><td>${item.kind || "—"}</td><td>${item.description || "—"}</td>`;
+    tr.innerHTML = `
+      <td>${fmtTime(item.ts)}</td>
+      <td>${item._type || "—"}</td>
+      <td>${item.description || "—"}</td>
+      <td>${item.email || item.uid || "—"}</td>
+    `;
     tbody.appendChild(tr);
   });
 }
@@ -1512,6 +2112,7 @@ qs("emailRegisterBtn").onclick = async () => {
 
 qs("logoutBtn").onclick = async () => {
   detachRealtimeListeners();
+  stopAutoSyncTimer();
   await signOut(auth);
 };
 
@@ -1541,6 +2142,11 @@ qs("weekBtn").onclick = () => {
   renderHistory();
 };
 
+qs("range30mBtn").onclick = () => setRangeFromMinutesBack(30);
+qs("range1hBtn").onclick = () => setRangeFromMinutesBack(60);
+qs("range6hBtn").onclick = () => setRangeFromMinutesBack(360);
+qs("range24hBtn").onclick = () => setRangeFromMinutesBack(1440);
+
 qs("jumpDateBtn").onclick = () => {
   const d = qs("jumpDate").value;
   if (!d) return;
@@ -1557,6 +2163,13 @@ qs("resetFiltersBtn").onclick = () => {
   qs("minSpeedFilter").value = "";
   qs("maxSpeedFilter").value = "";
   qs("hideJunkToggle").checked = false;
+  qs("movementFilter").value = "all";
+  renderHistory();
+};
+
+qs("showStopsOnMapToggle").onchange = () => {
+  settings.showStopsOnMap = qs("showStopsOnMapToggle").checked;
+  saveSettingsToStorage(settings);
   renderHistory();
 };
 
@@ -1576,9 +2189,20 @@ qs("exportCsvBtn").onclick = exportCsv;
 qs("exportGpxBtn").onclick = exportGpx;
 qs("exportPdfBtn").onclick = exportPdf;
 qs("deleteRangeBtn").onclick = deleteRange;
+qs("deleteVisibleJunkBtn").onclick = deleteVisibleJunkPoints;
+
+qs("exportFullDbBtn").onclick = exportFullDbBackup;
+qs("exportLiveSessionsBackupBtn").onclick = exportLiveSessionsBackup;
+qs("exportAdminLogsBackupBtn").onclick = exportAdminLogsBackup;
 
 qs("refreshSessionsBtn").onclick = loadSessions;
 qs("cleanupSessionsBtn").onclick = cleanupExpiredSessions;
+qs("syncActiveSessionsBtn").onclick = () => syncActiveSessionsFromLiveDefault(false);
+qs("endAllActiveSessionsBtn").onclick = endAllActiveSessions;
+qs("sessionSearchInput").oninput = renderSessions;
+qs("sessionStatusFilter").onchange = renderSessions;
+qs("autoSyncIntervalSelect").onchange = maybeStartAutoSync;
+
 qs("refreshNowBtn").onclick = updateNowFromAvailableSources;
 
 qs("liveAutoCenterBtn").onclick = () => {
@@ -1607,8 +2231,38 @@ qs("openCreatedShareBtn").onclick = () => {
   window.open(createdShareUrl, "_blank", "noopener,noreferrer");
 };
 
+qs("refreshJournalBtn").onclick = renderJournal;
+
+qs("saveSettingsBtn").onclick = async () => {
+  readSettingsFromUI();
+  applyMapStyle(settings.mapStyle);
+  applySettingsToUI();
+  renderHistory();
+  updateNowFromAvailableSources();
+  updateHealthPanel();
+  await logAction("settings_save", "Сохранены локальные настройки админки");
+  alert("Настройки сохранены локально.");
+};
+
+qs("resetSettingsBtn").onclick = () => {
+  settings = { ...DEFAULT_SETTINGS };
+  saveSettingsToStorage(settings);
+  applySettingsToUI();
+  applyMapStyle(settings.mapStyle);
+  renderHistory();
+  updateNowFromAvailableSources();
+  updateHealthPanel();
+  alert("Настройки сброшены.");
+};
+
+qs("mapStyleSelect").onchange = () => {
+  readSettingsFromUI();
+  applyMapStyle(qs("mapStyleSelect").value);
+};
+
 onAuthStateChanged(auth, async (user) => {
   detachRealtimeListeners();
+  stopAutoSyncTimer();
   hideError();
 
   if (!user) {
@@ -1616,22 +2270,25 @@ onAuthStateChanged(auth, async (user) => {
     allSessions = {};
     allHistoryPoints = [];
     deletionsLog = [];
+    actionLogs = [];
     currentFiltered = [];
     currentPointIndex = 0;
     selectedAddressRequestId = 0;
     liveAddressRequestId = 0;
     lastLiveAddressKey = "";
     createdShareUrl = "";
+    authSessionLoggedUid = null;
 
     authCard.classList.remove("hidden");
     adminPanel.classList.add("hidden");
     authMessage.innerHTML = 'Если после входа доступа нет, добавь свой UID в Firebase: <div class="mono">admins/ТВОЙ_UID = true</div>';
 
     updateUsage();
+    resetHealthPanel();
     resetNowPanel();
     resetHistoryPanel();
     resetSessionsPanel();
-    resetDeletionsPanel();
+    resetJournalPanel();
     return;
   }
 
@@ -1651,6 +2308,16 @@ onAuthStateChanged(auth, async (user) => {
     userInfo.textContent = user.email || "Google user";
 
     setDefaultPeriodToday();
+    applySettingsToUI();
+    applyMapStyle(settings.mapStyle);
+    maybeStartAutoSync();
+
+    if (authSessionLoggedUid !== user.uid) {
+      authSessionLoggedUid = user.uid;
+      try {
+        await logAction("admin_login", "Вход в админку");
+      } catch {}
+    }
 
     unsubLiveDefault = onValue(ref(db, "live/default"), (snap) => {
       liveDefaultData = snap.val() || null;
@@ -1663,6 +2330,7 @@ onAuthStateChanged(auth, async (user) => {
       updateUsage();
       renderSessions();
       updateNowFromAvailableSources();
+      updateHealthPanel();
     });
 
     unsubHistory = onValue(ref(db, "history/default"), (snap) => {
@@ -1674,6 +2342,7 @@ onAuthStateChanged(auth, async (user) => {
       updateUsage();
       renderHistory();
       updateNowFromAvailableSources();
+      updateHealthPanel();
     });
 
     unsubDeletions = onValue(ref(db, "adminLogs/deletions"), (snap) => {
@@ -1682,8 +2351,18 @@ onAuthStateChanged(auth, async (user) => {
         .filter(Boolean)
         .sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0));
 
-      renderDeletions();
+      renderJournal();
     });
+
+    unsubActions = onValue(ref(db, "adminLogs/actions"), (snap) => {
+      const raw = snap.val() || {};
+      actionLogs = Object.values(raw)
+        .filter(Boolean)
+        .sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0));
+
+      renderJournal();
+    });
+
   } catch (e) {
     authCard.classList.remove("hidden");
     adminPanel.classList.add("hidden");
