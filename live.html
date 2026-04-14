@@ -138,11 +138,11 @@
   </style>
 </head>
 <body>
-  <div class="wrap" id="appWrap">
+  <div class="wrap hidden" id="appWrap">
     <div class="top">
       <div class="card">
         <h1>MyGps Live</h1>
-        <p class="sub">Временная ссылка live-доступа к маршруту. Если срок действия закончился или сессия завершена, карта перестаёт быть доступной.</p>
+        <p class="sub">Временная ссылка live-доступа к маршруту.</p>
 
         <div class="row">
           <div class="pill"><span class="dot warn" id="liveDot"></span><span id="liveStatus">Проверка статуса…</span></div>
@@ -175,11 +175,10 @@
       </div>
 
       <div class="card">
-        <h2>Как работает</h2>
+        <h2>Live-доступ</h2>
         <div class="sub">
-          Ссылка имеет вид:<br>
-          <code>https://mygpstrack.github.io/mygps/live.html?session=TOKEN</code><br><br>
-          Без параметра <code>session</code>, с неверным токеном, после завершения сессии или после истечения времени данные не отображаются.
+          Эта страница работает только по временной ссылке с параметром
+          <code>?session=TOKEN</code>.
         </div>
       </div>
     </div>
@@ -187,66 +186,23 @@
     <div id="map"></div>
 
     <div class="footer">
-      Эта страница не пишет данные в Firebase и читает только публичную часть активной live-сессии.
+      Данные доступны только пока live-сессия активна и не истекла.
     </div>
   </div>
 
-  <div class="wrap hidden" id="emptyWrap">
+  <div class="wrap" id="emptyWrap">
     <div class="card emptyState">
       <h1 id="emptyTitle">Ссылка недействительна</h1>
       <p class="sub" id="emptyText">Доступ к live возможен только по активной временной ссылке.</p>
     </div>
   </div>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-
   <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
-    import { getDatabase, ref, onValue, off } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
-
-    const firebaseConfig = {
-      apiKey: "AIzaSyCXNCY-IpkhAXb8jNPhN8gf2UdOfPBc5gM",
-      authDomain: "mygpslive-57196.firebaseapp.com",
-      databaseURL: "https://mygpslive-57196-default-rtdb.europe-west1.firebasedatabase.app",
-      projectId: "mygpslive-57196",
-      storageBucket: "mygpslive-57196.firebasestorage.app",
-      messagingSenderId: "20781107701",
-      appId: "1:20781107701:web:bd47061b9aca13abbeb8bc",
-      measurementId: "G-BSCVNY9LH0"
-    };
-
     const params = new URLSearchParams(window.location.search);
     const sessionId = params.get("session") || "";
     const sessionValid = /^[A-Za-z0-9_-]{16,128}$/.test(sessionId);
 
     const qs = (id) => document.getElementById(id);
-
-    qs("sessionText").textContent = sessionId || "нет";
-
-    function fmtTime(value){
-      if(!value) return "—";
-      return new Date(value).toLocaleString("ru-RU");
-    }
-
-    function fmtRemain(ms){
-      if(ms == null) return "—";
-      const sec = Math.max(0, Math.floor(ms / 1000));
-      const h = Math.floor(sec / 3600);
-      const m = Math.floor((sec % 3600) / 60);
-      const s = sec % 60;
-      return h > 0
-        ? `${h}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`
-        : `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
-    }
-
-    function setStatus(text, cls){
-      qs("liveStatus").textContent = text;
-      qs("liveDot").className = "dot " + cls;
-    }
-
-    function setAccessState(text){
-      qs("accessState").textContent = text;
-    }
 
     function showEmpty(title, text){
       qs("appWrap").classList.add("hidden");
@@ -258,176 +214,215 @@
     if (!sessionId || !sessionValid) {
       showEmpty(
         "Ссылка недействительна",
-        "Доступ к live возможен только по корректной временной ссылке."
+        "Маршрут и live-данные доступны только по активной временной ссылке."
       );
-      throw new Error("Invalid session");
-    }
+    } else {
+      qs("emptyWrap").classList.add("hidden");
+      qs("appWrap").classList.remove("hidden");
+      qs("sessionText").textContent = sessionId;
 
-    const map = L.map("map").setView([56.95, 24.10], 12);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: "&copy; OpenStreetMap"
-    }).addTo(map);
+      const leafletScript = document.createElement("script");
+      leafletScript.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+      leafletScript.crossOrigin = "";
+      leafletScript.onload = async () => {
+        const { initializeApp } = await import("https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js");
+        const { getDatabase, ref, onValue, off } = await import("https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js");
 
-    const polyline = L.polyline([], { weight: 5 }).addTo(map);
-    const marker = L.circleMarker([56.95, 24.10], {
-      radius: 8,
-      color: "#22c55e",
-      fillColor: "#22c55e",
-      fillOpacity: 1
-    }).addTo(map);
+        const firebaseConfig = {
+          apiKey: "AIzaSyCXNCY-IpkhAXb8jNPhN8gf2UdOfPBc5gM",
+          authDomain: "mygpslive-57196.firebaseapp.com",
+          databaseURL: "https://mygpslive-57196-default-rtdb.europe-west1.firebasedatabase.app",
+          projectId: "mygpslive-57196",
+          storageBucket: "mygpslive-57196.firebasestorage.app",
+          messagingSenderId: "20781107701",
+          appId: "1:20781107701:web:bd47061b9aca13abbeb8bc",
+          measurementId: "G-BSCVNY9LH0"
+        };
 
-    qs("fitBtn").onclick = () => {
-      const latlngs = polyline.getLatLngs();
-      if (latlngs.length) {
-        map.fitBounds(polyline.getBounds(), { padding: [30,30] });
-      }
-    };
-
-    qs("lastBtn").onclick = () => {
-      map.setView(marker.getLatLng(), 16);
-    };
-
-    const app = initializeApp(firebaseConfig);
-    const db = getDatabase(app);
-
-    const metaRef = ref(db, `liveSessions/${sessionId}/meta`);
-    const publicRef = ref(db, `liveSessions/${sessionId}/public`);
-    const publicLastPointRef = ref(db, `liveSessions/${sessionId}/public/lastPoint`);
-    const publicRecentPointsRef = ref(db, `liveSessions/${sessionId}/public/recentPoints`);
-
-    let currentMeta = null;
-    let currentPublic = null;
-    let remainTimer = null;
-    let publicEnabled = true;
-
-    function stopRemainTimer() {
-      if (remainTimer) {
-        clearInterval(remainTimer);
-        remainTimer = null;
-      }
-    }
-
-    function updateRemaining() {
-      if (!currentMeta) {
-        qs("remain").textContent = "—";
-        return;
-      }
-
-      const expiresAt = Number(currentMeta.expiresAt || 0);
-      const now = Date.now();
-      const remainingMs = Math.max(0, expiresAt - now);
-      qs("remain").textContent = fmtRemain(remainingMs);
-
-      const active = !!currentMeta.active;
-      if (active && expiresAt > now) {
-        setStatus("Трансляция активна", "ok");
-        setAccessState("доступ открыт");
-      } else if (!active) {
-        setStatus("Трансляция завершена", "bad");
-        setAccessState("доступ закрыт");
-      } else {
-        setStatus("Ссылка истекла", "warn");
-        setAccessState("срок закончился");
-      }
-    }
-
-    function disablePublicDataView(reasonTitle, reasonText) {
-      publicEnabled = false;
-      off(publicLastPointRef);
-      off(publicRecentPointsRef);
-      stopRemainTimer();
-      showEmpty(reasonTitle, reasonText);
-    }
-
-    onValue(metaRef, (snap) => {
-      const data = snap.val();
-
-      if (!data) {
-        disablePublicDataView(
-          "Сессия не найдена",
-          "Такой live-сессии нет, она была удалена или ссылка неверная."
-        );
-        return;
-      }
-
-      currentMeta = data;
-      updateRemaining();
-
-      const active = !!data.active;
-      const expiresAt = Number(data.expiresAt || 0);
-      const now = Date.now();
-
-      stopRemainTimer();
-      remainTimer = setInterval(updateRemaining, 1000);
-
-      if (!active) {
-        disablePublicDataView(
-          "Трансляция завершена",
-          "Эта live-сессия была завершена владельцем."
-        );
-        return;
-      }
-
-      if (expiresAt <= now) {
-        disablePublicDataView(
-          "Ссылка истекла",
-          "Срок действия этой live-ссылки закончился."
-        );
-      }
-    }, (err) => {
-      console.error(err);
-      disablePublicDataView(
-        "Нет доступа к live-сессии",
-        "Ссылка недоступна, истекла или чтение закрыто правилами Firebase."
-      );
-    });
-
-    onValue(publicLastPointRef, (snap) => {
-      if (!publicEnabled) return;
-
-      const p = snap.val();
-      if (!p || p.latitude == null || p.longitude == null) return;
-
-      const lat = Number(p.latitude);
-      const lon = Number(p.longitude);
-
-      marker.setLatLng([lat, lon]);
-      qs("lastPoint").textContent = `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
-      qs("lastUpdate").textContent = fmtTime(p.timestamp);
-    }, (err) => {
-      console.error(err);
-      disablePublicDataView(
-        "Нет доступа к данным",
-        "Публичные данные этой live-сессии больше недоступны."
-      );
-    });
-
-    onValue(publicRecentPointsRef, (snap) => {
-      if (!publicEnabled) return;
-
-      const raw = snap.val() || {};
-      const pts = Object.values(raw)
-        .filter(Boolean)
-        .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))
-        .map((p) => [Number(p.latitude), Number(p.longitude)]);
-
-      polyline.setLatLngs(pts);
-
-      if (pts.length) {
-        marker.setLatLng(pts[pts.length - 1]);
-        if (pts.length === 1) {
-          map.setView(pts[0], 16);
-        } else {
-          map.fitBounds(polyline.getBounds(), { padding: [30,30] });
+        function fmtTime(value){
+          if(!value) return "—";
+          return new Date(value).toLocaleString("ru-RU");
         }
-      }
-    }, (err) => {
-      console.error(err);
-      disablePublicDataView(
-        "Нет доступа к маршруту",
-        "Маршрут этой live-сессии больше недоступен."
-      );
-    });
+
+        function fmtRemain(ms){
+          if(ms == null) return "—";
+          const sec = Math.max(0, Math.floor(ms / 1000));
+          const h = Math.floor(sec / 3600);
+          const m = Math.floor((sec % 3600) / 60);
+          const s = sec % 60;
+          return h > 0
+            ? `${h}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`
+            : `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+        }
+
+        function setStatus(text, cls){
+          qs("liveStatus").textContent = text;
+          qs("liveDot").className = "dot " + cls;
+        }
+
+        function setAccessState(text){
+          qs("accessState").textContent = text;
+        }
+
+        function disablePublicDataView(reasonTitle, reasonText) {
+          off(publicLastPointRef);
+          off(publicRecentPointsRef);
+          stopRemainTimer();
+          showEmpty(reasonTitle, reasonText);
+        }
+
+        const map = L.map("map").setView([56.95, 24.10], 12);
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          attribution: "&copy; OpenStreetMap"
+        }).addTo(map);
+
+        const polyline = L.polyline([], { weight: 5 }).addTo(map);
+        const marker = L.circleMarker([56.95, 24.10], {
+          radius: 8,
+          color: "#22c55e",
+          fillColor: "#22c55e",
+          fillOpacity: 1
+        }).addTo(map);
+
+        qs("fitBtn").onclick = () => {
+          const latlngs = polyline.getLatLngs();
+          if (latlngs.length) map.fitBounds(polyline.getBounds(), { padding: [30,30] });
+        };
+
+        qs("lastBtn").onclick = () => {
+          map.setView(marker.getLatLng(), 16);
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+
+        const metaRef = ref(db, `liveSessions/${sessionId}/meta`);
+        const publicLastPointRef = ref(db, `liveSessions/${sessionId}/public/lastPoint`);
+        const publicRecentPointsRef = ref(db, `liveSessions/${sessionId}/public/recentPoints`);
+
+        let currentMeta = null;
+        let remainTimer = null;
+
+        function stopRemainTimer() {
+          if (remainTimer) {
+            clearInterval(remainTimer);
+            remainTimer = null;
+          }
+        }
+
+        function updateRemaining() {
+          if (!currentMeta) {
+            qs("remain").textContent = "—";
+            return;
+          }
+
+          const expiresAt = Number(currentMeta.expiresAt || 0);
+          const now = Date.now();
+          const remainingMs = Math.max(0, expiresAt - now);
+          qs("remain").textContent = fmtRemain(remainingMs);
+
+          const active = !!currentMeta.active;
+          if (active && expiresAt > now) {
+            setStatus("Трансляция активна", "ok");
+            setAccessState("доступ открыт");
+          } else if (!active) {
+            setStatus("Трансляция завершена", "bad");
+            setAccessState("доступ закрыт");
+          } else {
+            setStatus("Ссылка истекла", "warn");
+            setAccessState("срок закончился");
+          }
+        }
+
+        onValue(metaRef, (snap) => {
+          const data = snap.val();
+
+          if (!data) {
+            disablePublicDataView(
+              "Сессия не найдена",
+              "Такой live-сессии нет, она была удалена или ссылка неверная."
+            );
+            return;
+          }
+
+          currentMeta = data;
+          updateRemaining();
+
+          const active = !!data.active;
+          const expiresAt = Number(data.expiresAt || 0);
+          const now = Date.now();
+
+          stopRemainTimer();
+          remainTimer = setInterval(updateRemaining, 1000);
+
+          if (!active) {
+            disablePublicDataView(
+              "Трансляция завершена",
+              "Эта live-сессия была завершена владельцем."
+            );
+            return;
+          }
+
+          if (expiresAt <= now) {
+            disablePublicDataView(
+              "Ссылка истекла",
+              "Срок действия этой live-ссылки закончился."
+            );
+          }
+        }, (err) => {
+          console.error(err);
+          disablePublicDataView(
+            "Нет доступа к live-сессии",
+            "Ссылка недоступна, истекла или чтение закрыто правилами Firebase."
+          );
+        });
+
+        onValue(publicLastPointRef, (snap) => {
+          const p = snap.val();
+          if (!p || p.latitude == null || p.longitude == null) return;
+
+          const lat = Number(p.latitude);
+          const lon = Number(p.longitude);
+
+          marker.setLatLng([lat, lon]);
+          qs("lastPoint").textContent = `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+          qs("lastUpdate").textContent = fmtTime(p.timestamp);
+        }, (err) => {
+          console.error(err);
+          disablePublicDataView(
+            "Нет доступа к данным",
+            "Публичные данные этой live-сессии больше недоступны."
+          );
+        });
+
+        onValue(publicRecentPointsRef, (snap) => {
+          const raw = snap.val() || {};
+          const pts = Object.values(raw)
+            .filter(Boolean)
+            .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))
+            .map((p) => [Number(p.latitude), Number(p.longitude)]);
+
+          polyline.setLatLngs(pts);
+
+          if (pts.length) {
+            marker.setLatLng(pts[pts.length - 1]);
+            if (pts.length === 1) {
+              map.setView(pts[0], 16);
+            } else {
+              map.fitBounds(polyline.getBounds(), { padding: [30,30] });
+            }
+          }
+        }, (err) => {
+          console.error(err);
+          disablePublicDataView(
+            "Нет доступа к маршруту",
+            "Маршрут этой live-сессии больше недоступен."
+          );
+        });
+      };
+
+      document.body.appendChild(leafletScript);
+    }
   </script>
 </body>
 </html>
