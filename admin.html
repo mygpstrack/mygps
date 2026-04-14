@@ -37,8 +37,16 @@
     .tab-btn{background:#1f2937}
     .tab-btn.active{background:var(--blue)}
     .hidden{display:none!important}
-    input,button,select{font:inherit}
-    input,select{padding:12px 14px;border-radius:12px;border:1px solid var(--border);background:#0b1220;color:var(--text);min-width:120px}
+    input,button,select,textarea{font:inherit}
+    input,select,textarea{
+      padding:12px 14px;
+      border-radius:12px;
+      border:1px solid var(--border);
+      background:#0b1220;
+      color:var(--text);
+      min-width:120px
+    }
+    textarea{width:100%;min-height:84px;resize:vertical}
     button{border:0;border-radius:12px;padding:10px 14px;font-weight:600;cursor:pointer;color:white;background:var(--blue)}
     button.secondary{background:#374151}
     button.warn{background:#b45309}
@@ -59,9 +67,15 @@
     #historyMap,#liveMap,#sessionMap{width:100%;height:420px;border-radius:16px;overflow:hidden;border:1px solid var(--border);margin-top:12px}
     .chartWrap{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:16px;padding:12px}
     .tag{display:inline-block;padding:3px 8px;border-radius:999px;border:1px solid var(--border);font-size:12px;margin-right:6px;margin-bottom:6px}
+    .sessionLinkBox{margin-top:12px}
     @media (max-width:1200px){.grid6{grid-template-columns:repeat(3,minmax(0,1fr))}}
     @media (max-width:1000px){.grid4{grid-template-columns:repeat(2,minmax(0,1fr))}.grid3,.grid2{grid-template-columns:1fr}}
-    @media (max-width:900px){.grid4,.grid6{grid-template-columns:1fr} input,select{min-width:unset;width:100%} .row>*{width:100%} #historyMap,#liveMap,#sessionMap{height:320px}}
+    @media (max-width:900px){
+      .grid4,.grid6{grid-template-columns:1fr}
+      input,select,textarea{min-width:unset;width:100%}
+      .row>*{width:100%}
+      #historyMap,#liveMap,#sessionMap{height:320px}
+    }
   </style>
 </head>
 <body>
@@ -257,6 +271,56 @@
 
     <div id="sessionsPanel" class="hidden">
       <div class="card">
+        <h2>Создать live-ссылку</h2>
+        <div class="grid4">
+          <div>
+            <div class="label">Время доступа</div>
+            <select id="shareDurationPreset">
+              <option value="15">15 минут</option>
+              <option value="30">30 минут</option>
+              <option value="60" selected>1 час</option>
+              <option value="180">3 часа</option>
+              <option value="360">6 часов</option>
+              <option value="720">12 часов</option>
+              <option value="1440">24 часа</option>
+              <option value="custom">Своё значение</option>
+            </select>
+          </div>
+          <div>
+            <div class="label">Свои минуты</div>
+            <input id="shareDurationCustom" type="number" min="1" step="1" placeholder="Например 90"/>
+          </div>
+          <div>
+            <div class="label">Источник</div>
+            <select id="shareSource">
+              <option value="auto" selected>Авто: live/default → history</option>
+              <option value="live">Только live/default</option>
+              <option value="history">Только history</option>
+            </select>
+          </div>
+          <div>
+            <div class="label">Точек в хвосте</div>
+            <input id="sharePointsLimit" type="number" min="2" max="500" step="1" value="100"/>
+          </div>
+        </div>
+
+        <div class="row">
+          <button id="createShareBtn" class="success">Создать live-ссылку</button>
+          <button id="clearShareResultBtn" class="secondary">Очистить блок ссылки</button>
+        </div>
+
+        <div id="shareResultBox" class="notice hidden sessionLinkBox">
+          <div><strong>Ссылка создана</strong></div>
+          <div style="margin-top:8px">Истекает: <span id="shareExpiresText">—</span></div>
+          <div style="margin-top:8px" class="mono" id="shareLinkText">—</div>
+          <div class="row">
+            <button id="copyCreatedShareBtn" class="secondary">Копировать ссылку</button>
+            <button id="openCreatedShareBtn">Открыть ссылку</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
         <h2>Live-сессии</h2>
         <div class="row">
           <button id="refreshSessionsBtn">Обновить live-сессии</button>
@@ -345,6 +409,7 @@ let distanceChart = null;
 let deletionsLog = [];
 let currentFiltered = [];
 let currentPointIndex = 0;
+let createdShareUrl = "";
 
 let unsubLiveDefault = null;
 let unsubLiveSessions = null;
@@ -424,6 +489,20 @@ function hideError() {
   box.textContent = "";
 }
 
+function showShareResult(url, expiresAt) {
+  createdShareUrl = url;
+  qs("shareLinkText").textContent = url;
+  qs("shareExpiresText").textContent = fmtTime(expiresAt);
+  qs("shareResultBox").classList.remove("hidden");
+}
+
+function hideShareResult() {
+  createdShareUrl = "";
+  qs("shareLinkText").textContent = "—";
+  qs("shareExpiresText").textContent = "—";
+  qs("shareResultBox").classList.add("hidden");
+}
+
 function resetNowPanel() {
   qs("nowStatus").textContent = "Нет данных";
   qs("nowSource").textContent = "—";
@@ -477,6 +556,7 @@ function resetSessionsPanel() {
   qs("sessionsTbody").innerHTML = '<tr><td colspan="6">Сессий пока нет</td></tr>';
   sessionTrail.setLatLngs([]);
   sessionMarker.setLatLng([56.95,24.10]);
+  hideShareResult();
 }
 
 function resetDeletionsPanel() {
@@ -877,18 +957,6 @@ function pointTags(prev, cur) {
   return tags;
 }
 
-function clearCharts() {
-  qs("dailyStatsTbody").innerHTML = "";
-  if (speedChart) {
-    speedChart.destroy();
-    speedChart = null;
-  }
-  if (distanceChart) {
-    distanceChart.destroy();
-    distanceChart = null;
-  }
-}
-
 function renderHistory() {
   const pts = filteredHistory();
 
@@ -1082,6 +1150,114 @@ async function endSession(token) {
   await logDeletion("session_end", token);
 }
 
+function getRecentSourcePoints(mode, pointsLimit) {
+  const limit = Math.max(2, Math.min(500, Number(pointsLimit || 100)));
+
+  const livePoints = Object.values(liveDefaultData?.recentPoints || {})
+    .filter(Boolean)
+    .sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+
+  const historyPoints = allHistoryPoints
+    .filter(Boolean)
+    .sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+
+  if (mode === "live") {
+    return livePoints.slice(-limit);
+  }
+
+  if (mode === "history") {
+    return historyPoints.slice(-limit);
+  }
+
+  if (livePoints.length) return livePoints.slice(-limit);
+  return historyPoints.slice(-limit);
+}
+
+function getLastPointForShare(points) {
+  if (!points.length) return null;
+  return points[points.length - 1];
+}
+
+function generateSessionToken() {
+  const arr = new Uint8Array(24);
+  crypto.getRandomValues(arr);
+  return Array.from(arr, b => b.toString(16).padStart(2, "0")).join("");
+}
+
+function getShareDurationMinutes() {
+  const preset = qs("shareDurationPreset").value;
+  if (preset === "custom") {
+    const custom = Number(qs("shareDurationCustom").value || 0);
+    if (!Number.isFinite(custom) || custom <= 0) return null;
+    return Math.floor(custom);
+  }
+  return Number(preset);
+}
+
+function buildShareUrl(token) {
+  return `https://mygpstrack.github.io/mygps/live.html?session=${encodeURIComponent(token)}`;
+}
+
+async function createLiveSession() {
+  const durationMinutes = getShareDurationMinutes();
+  if (!durationMinutes || durationMinutes <= 0) {
+    alert("Укажи корректное время действия ссылки.");
+    return;
+  }
+
+  const sourceMode = qs("shareSource").value;
+  const pointsLimit = Number(qs("sharePointsLimit").value || 100);
+  const sourcePoints = getRecentSourcePoints(sourceMode, pointsLimit);
+
+  if (!sourcePoints.length) {
+    alert("Нет данных для создания live-ссылки.");
+    return;
+  }
+
+  const token = generateSessionToken();
+  const now = Date.now();
+  const expiresAt = now + durationMinutes * 60 * 1000;
+  const lastPoint = getLastPointForShare(sourcePoints);
+
+  const recentPointsObj = {};
+  sourcePoints.forEach((p) => {
+    const key = String(p.timestamp || Date.now() + Math.random());
+    recentPointsObj[key] = p;
+  });
+
+  const currentUser = auth.currentUser;
+  const payload = {
+    meta: {
+      active: true,
+      createdAt: now,
+      expiresAt,
+      createdBy: currentUser?.uid || null,
+      createdByEmail: currentUser?.email || null,
+      durationMinutes
+    },
+    lastPoint,
+    recentPoints: recentPointsObj,
+    public: {
+      lastPoint,
+      recentPoints: recentPointsObj
+    },
+    viewStats: {
+      status: "created",
+      openCount: 0,
+      firstOpenAt: null,
+      lastOpenAt: null
+    }
+  };
+
+  await set(ref(db, `liveSessions/${token}`), payload);
+  await logDeletion("session_create", `Создана live-сессия ${token} на ${durationMinutes} мин`);
+
+  const url = buildShareUrl(token);
+  showShareResult(url, expiresAt);
+  renderSessions();
+  alert("Live-ссылка создана.");
+}
+
 function renderSessions() {
   const tbody = qs("sessionsTbody");
   tbody.innerHTML = "";
@@ -1122,7 +1298,7 @@ function renderSessions() {
 
   tbody.querySelectorAll("button[data-copy]").forEach((b) => {
     b.onclick = async () => {
-      await navigator.clipboard.writeText(`https://mygpstrack.github.io/mygps/live.html?session=${b.dataset.copy}`);
+      await navigator.clipboard.writeText(buildShareUrl(b.dataset.copy));
       alert("Ссылка скопирована");
     };
   });
@@ -1410,6 +1586,27 @@ qs("liveAutoCenterBtn").onclick = () => {
   qs("liveAutoCenterBtn").textContent = `Автоцентр: ${liveAutoCenter ? "вкл" : "выкл"}`;
 };
 
+qs("createShareBtn").onclick = async () => {
+  try {
+    await createLiveSession();
+  } catch (e) {
+    alert("Ошибка создания live-ссылки: " + (e.message || e));
+  }
+};
+
+qs("clearShareResultBtn").onclick = hideShareResult;
+
+qs("copyCreatedShareBtn").onclick = async () => {
+  if (!createdShareUrl) return;
+  await navigator.clipboard.writeText(createdShareUrl);
+  alert("Ссылка скопирована");
+};
+
+qs("openCreatedShareBtn").onclick = () => {
+  if (!createdShareUrl) return;
+  window.open(createdShareUrl, "_blank", "noopener,noreferrer");
+};
+
 onAuthStateChanged(auth, async (user) => {
   detachRealtimeListeners();
   hideError();
@@ -1424,6 +1621,7 @@ onAuthStateChanged(auth, async (user) => {
     selectedAddressRequestId = 0;
     liveAddressRequestId = 0;
     lastLiveAddressKey = "";
+    createdShareUrl = "";
 
     authCard.classList.remove("hidden");
     adminPanel.classList.add("hidden");
