@@ -69,11 +69,8 @@
     .chartWrap{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:16px;padding:12px}
     .tag{display:inline-block;padding:3px 8px;border-radius:999px;border:1px solid var(--border);font-size:12px;margin-right:6px;margin-bottom:6px}
     .sessionLinkBox{margin-top:12px}
-    .muted{color:var(--muted)}
     .checkboxRow{display:flex;align-items:center;gap:8px}
     .checkboxRow input{width:auto;min-width:auto}
-    .settingsBlock{margin-top:16px}
-    .kbd{display:inline-block;padding:2px 8px;border-radius:8px;border:1px solid var(--border);background:rgba(255,255,255,.03)}
     @media (max-width:1200px){.grid6{grid-template-columns:repeat(3,minmax(0,1fr))}}
     @media (max-width:1000px){.grid4{grid-template-columns:repeat(2,minmax(0,1fr))}.grid3,.grid2{grid-template-columns:1fr}}
     @media (max-width:900px){
@@ -89,7 +86,7 @@
   <div class="card">
     <h1>MyGps Admin</h1>
     <div id="pageDateTime" class="headerTime">—</div>
-    <p class="sub">История, live-сессии, карта, экспорт, графики, backup и диагностика. Настройки админки сохраняются локально в браузере, чтобы не тратить Firebase.</p>
+    <p class="sub">Production-версия под бесплатный Firebase и GitHub Pages. Настройки админки сохраняются локально в браузере.</p>
   </div>
 
   <div class="card" id="authCard">
@@ -329,7 +326,7 @@
           <div class="stat"><div class="label">Всего в базе</div><div class="value" id="totalSize">—</div></div>
           <div class="stat"><div class="label">Точек в истории</div><div class="value" id="historyCount">0</div></div>
         </div>
-        <div class="notice">Это оценка по содержимому базы на клиенте. Для бесплатного Firebase следи за количеством чтений/записей и включай автосинхронизацию live-сессий только когда нужно.</div>
+        <div class="notice">Это оценка по содержимому базы на клиенте. Для бесплатного Firebase избегай лишних кнопок “обновить” и держи автосинхронизацию live-сессий выключенной, если она не нужна.</div>
       </div>
 
       <div class="card">
@@ -339,7 +336,6 @@
           <button id="exportLiveSessionsBackupBtn" class="secondary">Экспорт liveSessions</button>
           <button id="exportAdminLogsBackupBtn" class="secondary">Экспорт adminLogs</button>
         </div>
-        <div class="notice">Backup выгружается локально в JSON. Это не пишет ничего в Firebase и не требует платного тарифа.</div>
       </div>
     </div>
 
@@ -413,9 +409,8 @@
           <div>
             <div class="label">Автосинхронизация active-сессий</div>
             <select id="autoSyncIntervalSelect">
-              <option value="0">Выключена</option>
-              <option value="30">Каждые 30 сек</option>
-              <option value="60" selected>Каждые 60 сек</option>
+              <option value="0" selected>Выключена</option>
+              <option value="60">Каждые 60 сек</option>
               <option value="120">Каждые 2 мин</option>
               <option value="300">Каждые 5 мин</option>
             </select>
@@ -461,40 +456,26 @@
     <div id="settingsPanel" class="hidden">
       <div class="card">
         <h2>Настройки админки</h2>
-        <p class="sub">Эти настройки сохраняются локально в браузере администратора, чтобы не тратить записи в Firebase.</p>
+        <p class="sub">Сохраняются локально в браузере и не пишутся в Firebase.</p>
 
-        <div class="settingsBlock">
-          <h3>Пороги и фильтры</h3>
-          <div class="grid4">
-            <div><div class="label">Онлайн-свежесть, мин</div><input id="settingOnlineFreshnessMin" type="number" min="1" step="1"/></div>
-            <div><div class="label">Макс. accuracy для мусора, м</div><input id="settingJunkMaxAccuracy" type="number" min="1" step="1"/></div>
-            <div><div class="label">Скорость “стоит”, км/ч</div><input id="settingStopSpeedThreshold" type="number" min="0" step="0.1"/></div>
-            <div><div class="label">Мин. стоянка, мин</div><input id="settingStopMinMinutes" type="number" min="1" step="1"/></div>
-            <div><div class="label">Разрыв поездки, мин</div><input id="settingTripGapMinutes" type="number" min="1" step="1"/></div>
-            <div><div class="label">Порог телепорта, км/ч</div><input id="settingJunkTeleportSpeed" type="number" min="1" step="1"/></div>
-            <div><div class="label">Макс. вычисл. скорость, км/ч</div><input id="settingJunkMaxCalcSpeed" type="number" min="1" step="1"/></div>
-            <div><div class="label">Строк в истории</div><input id="settingTableMaxRows" type="number" min="50" step="50"/></div>
-          </div>
-        </div>
-
-        <div class="settingsBlock">
-          <h3>Карта и производительность</h3>
-          <div class="grid4">
-            <div><div class="label">Лимит точек на карте history</div><input id="settingMapMaxPoints" type="number" min="200" step="100"/></div>
-            <div><div class="label">Лимит точек live-хвоста</div><input id="settingLiveTrailMaxPoints" type="number" min="50" step="50"/></div>
-            <div><div class="label">Дефолт live-ссылка, мин</div><input id="settingDefaultShareMinutes" type="number" min="1" step="1"/></div>
-            <div><div class="label">Хвост для live-ссылки, точек</div><input id="settingLiveShareDefaultPoints" type="number" min="2" max="500" step="1"/></div>
-          </div>
+        <div class="grid4">
+          <div><div class="label">Онлайн-свежесть, мин</div><input id="settingOnlineFreshnessMin" type="number" min="1" step="1"/></div>
+          <div><div class="label">Макс. accuracy для мусора, м</div><input id="settingJunkMaxAccuracy" type="number" min="1" step="1"/></div>
+          <div><div class="label">Скорость “стоит”, км/ч</div><input id="settingStopSpeedThreshold" type="number" min="0" step="0.1"/></div>
+          <div><div class="label">Мин. стоянка, мин</div><input id="settingStopMinMinutes" type="number" min="1" step="1"/></div>
+          <div><div class="label">Разрыв поездки, мин</div><input id="settingTripGapMinutes" type="number" min="1" step="1"/></div>
+          <div><div class="label">Порог телепорта, км/ч</div><input id="settingJunkTeleportSpeed" type="number" min="1" step="1"/></div>
+          <div><div class="label">Макс. вычисл. скорость, км/ч</div><input id="settingJunkMaxCalcSpeed" type="number" min="1" step="1"/></div>
+          <div><div class="label">Строк в истории</div><input id="settingTableMaxRows" type="number" min="50" step="50"/></div>
+          <div><div class="label">Лимит точек на карте history</div><input id="settingMapMaxPoints" type="number" min="200" step="100"/></div>
+          <div><div class="label">Лимит точек live-хвоста</div><input id="settingLiveTrailMaxPoints" type="number" min="50" step="50"/></div>
+          <div><div class="label">Дефолт live-ссылка, мин</div><input id="settingDefaultShareMinutes" type="number" min="1" step="1"/></div>
+          <div><div class="label">Хвост для live-ссылки, точек</div><input id="settingLiveShareDefaultPoints" type="number" min="2" max="500" step="1"/></div>
         </div>
 
         <div class="row">
           <button id="saveSettingsBtn" class="success">Сохранить настройки</button>
           <button id="resetSettingsBtn" class="secondary">Сбросить настройки</button>
-        </div>
-
-        <div class="notice">
-          <div><strong>Важно:</strong> настройки здесь не пишутся в Firebase и не требуют платного тарифа.</div>
-          <div style="margin-top:8px">Стиль карты “спутник” не добавлял, чтобы не тянуть внешние платные API и ключи.</div>
         </div>
       </div>
     </div>
@@ -539,7 +520,7 @@ const firebaseConfig = {
   measurementId: "G-BSCVNY9LH0"
 };
 
-const SETTINGS_KEY = "mygps_admin_settings_v2";
+const SETTINGS_KEY = "mygps_admin_settings_prod_v1";
 
 const DEFAULT_SETTINGS = {
   onlineFreshnessMin: 3,
@@ -666,10 +647,8 @@ applyMapStyle(settings.mapStyle);
 const startMarker = L.marker([56.95,24.10]).addTo(historyMap).bindTooltip("Старт", {permanent:true, direction:"top"});
 const endMarker = L.marker([56.95,24.10]).addTo(historyMap).bindTooltip("Финиш", {permanent:true, direction:"top"});
 const selectedMarker = L.circleMarker([56.95,24.10], {radius:8,color:"#60a5fa",fillColor:"#60a5fa",fillOpacity:1}).addTo(historyMap);
-
 const liveTrail = L.polyline([], {weight:5}).addTo(liveMap);
 const liveMarker = L.circleMarker([56.95,24.10], {radius:8,color:"#22c55e",fillColor:"#22c55e",fillOpacity:1}).addTo(liveMap);
-
 const sessionTrail = L.polyline([], {weight:5}).addTo(sessionMap);
 const sessionMarker = L.circleMarker([56.95,24.10], {radius:8,color:"#22c55e",fillColor:"#22c55e",fillOpacity:1}).addTo(sessionMap);
 
@@ -752,7 +731,6 @@ function detachRealtimeListeners() {
   unsubHistory?.();
   unsubDeletions?.();
   unsubActions?.();
-
   unsubLiveDefault = null;
   unsubLiveSessions = null;
   unsubHistory = null;
@@ -830,7 +808,6 @@ function resetHealthPanel() {
 function resetHistoryPanel() {
   currentFiltered = [];
   currentPointIndex = 0;
-
   qs("pointsCount").textContent = "0";
   qs("distanceValue").textContent = "0 км";
   qs("avgSpeedValue").textContent = "0 км/ч";
@@ -847,21 +824,13 @@ function resetHistoryPanel() {
   qs("dailyStatsTbody").innerHTML = "";
   qs("tripsTbody").innerHTML = "";
   qs("pointNavigatorLabel").textContent = "—";
-
   clearRouteSegments();
   clearStopMarkers();
   startMarker.setLatLng([56.95,24.10]);
   endMarker.setLatLng([56.95,24.10]);
   selectedMarker.setLatLng([56.95,24.10]);
-
-  if (speedChart) {
-    speedChart.destroy();
-    speedChart = null;
-  }
-  if (distanceChart) {
-    distanceChart.destroy();
-    distanceChart = null;
-  }
+  if (speedChart) { speedChart.destroy(); speedChart = null; }
+  if (distanceChart) { distanceChart.destroy(); distanceChart = null; }
 }
 
 function resetSessionsPanel() {
@@ -880,10 +849,8 @@ document.querySelectorAll(".tab-btn").forEach(btn => {
     document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
     document.querySelectorAll("#healthPanel,#nowPanel,#historyPanel,#reportsPanel,#tripsPanel,#usagePanel,#sessionsPanel,#journalPanel,#settingsPanel")
       .forEach(p => p.classList.add("hidden"));
-
     btn.classList.add("active");
     qs(btn.dataset.tab).classList.remove("hidden");
-
     setTimeout(() => {
       historyMap.invalidateSize();
       liveMap.invalidateSize();
@@ -958,7 +925,6 @@ function looksJunk(prev, cur) {
   const acc = Number(cur.accuracy || 0);
   const sp = Number(cur.speed || 0);
   if (acc > settings.junkMaxAccuracy) return true;
-
   if (prev) {
     const dist = distanceMeters(prev, cur);
     const dt = Math.max(1, (Number(cur.timestamp || 0) - Number(prev.timestamp || 0)) / 1000);
@@ -994,27 +960,18 @@ function filteredHistory() {
     if (minSp > 0 && sp < minSp) return false;
     if (maxSp > 0 && sp > maxSp) return false;
     if (hideJunk && junk) return false;
-
     if (movementMode === "moving" && isStopPoint(p)) return false;
     if (movementMode === "stops" && !isStopPoint(p)) return false;
     if (movementMode === "junk" && !junk) return false;
-
     return true;
   });
 }
 
 function computeSummary(points) {
   if (!points.length) return {count:0, km:0, avgSpeed:0, maxSpeed:0};
-
   let meters = 0;
-  for (let i = 1; i < points.length; i++) {
-    meters += distanceMeters(points[i - 1], points[i]);
-  }
-
-  const speeds = points
-    .map(p => Number(p.speed || 0))
-    .filter(v => Number.isFinite(v) && v > 0);
-
+  for (let i = 1; i < points.length; i++) meters += distanceMeters(points[i - 1], points[i]);
+  const speeds = points.map(p => Number(p.speed || 0)).filter(v => Number.isFinite(v) && v > 0);
   return {
     count: points.length,
     km: meters / 1000,
@@ -1027,27 +984,20 @@ function detectStops(points) {
   const stops = [];
   let startIdx = null;
   const minDurationMs = settings.stopMinMinutes * 60 * 1000;
-
   for (let i = 0; i < points.length; i++) {
     const stopped = isStopPoint(points[i]);
     if (stopped) {
       if (startIdx === null) startIdx = i;
     } else if (startIdx !== null) {
       const duration = Number(points[i - 1].timestamp || 0) - Number(points[startIdx].timestamp || 0);
-      if (duration >= minDurationMs) {
-        stops.push({start: points[startIdx], end: points[i - 1], duration});
-      }
+      if (duration >= minDurationMs) stops.push({start: points[startIdx], end: points[i - 1], duration});
       startIdx = null;
     }
   }
-
   if (startIdx !== null && points.length) {
     const duration = Number(points[points.length - 1].timestamp || 0) - Number(points[startIdx].timestamp || 0);
-    if (duration >= minDurationMs) {
-      stops.push({start: points[startIdx], end: points[points.length - 1], duration});
-    }
+    if (duration >= minDurationMs) stops.push({start: points[startIdx], end: points[points.length - 1], duration});
   }
-
   return stops;
 }
 
@@ -1056,7 +1006,6 @@ function splitTrips(points) {
   const trips = [];
   let cur = [points[0]];
   const gapMs = settings.tripGapMinutes * 60 * 1000;
-
   for (let i = 1; i < points.length; i++) {
     const gap = Number(points[i].timestamp || 0) - Number(points[i - 1].timestamp || 0);
     if (gap > gapMs) {
@@ -1066,7 +1015,6 @@ function splitTrips(points) {
       cur.push(points[i]);
     }
   }
-
   trips.push(cur);
   return trips;
 }
@@ -1078,12 +1026,8 @@ function geocodeKey(lat, lon) {
 async function reverseGeocode(lat, lon) {
   const key = geocodeKey(lat, lon);
   if (geocodeCache.has(key)) return geocodeCache.get(key);
-
   try {
-    const res = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&zoom=18&addressdetails=1`,
-      { headers: { Accept: "application/json" } }
-    );
+    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&zoom=18&addressdetails=1`, { headers: { Accept: "application/json" } });
     const json = await res.json();
     const addr = json.display_name || `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
     geocodeCache.set(key, addr);
@@ -1113,7 +1057,6 @@ function downsamplePoints(points, maxPoints) {
 function renderStopMarkers(stops) {
   clearStopMarkers();
   if (!settings.showStopsOnMap || !qs("showStopsOnMapToggle").checked) return;
-
   stops.forEach((stop, idx) => {
     if (stop.start?.latitude == null || stop.start?.longitude == null) return;
     const marker = L.marker([Number(stop.start.latitude), Number(stop.start.longitude)])
@@ -1125,37 +1068,25 @@ function renderStopMarkers(stops) {
 
 async function updateHistoryMap(points, stops = []) {
   clearRouteSegments();
-
-  const mapPoints = downsamplePoints(
-    points.filter(p => p.latitude != null && p.longitude != null),
-    settings.mapMaxPoints
-  );
-
+  const mapPoints = downsamplePoints(points.filter(p => p.latitude != null && p.longitude != null), settings.mapMaxPoints);
   const latlngs = mapPoints.map(p => [Number(p.latitude), Number(p.longitude)]);
   if (!latlngs.length) return;
 
   for (let i = 1; i < mapPoints.length; i++) {
     const a = [Number(mapPoints[i - 1].latitude), Number(mapPoints[i - 1].longitude)];
     const b = [Number(mapPoints[i].latitude), Number(mapPoints[i].longitude)];
-    const seg = L.polyline([a, b], {
-      weight: 5,
-      color: speedColor(Number(mapPoints[i].speed || 0))
-    }).addTo(historyMap);
+    const seg = L.polyline([a, b], { weight: 5, color: speedColor(Number(mapPoints[i].speed || 0)) }).addTo(historyMap);
     routeSegments.push(seg);
   }
 
   const first = points[0];
   const last = points[points.length - 1];
-
   startMarker.setLatLng([Number(first.latitude), Number(first.longitude)]);
   endMarker.setLatLng([Number(last.latitude), Number(last.longitude)]);
   selectedMarker.setLatLng([Number(last.latitude), Number(last.longitude)]);
 
-  if (latlngs.length === 1) {
-    historyMap.setView(latlngs[0], 16);
-  } else {
-    historyMap.fitBounds(L.latLngBounds(latlngs), {padding:[30,30]});
-  }
+  if (latlngs.length === 1) historyMap.setView(latlngs[0], 16);
+  else historyMap.fitBounds(L.latLngBounds(latlngs), {padding:[30,30]});
 
   renderStopMarkers(stops);
 
@@ -1165,25 +1096,18 @@ async function updateHistoryMap(points, stops = []) {
 
 async function focusPointByIndex(idx) {
   if (!currentFiltered.length) return;
-
   currentPointIndex = Math.max(0, Math.min(idx, currentFiltered.length - 1));
   const p = currentFiltered[currentPointIndex];
   const lat = Number(p.latitude);
   const lon = Number(p.longitude);
 
-  selectedMarker
-    .setLatLng([lat, lon])
-    .bindPopup(`${lat.toFixed(5)}, ${lon.toFixed(5)}<br>${fmtTime(p.timestamp)}<br>Скорость: ${Number(p.speed || 0).toFixed(1)} км/ч`)
-    .openPopup();
-
+  selectedMarker.setLatLng([lat, lon]).bindPopup(`${lat.toFixed(5)}, ${lon.toFixed(5)}<br>${fmtTime(p.timestamp)}<br>Скорость: ${Number(p.speed || 0).toFixed(1)} км/ч`).openPopup();
   historyMap.setView([lat, lon], 17);
   qs("pointNavigatorLabel").textContent = `${currentPointIndex + 1} / ${currentFiltered.length}`;
 
   const reqId = ++selectedAddressRequestId;
   const addr = await reverseGeocode(lat, lon);
-  if (reqId === selectedAddressRequestId) {
-    qs("selectedAddress").textContent = addr;
-  }
+  if (reqId === selectedAddressRequestId) qs("selectedAddress").textContent = addr;
 }
 
 function formatSize(bytes) {
@@ -1196,7 +1120,6 @@ function updateUsage() {
   const historyObj = Object.fromEntries(allHistoryPoints.map(p => [String(p.timestamp), p]));
   const historyBytes = new Blob([JSON.stringify(historyObj)]).size;
   const sessionsBytes = new Blob([JSON.stringify(allSessions || {})]).size + new Blob([JSON.stringify(liveDefaultData || {})]).size;
-
   qs("historySize").textContent = formatSize(historyBytes);
   qs("sessionsSize").textContent = formatSize(sessionsBytes);
   qs("totalSize").textContent = formatSize(historyBytes + sessionsBytes);
@@ -1206,8 +1129,7 @@ function updateUsage() {
 function updateHealthPanel() {
   const now = Date.now();
   const lastPoint = allHistoryPoints.length ? allHistoryPoints[allHistoryPoints.length - 1] : null;
-  const todayStart = new Date();
-  todayStart.setHours(0,0,0,0);
+  const todayStart = new Date(); todayStart.setHours(0,0,0,0);
   const dayStartTs = todayStart.getTime();
   const pointsToday = allHistoryPoints.filter(p => Number(p.timestamp || 0) >= dayStartTs).length;
   const points24h = allHistoryPoints.filter(p => Number(p.timestamp || 0) >= now - 24 * 60 * 60 * 1000).length;
@@ -1233,7 +1155,6 @@ function updateHealthPanel() {
     qs("healthNotice").textContent = "История пока пустая.";
     return;
   }
-
   const freshness = now - Number(lastPoint.timestamp || 0);
   const freshnessLimit = settings.onlineFreshnessMin * 60 * 1000;
   qs("healthNotice").textContent = freshness <= freshnessLimit
@@ -1243,34 +1164,21 @@ function updateHealthPanel() {
 
 function updateCharts(points) {
   const lastSpeedPoints = points.slice(-120);
-  const speedLabels = lastSpeedPoints.map(p =>
-    new Date(Number(p.timestamp || 0)).toLocaleTimeString("ru-RU", {hour:"2-digit", minute:"2-digit"})
-  );
+  const speedLabels = lastSpeedPoints.map(p => new Date(Number(p.timestamp || 0)).toLocaleTimeString("ru-RU", {hour:"2-digit", minute:"2-digit"}));
   const speedData = lastSpeedPoints.map(p => Number(p.speed || 0));
 
   if (speedChart) speedChart.destroy();
   speedChart = new Chart(qs("speedChart"), {
     type: "line",
-    data: {
-      labels: speedLabels,
-      datasets: [{ label: "Скорость, км/ч", data: speedData, tension: 0.25 }]
-    },
-    options: {
-      responsive: true,
-      plugins: { legend: { display: false } },
-      scales: { y: { beginAtZero: true } }
-    }
+    data: { labels: speedLabels, datasets: [{ label: "Скорость, км/ч", data: speedData, tension: 0.25 }] },
+    options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
   });
 
   const byDay = {};
   for (let i = 0; i < points.length; i++) {
     const day = new Date(Number(points[i].timestamp || 0)).toLocaleDateString("ru-RU");
     byDay[day] = byDay[day] || {dist:0, count:0, max:0, sumSpeed:0};
-
-    if (i > 0) {
-      byDay[day].dist += distanceMeters(points[i - 1], points[i]) / 1000;
-    }
-
+    if (i > 0) byDay[day].dist += distanceMeters(points[i - 1], points[i]) / 1000;
     const sp = Number(points[i].speed || 0);
     byDay[day].count += 1;
     byDay[day].sumSpeed += sp;
@@ -1283,15 +1191,8 @@ function updateCharts(points) {
   if (distanceChart) distanceChart.destroy();
   distanceChart = new Chart(qs("distanceChart"), {
     type: "bar",
-    data: {
-      labels,
-      datasets: [{ label: "Пробег, км", data: vals }]
-    },
-    options: {
-      responsive: true,
-      plugins: { legend: { display: false } },
-      scales: { y: { beginAtZero: true } }
-    }
+    data: { labels, datasets: [{ label: "Пробег, км", data: vals }] },
+    options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
   });
 
   const tbody = qs("dailyStatsTbody");
@@ -1299,13 +1200,7 @@ function updateCharts(points) {
   labels.forEach(d => {
     const item = byDay[d];
     const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${d}</td>
-      <td>${item.dist.toFixed(2)}</td>
-      <td>${(item.sumSpeed / Math.max(1, item.count)).toFixed(1)} км/ч</td>
-      <td>${item.max.toFixed(1)} км/ч</td>
-      <td>${item.count}</td>
-    `;
+    tr.innerHTML = `<td>${d}</td><td>${item.dist.toFixed(2)}</td><td>${(item.sumSpeed / Math.max(1, item.count)).toFixed(1)} км/ч</td><td>${item.max.toFixed(1)} км/ч</td><td>${item.count}</td>`;
     tbody.appendChild(tr);
   });
 }
@@ -1314,18 +1209,10 @@ function renderTrips(points) {
   const trips = splitTrips(points);
   const tbody = qs("tripsTbody");
   tbody.innerHTML = "";
-
   trips.forEach((trip, idx) => {
     const s = computeSummary(trip);
     const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${idx + 1}</td>
-      <td>${fmtTime(trip[0]?.timestamp)}</td>
-      <td>${fmtTime(trip[trip.length - 1]?.timestamp)}</td>
-      <td>${formatDuration(Number(trip[trip.length - 1]?.timestamp || 0) - Number(trip[0]?.timestamp || 0))}</td>
-      <td>${s.km.toFixed(2)} км</td>
-      <td><button class="secondary small">Показать</button></td>
-    `;
+    tr.innerHTML = `<td>${idx + 1}</td><td>${fmtTime(trip[0]?.timestamp)}</td><td>${fmtTime(trip[trip.length - 1]?.timestamp)}</td><td>${formatDuration(Number(trip[trip.length - 1]?.timestamp || 0) - Number(trip[0]?.timestamp || 0))}</td><td>${s.km.toFixed(2)} км</td><td><button class="secondary small">Показать</button></td>`;
     tr.querySelector("button").onclick = () => {
       setDateTimeRange(new Date(Number(trip[0].timestamp)), new Date(Number(trip[trip.length - 1].timestamp)));
       renderHistory();
@@ -1346,7 +1233,6 @@ function pointTags(prev, cur) {
 
 function renderHistory() {
   const pts = filteredHistory();
-
   if (!pts.length) {
     resetHistoryPanel();
     return;
@@ -1354,7 +1240,6 @@ function renderHistory() {
 
   const s = computeSummary(pts);
   const stops = detectStops(pts);
-
   currentFiltered = pts;
   currentPointIndex = Math.min(currentPointIndex, Math.max(0, pts.length - 1));
 
@@ -1366,14 +1251,12 @@ function renderHistory() {
   qs("routeEndCoords").textContent = `${Number(pts[pts.length - 1].latitude).toFixed(5)}, ${Number(pts[pts.length - 1].longitude).toFixed(5)}`;
   qs("routeDuration").textContent = formatDuration(Number(pts[pts.length - 1].timestamp || 0) - Number(pts[0].timestamp || 0));
   qs("routeStops").textContent = String(stops.length);
-  qs("stopsNotice").textContent = stops.length
-    ? `Стоянки: ${stops.map((s, i) => `#${i + 1} ${formatDuration(s.duration)}`).join(", ")}`
-    : "Стоянок не найдено.";
+  qs("stopsNotice").textContent = stops.length ? `Стоянки: ${stops.map((s, i) => `#${i + 1} ${formatDuration(s.duration)}`).join(", ")}` : "Стоянок не найдено.";
 
   const tbody = qs("historyTbody");
   tbody.innerHTML = "";
-
   let lastDay = "";
+
   pts.slice().reverse().slice(0, settings.tableMaxRows).forEach((p, revIdx) => {
     const realIdx = pts.length - 1 - revIdx;
     const tags = pointTags(pts[realIdx - 1], p);
@@ -1389,14 +1272,7 @@ function renderHistory() {
 
     const tr = document.createElement("tr");
     tr.className = "clickable";
-    tr.innerHTML = `
-      <td>${fmtTime(p.timestamp)}</td>
-      <td class="mono">${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}</td>
-      <td>${p.accuracy ?? "—"}</td>
-      <td>${p.speed != null ? Number(p.speed).toFixed(1) + " км/ч" : "—"}</td>
-      <td>${tags.map(t => `<span class="tag">${t}</span>`).join("") || "—"}</td>
-      <td><button class="danger small">Удалить</button></td>
-    `;
+    tr.innerHTML = `<td>${fmtTime(p.timestamp)}</td><td class="mono">${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}</td><td>${p.accuracy ?? "—"}</td><td>${p.speed != null ? Number(p.speed).toFixed(1) + " км/ч" : "—"}</td><td>${tags.map(t => `<span class="tag">${t}</span>`).join("") || "—"}</td><td><button class="danger small">Удалить</button></td>`;
     tr.onclick = (e) => {
       if (e.target.tagName === "BUTTON") return;
       focusPointByIndex(realIdx);
@@ -1434,10 +1310,7 @@ function exportWithTimestamp(prefix, data) {
 async function loadHistory() {
   const snap = await get(ref(db, "history/default"));
   const raw = snap.val() || {};
-  allHistoryPoints = Object.values(raw)
-    .filter(Boolean)
-    .sort((a, b) => Number(a.timestamp || 0) - Number(b.timestamp || 0));
-
+  allHistoryPoints = Object.values(raw).filter(Boolean).sort((a, b) => Number(a.timestamp || 0) - Number(b.timestamp || 0));
   updateUsage();
   renderHistory();
   updateNowFromAvailableSources();
@@ -1462,11 +1335,7 @@ function exportCsv() {
 }
 
 function exportGpxFromPoints(pts, filename) {
-  const lines = [
-    '<?xml version="1.0" encoding="UTF-8"?>',
-    '<gpx version="1.1" creator="MyGps Admin" xmlns="http://www.topografix.com/GPX/1/1">',
-    '<trk><name>History Export</name><trkseg>'
-  ];
+  const lines = ['<?xml version="1.0" encoding="UTF-8"?>','<gpx version="1.1" creator="MyGps Admin" xmlns="http://www.topografix.com/GPX/1/1">','<trk><name>History Export</name><trkseg>'];
   pts.forEach(p => lines.push(`<trkpt lat="${p.latitude}" lon="${p.longitude}"><time>${new Date(Number(p.timestamp || 0)).toISOString()}</time></trkpt>`));
   lines.push("</trkseg></trk></gpx>");
   downloadText(filename, lines.join(""), "application/gpx+xml");
@@ -1499,19 +1368,9 @@ function exportPdf() {
   doc.text(`Start coordinates: ${startCoords}`, 14, 56);
   doc.text(`End coordinates: ${endCoords}`, 14, 62);
 
-  const rows = pts.slice(0, 250).map(p => [
-    fmtTime(p.timestamp),
-    `${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}`,
-    p.speed != null ? Number(p.speed).toFixed(1) : "—"
-  ]);
+  const rows = pts.slice(0, 250).map(p => [fmtTime(p.timestamp), `${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}`, p.speed != null ? Number(p.speed).toFixed(1) : "—"]);
 
-  doc.autoTable({
-    startY: 70,
-    head: [["Time", "Coordinates", "Speed km/h"]],
-    body: rows,
-    styles: {fontSize: 9}
-  });
-
+  doc.autoTable({ startY: 70, head: [["Time", "Coordinates", "Speed km/h"]], body: rows, styles: {fontSize: 9} });
   doc.save(`history_${getPeriodFileSuffix()}.pdf`);
 }
 
@@ -1532,24 +1391,12 @@ async function exportAdminLogsBackup() {
 
 async function logDeletion(kind, description) {
   const entryRef = push(ref(db, "adminLogs/deletions"));
-  await set(entryRef, {
-    ts: Date.now(),
-    kind,
-    description,
-    uid: auth.currentUser?.uid || null,
-    email: auth.currentUser?.email || null
-  });
+  await set(entryRef, { ts: Date.now(), kind, description, uid: auth.currentUser?.uid || null, email: auth.currentUser?.email || null });
 }
 
 async function logAction(kind, description) {
   const entryRef = push(ref(db, "adminLogs/actions"));
-  await set(entryRef, {
-    ts: Date.now(),
-    kind,
-    description,
-    uid: auth.currentUser?.uid || null,
-    email: auth.currentUser?.email || null
-  });
+  await set(entryRef, { ts: Date.now(), kind, description, uid: auth.currentUser?.uid || null, email: auth.currentUser?.email || null });
 }
 
 async function deleteRange() {
@@ -1558,17 +1405,13 @@ async function deleteRange() {
     alert("Нет точек в выбранном диапазоне.");
     return;
   }
-
   if (qs("backupBeforeDeleteToggle").checked) {
     downloadText(`backup_before_delete_${getPeriodFileSuffix()}.json`, JSON.stringify(pts, null, 2), "application/json");
   }
-
   if (!confirm(`Удалить ${pts.length} точек за выбранный период?`)) return;
 
   const updatesObj = {};
-  pts.forEach(p => {
-    updatesObj[`history/default/${String(p.timestamp)}`] = null;
-  });
+  pts.forEach(p => { updatesObj[`history/default/${String(p.timestamp)}`] = null; });
 
   await logDeletion("range", `${pts.length} точек`);
   await update(ref(db), updatesObj);
@@ -1584,9 +1427,7 @@ async function deleteVisibleJunkPoints() {
   if (!confirm(`Удалить ${pts.length} мусорных точек за текущий период?`)) return;
 
   const updatesObj = {};
-  pts.forEach(p => {
-    updatesObj[`history/default/${String(p.timestamp)}`] = null;
-  });
+  pts.forEach(p => { updatesObj[`history/default/${String(p.timestamp)}`] = null; });
 
   await logDeletion("junk_bulk_delete", `${pts.length} точек`);
   await update(ref(db), updatesObj);
@@ -1598,7 +1439,6 @@ function getSessionStatus(session) {
   const active = !!meta.active;
   const expiresAt = Number(meta.expiresAt || 0);
   const now = Date.now();
-
   if (active && expiresAt > now) return "active";
   if (active && expiresAt <= now) return "expired";
   if (!active && expiresAt > now) return "ended";
@@ -1614,10 +1454,7 @@ function getSessionStatusLabel(status) {
 
 async function endSession(token) {
   if (!confirm(`Завершить live-сессию ${token}?`)) return;
-  await update(ref(db, `liveSessions/${token}/meta`), {
-    active: false,
-    endedAt: Date.now()
-  });
+  await update(ref(db, `liveSessions/${token}/meta`), { active: false, endedAt: Date.now() });
   await logAction("session_end", `Завершена live-сессия ${token}`);
 }
 
@@ -1638,35 +1475,18 @@ async function extendSession(token) {
   const base = Math.max(currentExpires, Date.now());
   const newExpiresAt = base + minutes * 60 * 1000;
 
-  await update(ref(db, `liveSessions/${token}/meta`), {
-    expiresAt: newExpiresAt,
-    active: true,
-    extendedAt: Date.now()
-  });
-
+  await update(ref(db, `liveSessions/${token}/meta`), { expiresAt: newExpiresAt, active: true, extendedAt: Date.now() });
   await logAction("session_extend", `Продлена live-сессия ${token} на ${minutes} мин`);
   alert(`Сессия продлена до ${fmtTime(newExpiresAt)}`);
 }
 
 function getRecentSourcePoints(mode, pointsLimit) {
   const limit = Math.max(2, Math.min(500, Number(pointsLimit || settings.liveShareDefaultPoints)));
+  const livePoints = Object.values(liveDefaultData?.recentPoints || {}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+  const historyPoints = allHistoryPoints.filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
 
-  const livePoints = Object.values(liveDefaultData?.recentPoints || {})
-    .filter(Boolean)
-    .sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
-
-  const historyPoints = allHistoryPoints
-    .filter(Boolean)
-    .sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
-
-  if (mode === "live") {
-    return livePoints.slice(-limit);
-  }
-
-  if (mode === "history") {
-    return historyPoints.slice(-limit);
-  }
-
+  if (mode === "live") return livePoints.slice(-limit);
+  if (mode === "history") return historyPoints.slice(-limit);
   if (livePoints.length) return livePoints.slice(-limit);
   return historyPoints.slice(-limit);
 }
@@ -1733,14 +1553,11 @@ async function createLiveSession() {
       createdByEmail: currentUser?.email || null,
       durationMinutes
     },
-    lastPoint,
-    recentPoints: recentPointsObj,
     public: {
       lastPoint,
       recentPoints: recentPointsObj
     },
     viewStats: {
-      status: "created",
       openCount: 0,
       firstOpenAt: null,
       lastOpenAt: null
@@ -1749,9 +1566,7 @@ async function createLiveSession() {
 
   await set(ref(db, `liveSessions/${token}`), payload);
   await logAction("session_create", `Создана live-сессия ${token} на ${durationMinutes} мин`);
-
-  const url = buildShareUrl(token);
-  showShareResult(url, expiresAt);
+  showShareResult(buildShareUrl(token), expiresAt);
   alert("Live-ссылка создана.");
 }
 
@@ -1762,28 +1577,18 @@ async function syncActiveSessionsFromLiveDefault(silent = false) {
   }
 
   const now = Date.now();
-  const activeEntries = Object.entries(allSessions)
-    .filter(([k, v]) => k !== "_init" && v?.meta?.active && Number(v?.meta?.expiresAt || 0) > now);
-
+  const activeEntries = Object.entries(allSessions).filter(([k, v]) => k !== "_init" && v?.meta?.active && Number(v?.meta?.expiresAt || 0) > now);
   if (!activeEntries.length) {
     if (!silent) alert("Активных live-сессий нет.");
     return;
   }
 
-  const livePoints = Object.values(liveDefaultData.recentPoints || {})
-    .filter(Boolean)
-    .sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0))
-    .slice(-settings.liveShareDefaultPoints);
-
+  const livePoints = Object.values(liveDefaultData.recentPoints || {}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0)).slice(-settings.liveShareDefaultPoints);
   const recentPointsObj = {};
-  livePoints.forEach((p) => {
-    recentPointsObj[String(p.timestamp || Date.now() + Math.random())] = p;
-  });
+  livePoints.forEach((p) => { recentPointsObj[String(p.timestamp || Date.now() + Math.random())] = p; });
 
   const updatesObj = {};
   activeEntries.forEach(([token]) => {
-    updatesObj[`liveSessions/${token}/lastPoint`] = liveDefaultData.lastPoint;
-    updatesObj[`liveSessions/${token}/recentPoints`] = recentPointsObj;
     updatesObj[`liveSessions/${token}/public/lastPoint`] = liveDefaultData.lastPoint;
     updatesObj[`liveSessions/${token}/public/recentPoints`] = recentPointsObj;
     updatesObj[`liveSessions/${token}/meta/lastSyncedAt`] = Date.now();
@@ -1791,21 +1596,19 @@ async function syncActiveSessionsFromLiveDefault(silent = false) {
 
   await update(ref(db), updatesObj);
   if (!silent) {
-    await logAction("session_sync_active", `Синхронизировано активных сессий: ${activeEntries.length}`);
+    await logAction("session_sync_active", `Синхронизировано active-сессий: ${activeEntries.length}`);
     alert(`Синхронизировано ${activeEntries.length} active-сессий.`);
   }
 }
 
 async function endAllActiveSessions() {
   const now = Date.now();
-  const activeEntries = Object.entries(allSessions)
-    .filter(([k, v]) => k !== "_init" && v?.meta?.active && Number(v?.meta?.expiresAt || 0) > now);
+  const activeEntries = Object.entries(allSessions).filter(([k, v]) => k !== "_init" && v?.meta?.active && Number(v?.meta?.expiresAt || 0) > now);
 
   if (!activeEntries.length) {
     alert("Активных сессий нет.");
     return;
   }
-
   if (!confirm(`Завершить все активные live-сессии (${activeEntries.length})?`)) return;
 
   const updatesObj = {};
@@ -1856,22 +1659,7 @@ function renderSessions() {
     const expiresAt = Number(meta.expiresAt || 0);
 
     const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td class="mono">${token}</td>
-      <td>${statusText}</td>
-      <td>${fmtTime(expiresAt)}</td>
-      <td>${stats.openCount || 0}</td>
-      <td>${fmtTime(stats.firstOpenAt)}<br>${fmtTime(stats.lastOpenAt)}</td>
-      <td>
-        <div class="row">
-          <button class="secondary small" data-copy="${token}">Копировать</button>
-          <button class="secondary small" data-view="${token}">Карта</button>
-          <button class="secondary small" data-extend="${token}">Продлить</button>
-          <button class="warn small" data-end="${token}">Завершить</button>
-          <button class="danger small" data-delete="${token}">Удалить</button>
-        </div>
-      </td>
-    `;
+    tr.innerHTML = `<td class="mono">${token}</td><td>${statusText}</td><td>${fmtTime(expiresAt)}</td><td>${stats.openCount || 0}</td><td>${fmtTime(stats.firstOpenAt)}<br>${fmtTime(stats.lastOpenAt)}</td><td><div class="row"><button class="secondary small" data-copy="${token}">Копировать</button><button class="secondary small" data-view="${token}">Карта</button><button class="secondary small" data-extend="${token}">Продлить</button><button class="warn small" data-end="${token}">Завершить</button><button class="danger small" data-delete="${token}">Удалить</button></div></td>`;
     tbody.appendChild(tr);
   });
 
@@ -1886,18 +1674,12 @@ function renderSessions() {
     b.onclick = () => {
       const token = b.dataset.view;
       const session = allSessions[token] || {};
-      const pointsSource = session.public?.recentPoints || session.recentPoints || {};
-      const pts = Object.values(pointsSource)
-        .filter(Boolean)
-        .sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
-
+      const pointsSource = session.public?.recentPoints || {};
+      const pts = Object.values(pointsSource).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
       const mapPts = downsamplePoints(pts, settings.mapMaxPoints);
-      const latlngs = mapPts
-        .filter(p => p.latitude != null && p.longitude != null)
-        .map(p => [Number(p.latitude), Number(p.longitude)]);
+      const latlngs = mapPts.filter(p => p.latitude != null && p.longitude != null).map(p => [Number(p.latitude), Number(p.longitude)]);
 
       sessionTrail.setLatLngs(latlngs);
-
       if (latlngs.length) {
         sessionMarker.setLatLng(latlngs[latlngs.length - 1]);
         if (latlngs.length === 1) sessionMap.setView(latlngs[0], 16);
@@ -1906,14 +1688,8 @@ function renderSessions() {
     };
   });
 
-  tbody.querySelectorAll("button[data-extend]").forEach((b) => {
-    b.onclick = () => extendSession(b.dataset.extend);
-  });
-
-  tbody.querySelectorAll("button[data-end]").forEach((b) => {
-    b.onclick = () => endSession(b.dataset.end);
-  });
-
+  tbody.querySelectorAll("button[data-extend]").forEach((b) => { b.onclick = () => extendSession(b.dataset.extend); });
+  tbody.querySelectorAll("button[data-end]").forEach((b) => { b.onclick = () => endSession(b.dataset.end); });
   tbody.querySelectorAll("button[data-delete]").forEach((b) => {
     b.onclick = async () => {
       if (!confirm(`Удалить live-сессию ${b.dataset.delete}?`)) return;
@@ -1936,10 +1712,7 @@ function findIdleDurationMs(points, lastPoint) {
   if (!lastPoint?.timestamp) return null;
   if (Number(lastPoint.speed || 0) > settings.stopSpeedThreshold) return 0;
 
-  const ordered = points
-    .filter(Boolean)
-    .sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
-
+  const ordered = points.filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
   if (!ordered.length) return null;
 
   let idleStartTs = Number(lastPoint.timestamp);
@@ -1949,7 +1722,6 @@ function findIdleDurationMs(points, lastPoint) {
     if (speed > settings.stopSpeedThreshold) break;
     idleStartTs = Number(p.timestamp || idleStartTs);
   }
-
   return Math.max(0, Number(lastPoint.timestamp) - idleStartTs);
 }
 
@@ -1960,7 +1732,6 @@ function updateNowUI(point, sourceLabel, recentPoints = []) {
     const lat = Number(point.latitude);
     const lon = Number(point.longitude);
     const key = geocodeKey(lat, lon);
-
     liveMarker.setLatLng([lat, lon]);
     if (liveAutoCenter) liveMap.setView([lat, lon], 16);
 
@@ -1968,9 +1739,7 @@ function updateNowUI(point, sourceLabel, recentPoints = []) {
       lastLiveAddressKey = key;
       const reqId = ++liveAddressRequestId;
       reverseGeocode(lat, lon).then(addr => {
-        if (reqId === liveAddressRequestId) {
-          qs("nowAddress").textContent = addr;
-        }
+        if (reqId === liveAddressRequestId) qs("nowAddress").textContent = addr;
       });
     }
   } else {
@@ -1993,16 +1762,9 @@ function updateNowUI(point, sourceLabel, recentPoints = []) {
 
 function updateNowFromAvailableSources() {
   if (liveDefaultData && liveDefaultData.lastPoint) {
-    const pts = Object.values(liveDefaultData.recentPoints || {})
-      .filter(Boolean)
-      .sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
-
+    const pts = Object.values(liveDefaultData.recentPoints || {}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
     const mapPts = downsamplePoints(pts, settings.liveTrailMaxPoints);
-    liveTrail.setLatLngs(mapPts
-      .filter(p => p.latitude != null && p.longitude != null)
-      .map(p => [Number(p.latitude), Number(p.longitude)])
-    );
-
+    liveTrail.setLatLngs(mapPts.filter(p => p.latitude != null && p.longitude != null).map(p => [Number(p.latitude), Number(p.longitude)]));
     updateNowUI(liveDefaultData.lastPoint, "live/default", pts);
     updateHealthPanel();
     return;
@@ -2015,17 +1777,10 @@ function updateNowFromAvailableSources() {
 
   if (activeEntries.length) {
     const [token, session] = activeEntries[0];
-    const sourcePoints = Object.values(session.public?.recentPoints || session.recentPoints || {})
-      .filter(Boolean)
-      .sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
-
+    const sourcePoints = Object.values(session.public?.recentPoints || {}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
     const mapPts = downsamplePoints(sourcePoints, settings.liveTrailMaxPoints);
-    liveTrail.setLatLngs(mapPts
-      .filter(p => p.latitude != null && p.longitude != null)
-      .map(p => [Number(p.latitude), Number(p.longitude)])
-    );
-
-    updateNowUI(session.lastPoint || session.public?.lastPoint || null, `liveSessions/${token}`, sourcePoints);
+    liveTrail.setLatLngs(mapPts.filter(p => p.latitude != null && p.longitude != null).map(p => [Number(p.latitude), Number(p.longitude)]));
+    updateNowUI(session.public?.lastPoint || null, `liveSessions/${token}`, sourcePoints);
     updateHealthPanel();
     return;
   }
@@ -2073,12 +1828,7 @@ function renderJournal() {
 
   combined.slice(0, 500).forEach(item => {
     const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${fmtTime(item.ts)}</td>
-      <td>${item._type || "—"}</td>
-      <td>${item.description || "—"}</td>
-      <td>${item.email || item.uid || "—"}</td>
-    `;
+    tr.innerHTML = `<td>${fmtTime(item.ts)}</td><td>${item._type || "—"}</td><td>${item.description || "—"}</td><td>${item.email || item.uid || "—"}</td>`;
     tbody.appendChild(tr);
   });
 }
@@ -2157,7 +1907,6 @@ qs("jumpDateBtn").onclick = () => {
 };
 
 qs("applyFiltersBtn").onclick = renderHistory;
-
 qs("resetFiltersBtn").onclick = () => {
   qs("maxAccuracyFilter").value = "";
   qs("minSpeedFilter").value = "";
@@ -2175,9 +1924,7 @@ qs("showStopsOnMapToggle").onchange = () => {
 
 qs("refreshHistoryBtn").onclick = loadHistory;
 qs("fitRouteBtn").onclick = () => {
-  const pts = currentFiltered
-    .filter(p => p.latitude != null && p.longitude != null)
-    .map(p => [Number(p.latitude), Number(p.longitude)]);
+  const pts = currentFiltered.filter(p => p.latitude != null && p.longitude != null).map(p => [Number(p.latitude), Number(p.longitude)]);
   if (pts.length) historyMap.fitBounds(L.latLngBounds(pts), {padding:[30,30]});
 };
 
@@ -2204,7 +1951,6 @@ qs("sessionStatusFilter").onchange = renderSessions;
 qs("autoSyncIntervalSelect").onchange = maybeStartAutoSync;
 
 qs("refreshNowBtn").onclick = updateNowFromAvailableSources;
-
 qs("liveAutoCenterBtn").onclick = () => {
   liveAutoCenter = !liveAutoCenter;
   qs("liveAutoCenterBtn").textContent = `Автоцентр: ${liveAutoCenter ? "вкл" : "выкл"}`;
@@ -2219,13 +1965,11 @@ qs("createShareBtn").onclick = async () => {
 };
 
 qs("clearShareResultBtn").onclick = hideShareResult;
-
 qs("copyCreatedShareBtn").onclick = async () => {
   if (!createdShareUrl) return;
   await navigator.clipboard.writeText(createdShareUrl);
   alert("Ссылка скопирована");
 };
-
 qs("openCreatedShareBtn").onclick = () => {
   if (!createdShareUrl) return;
   window.open(createdShareUrl, "_blank", "noopener,noreferrer");
@@ -2314,9 +2058,7 @@ onAuthStateChanged(auth, async (user) => {
 
     if (authSessionLoggedUid !== user.uid) {
       authSessionLoggedUid = user.uid;
-      try {
-        await logAction("admin_login", "Вход в админку");
-      } catch {}
+      try { await logAction("admin_login", "Вход в админку"); } catch {}
     }
 
     unsubLiveDefault = onValue(ref(db, "live/default"), (snap) => {
@@ -2335,10 +2077,7 @@ onAuthStateChanged(auth, async (user) => {
 
     unsubHistory = onValue(ref(db, "history/default"), (snap) => {
       const raw = snap.val() || {};
-      allHistoryPoints = Object.values(raw)
-        .filter(Boolean)
-        .sort((a, b) => Number(a.timestamp || 0) - Number(b.timestamp || 0));
-
+      allHistoryPoints = Object.values(raw).filter(Boolean).sort((a, b) => Number(a.timestamp || 0) - Number(b.timestamp || 0));
       updateUsage();
       renderHistory();
       updateNowFromAvailableSources();
@@ -2347,22 +2086,15 @@ onAuthStateChanged(auth, async (user) => {
 
     unsubDeletions = onValue(ref(db, "adminLogs/deletions"), (snap) => {
       const raw = snap.val() || {};
-      deletionsLog = Object.values(raw)
-        .filter(Boolean)
-        .sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0));
-
+      deletionsLog = Object.values(raw).filter(Boolean).sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0));
       renderJournal();
     });
 
     unsubActions = onValue(ref(db, "adminLogs/actions"), (snap) => {
       const raw = snap.val() || {};
-      actionLogs = Object.values(raw)
-        .filter(Boolean)
-        .sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0));
-
+      actionLogs = Object.values(raw).filter(Boolean).sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0));
       renderJournal();
     });
-
   } catch (e) {
     authCard.classList.remove("hidden");
     adminPanel.classList.add("hidden");
