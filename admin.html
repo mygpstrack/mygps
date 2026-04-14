@@ -521,7 +521,7 @@ const firebaseConfig = {
   measurementId: "G-BSCVNY9LH0"
 };
 
-const SETTINGS_KEY = "mygps_admin_settings_prod_v1";
+const SETTINGS_KEY = "mygps_admin_settings_prod_v2";
 
 const DEFAULT_SETTINGS = {
   onlineFreshnessMin: 3,
@@ -1349,6 +1349,15 @@ async function loadHistory() {
   updateHealthPanel();
 }
 
+async function loadSessions() {
+  const snap = await get(ref(db, "liveSessions"));
+  allSessions = snap.val() || {};
+  updateUsage();
+  renderSessions();
+  updateNowFromAvailableSources();
+  updateHealthPanel();
+}
+
 function getPeriodFileSuffix() {
   const from = `${qs("fromDate").value || "from"}_${qs("fromHour").value || "00"}-${qs("fromMinute").value || "00"}`;
   const to = `${qs("toDate").value || "to"}_${qs("toHour").value || "00"}-${qs("toMinute").value || "00"}`;
@@ -1401,7 +1410,6 @@ function exportPdf() {
   doc.text(`End coordinates: ${endCoords}`, 14, 62);
 
   const rows = pts.slice(0, 250).map(p => [fmtTime(p.timestamp), `${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}`, p.speed != null ? Number(p.speed).toFixed(1) : "—"]);
-
   doc.autoTable({ startY: 70, head: [["Time", "Coordinates", "Speed km/h"]], body: rows, styles: {fontSize: 9} });
   doc.save(`history_${getPeriodFileSuffix()}.pdf`);
 }
@@ -1527,8 +1535,7 @@ function getRecentSourcePoints(mode, pointsLimit) {
 }
 
 function getLastPointForShare(points) {
-  if (!points.length) return null;
-  return points[points.length - 1];
+  return points.length ? points[points.length - 1] : null;
 }
 
 function generateSessionToken() {
@@ -1623,39 +1630,75 @@ async function syncActiveSessionsFromLiveDefault(silent = false) {
   const recentPointsObj = {};
   livePoints.forEach((p) => { recentPointsObj[String(p.timestamp || Date.now() + Math.random())] = p; });
 
-  const updatesObj = {};
-  activeEntries.forEach(([token]) => {
-    updatesObj[`liveSessions/${token}/public/lastPoint`] = liveDefaultData.lastPoint;
-    updatesObj[`liveSessions/${token}/public/recentPoints`] = recentPointsObj;
-    updatesObj[`liveSessions/${token}/meta/lastSyncedAt`] = Date.now();
-  });
-
-  await update(ref(db), updatesObj);
-  if (!silent) {
-    await logAction("session_sync_active", `Синхронизировано active-сессий: ${activeEntries.length}`);
-    await loadSessions();
-    alert(`Синхронизировано ${activeEntries.length} active-сессий.`);
+  if (silent) {
+    const updatesObj = {};
+    activeEntries.forEach(([token]) => {
+      updatesObj[`liveSessions/${token}/public/lastPoint`] = liveDefaultData.lastPoint;
+      updatesObj[`liveSessions/${token}/public/recentPoints`] = recentPointsObj;
+      updatesObj[`liveSessions/${token}/meta/lastSyncedAt`] = Date.now();
+    });
+    await update(ref(db), updatesObj);
+    return;
   }
+
+  await runSafe("Синхронизация active-сессий", async () => {
+    for (const [token] of activeEntries) {
+      await update(ref(db, `liveSessions/${token}/public`), {
+        lastPoint: liveDefaultData.lastPoint,
+        recentPoints: recentPointsObj
+      });
+      await update(ref(db, `liveSessions/${token}/meta`), {
+        lastSyncedAt: Date.now()
+      });
+    }
+    await logAction("session_sync_active", `Синхронизировано active-сессий: ${activeEntries.length}`);
+  }, { reloadSessions: true, silentSuccess: false });
 }
 
 async function endAllActiveSessions() {
   const now = Date.now();
-  const activeEntries = Object.entries(allSessions).filter(([k, v]) => k !== "_init" && v?.meta?.active && Number(v?.meta?.expiresAt || 0) > now);
+  const activeTokens = Object.entries(allSessions)
+    .filter(([token, session]) => token !== "_init" && !!session?.meta?.active && Number(session?.meta?.expiresAt || 0) > now)
+    .map(([token]) => token);
 
-  if (!activeEntries.length) {
+  if (!activeTokens.length) {
     alert("Активных сессий нет.");
     return;
   }
-  if (!confirm(`Завершить все активные live-сессии (${activeEntries.length})?`)) return;
+  if (!confirm(`Завершить все активные live-сессии (${activeTokens.length})?`)) return;
 
   await runSafe("Остановка всех активных live-сессий", async () => {
-    const updatesObj = {};
-    activeEntries.forEach(([token]) => {
-      updatesObj[`liveSessions/${token}/meta/active`] = false;
-      updatesObj[`liveSessions/${token}/meta/endedAt`] = Date.now();
-    });
-    await update(ref(db), updatesObj);
-    await logAction("session_end_all", `Завершены все активные сессии: ${activeEntries.length}`);
+    for (const token of activeTokens) {
+      await update(ref(db, `liveSessions/${token}/meta`), {
+        active: false,
+        endedAt: Date.now()
+      });
+    }
+    await logAction("session_end_all", `Завершены все активные сессии: ${activeTokens.length}`);
+  }, { reloadSessions: true, silentSuccess: false });
+}
+
+async function cleanupExpiredSessions() {
+  const now = Date.now();
+  const tokensToDelete = Object.entries(allSessions)
+    .filter(([token, session]) => {
+      if (token === "_init") return false;
+      const expiresAt = Number(session?.meta?.expiresAt || 0);
+      return expiresAt > 0 && expiresAt < now;
+    })
+    .map(([token]) => token);
+
+  if (!tokensToDelete.length) {
+    alert("Истёкших сессий не найдено.");
+    return;
+  }
+  if (!confirm(`Удалить ${tokensToDelete.length} истёкших live-сессий?`)) return;
+
+  await runSafe("Очистка истёкших live-сессий", async () => {
+    for (const token of tokensToDelete) {
+      await remove(ref(db, `liveSessions/${token}`));
+    }
+    await logAction("expired_sessions_cleanup", `Удалено истёкших сессий: ${tokensToDelete.length}`);
   }, { reloadSessions: true, silentSuccess: false });
 }
 
@@ -1749,15 +1792,6 @@ function renderSessions() {
   });
 }
 
-async function loadSessions() {
-  const snap = await get(ref(db, "liveSessions"));
-  allSessions = snap.val() || {};
-  updateUsage();
-  renderSessions();
-  updateNowFromAvailableSources();
-  updateHealthPanel();
-}
-
 function findIdleDurationMs(points, lastPoint) {
   if (!lastPoint?.timestamp) return null;
   if (Number(lastPoint.speed || 0) > settings.stopSpeedThreshold) return 0;
@@ -1839,32 +1873,6 @@ function updateNowFromAvailableSources() {
   liveTrail.setLatLngs([]);
   updateNowUI(point, "history/default", allHistoryPoints.slice(-30));
   updateHealthPanel();
-}
-
-async function cleanupExpiredSessions() {
-  const now = Date.now();
-  const updatesObj = {};
-  let count = 0;
-
-  Object.entries(allSessions).forEach(([token, session]) => {
-    if (token === "_init") return;
-    const expiresAt = Number(session?.meta?.expiresAt || 0);
-    if (expiresAt && expiresAt < now) {
-      updatesObj[`liveSessions/${token}`] = null;
-      count++;
-    }
-  });
-
-  if (!count) {
-    alert("Истёкших сессий не найдено.");
-    return;
-  }
-  if (!confirm(`Удалить ${count} истёкших live-сессий?`)) return;
-
-  await runSafe("Очистка истёкших live-сессий", async () => {
-    await logAction("expired_sessions_cleanup", `Удалено истёкших сессий: ${count}`);
-    await update(ref(db), updatesObj);
-  }, { reloadSessions: true, silentSuccess: false });
 }
 
 function renderJournal() {
@@ -1994,7 +2002,7 @@ qs("exportAdminLogsBackupBtn").onclick = () => runSafe("Экспорт adminLogs
 
 qs("refreshSessionsBtn").onclick = () => runSafe("Обновление live-сессий", loadSessions, { silentSuccess: true });
 qs("cleanupSessionsBtn").onclick = cleanupExpiredSessions;
-qs("syncActiveSessionsBtn").onclick = () => runSafe("Синхронизация active-сессий", () => syncActiveSessionsFromLiveDefault(false), { silentSuccess: true });
+qs("syncActiveSessionsBtn").onclick = () => syncActiveSessionsFromLiveDefault(false);
 qs("endAllActiveSessionsBtn").onclick = endAllActiveSessions;
 qs("sessionSearchInput").oninput = renderSessions;
 qs("sessionStatusFilter").onchange = renderSessions;
@@ -2052,13 +2060,6 @@ qs("mapStyleSelect").onchange = () => {
   readSettingsFromUI();
   applyMapStyle(qs("mapStyleSelect").value);
 };
-
-async function loadActionLogs() {
-  const snap = await get(ref(db, "adminLogs/actions"));
-  const raw = snap.val() || {};
-  actionLogs = Object.values(raw).filter(Boolean).sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0));
-  renderJournal();
-}
 
 onAuthStateChanged(auth, async (user) => {
   detachRealtimeListeners();
@@ -2152,7 +2153,8 @@ onAuthStateChanged(auth, async (user) => {
       renderJournal();
     });
 
-    await loadActionLogs();
+    await loadHistory();
+    await loadSessions();
   } catch (e) {
     authCard.classList.remove("hidden");
     adminPanel.classList.add("hidden");
