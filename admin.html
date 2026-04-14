@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>MyGps Admin</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+  <style>
+    :root{--bg:#0f172a;--card:#111827;--muted:#94a3b8;--text:#e5e7eb;--accent:#22c55e;--warn:#eab308;--danger:#ef4444;--border:#1f2937;--blue:#2563eb}
+    *{box-sizing:border-box} body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text)}
+    .wrap{max-width:1280px;margin:0 auto;padding:16px}.card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:16px;margin-bottom:16px}
+    h1,h2,p{margin:0}.sub{color:var(--muted);margin-top:6px;line-height:1.6}.headerTime{margin-top:8px;color:var(--muted)}
+    .grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:12px}
+    .grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px}
+    .periodGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:12px}
+    .stat{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:14px;padding:12px}.label{color:var(--muted);font-size:13px;margin-bottom:6px}.value{font-size:18px;font-weight:700;line-height:1.2;word-break:break-word}
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.tab-btn{background:#1f2937}.tab-btn.active{background:var(--blue)}.hidden{display:none!important}
+    input,button{font:inherit} input{padding:12px 14px;border-radius:12px;border:1px solid var(--border);background:#0b1220;color:var(--text);min-width:160px}
+    button{border:0;border-radius:12px;padding:10px 14px;font-weight:600;cursor:pointer;color:white;background:var(--blue)} button.secondary{background:#374151} button.warn{background:#b45309} button.danger{background:#b91c1c} button.success{background:#15803d} button.small{padding:6px 10px;font-size:13px}
+    .pill{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;border:1px solid var(--border);background:rgba(255,255,255,.03);font-size:14px}.dot{width:10px;height:10px;border-radius:50%;display:inline-block}.ok{background:var(--accent)}
+    .notice,.address-box,.error{padding:12px;border-radius:14px;border:1px solid var(--border);background:rgba(255,255,255,.03);margin-top:12px;line-height:1.6}.error{border-color:#7f1d1d;background:rgba(127,29,29,.25);color:#fecaca}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;word-break:break-all}
+    table{width:100%;border-collapse:collapse;margin-top:12px;font-size:14px} th,td{border-bottom:1px solid var(--border);padding:10px 8px;text-align:left;vertical-align:top} th{color:var(--muted)}
+    tr.clickable{cursor:pointer} tr.clickable:hover{background:rgba(255,255,255,.04)}
+    #historyMap,#liveMap{width:100%;height:420px;border-radius:16px;overflow:hidden;border:1px solid var(--border);margin-top:12px}.chartWrap{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:16px;padding:12px} canvas{max-width:100%}
+    @media (max-width:1100px){.grid4{grid-template-columns:repeat(2,minmax(0,1fr))}.periodGrid{grid-template-columns:repeat(2,minmax(0,1fr))}.grid2{grid-template-columns:1fr}}
+    @media (max-width:900px){.grid4,.periodGrid{grid-template-columns:1fr} input{min-width:unset;width:100%} .row>*{width:100%} #historyMap,#liveMap{height:320px}}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>MyGps Admin</h1>
+    <div id="pageDateTime" class="headerTime">—</div>
+    <p class="sub">История, live-сессии, карта, экспорт, графики и оценка объёма данных.</p>
+  </div>
+
+  <div class="card" id="authCard">
+    <h2>Вход</h2>
+    <div class="row"><button id="googleBtn">Войти через Google</button></div>
+    <div class="row"><input id="emailInput" type="email" placeholder="Email"/><input id="passwordInput" type="password" placeholder="Пароль"/></div>
+    <div class="row"><button id="emailLoginBtn" class="secondary">Войти по Email</button><button id="emailRegisterBtn" class="success">Создать Email-аккаунт</button></div>
+    <div class="notice" id="authMessage">Если после входа доступа нет, добавь свой UID в Firebase: <span class="mono">admins/ТВОЙ_UID = true</span></div>
+    <div id="errorBox" class="error hidden"></div>
+  </div>
+
+  <div id="adminPanel" class="hidden">
+    <div class="card">
+      <div class="row"><div class="pill"><span class="dot ok"></span><span id="userInfo">Вы вошли</span></div><button id="logoutBtn" class="secondary">Выйти</button></div>
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="nowPanel">Сейчас</button>
+        <button class="tab-btn" data-tab="historyPanel">История</button>
+        <button class="tab-btn" data-tab="reportsPanel">Отчёты и графики</button>
+        <button class="tab-btn" data-tab="usagePanel">Объём данных</button>
+        <button class="tab-btn" data-tab="sessionsPanel">Live-сессии</button>
+      </div>
+    </div>
+
+    <div id="nowPanel">
+      <div class="card">
+        <h2>Сейчас</h2>
+        <div class="grid4">
+          <div class="stat"><div class="label">Статус приложения</div><div class="value" id="nowStatus">Нет данных</div></div>
+          <div class="stat"><div class="label">Источник</div><div class="value" id="nowSource">—</div></div>
+          <div class="stat"><div class="label">Скорость</div><div class="value" id="nowSpeed">—</div></div>
+          <div class="stat"><div class="label">Точность</div><div class="value" id="nowAccuracy">—</div></div>
+          <div class="stat"><div class="label">Последнее обновление</div><div class="value" id="nowUpdated">—</div></div>
+          <div class="stat"><div class="label">Направление</div><div class="value" id="nowBearing">—</div></div>
+          <div class="stat"><div class="label">Простой</div><div class="value" id="nowIdle">—</div></div>
+          <div class="stat"><div class="label">Адрес текущей точки</div><div class="value" id="nowAddress">—</div></div>
+        </div>
+        <div class="row"><button id="liveAutoCenterBtn">Автоцентр: вкл</button><button id="refreshNowBtn" class="secondary">Обновить сейчас</button></div>
+        <div id="liveMap"></div>
+      </div>
+    </div>
+
+    <div id="historyPanel" class="hidden">
+      <div class="card">
+        <h2>Сводка истории</h2>
+        <div class="grid4">
+          <div class="stat"><div class="label">Точек за период</div><div class="value" id="pointsCount">0</div></div>
+          <div class="stat"><div class="label">Километраж</div><div class="value" id="distanceValue">0 км</div></div>
+          <div class="stat"><div class="label">Средняя скорость</div><div class="value" id="avgSpeedValue">0 км/ч</div></div>
+          <div class="stat"><div class="label">Максимальная скорость</div><div class="value" id="maxSpeedValue">0 км/ч</div></div>
+        </div>
+        <div class="periodGrid">
+          <div><div class="label">Дата от</div><input id="fromDate" type="date"/></div>
+          <div><div class="label">Время от</div><input id="fromTime" type="time" step="60"/></div>
+          <div><div class="label">Дата до</div><input id="toDate" type="date"/></div>
+          <div><div class="label">Время до</div><input id="toTime" type="time" step="60"/></div>
+        </div>
+        <div class="row">
+          <button id="todayBtn">Сегодня</button>
+          <button id="yesterdayBtn" class="secondary">Вчера</button>
+          <button id="weekBtn" class="secondary">Неделя</button>
+          <button id="setStartDayBtn" class="secondary">Старт 00:00</button>
+          <button id="setEndNowBtn" class="secondary">Финиш сейчас</button>
+          <button id="setEndDayBtn" class="secondary">Финиш 23:59</button>
+        </div>
+        <div class="row">
+          <button id="refreshHistoryBtn">Обновить историю</button>
+          <button id="exportJsonBtn" class="secondary">Экспорт JSON</button>
+          <button id="exportCsvBtn" class="secondary">Экспорт CSV</button>
+          <button id="exportGpxBtn" class="secondary">Экспорт GPX</button>
+          <button id="exportPdfBtn" class="secondary">Экспорт PDF</button>
+          <button id="deleteRangeBtn" class="danger">Удалить период</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Карта истории</h2>
+        <p class="sub">Старт зелёный, финиш красный. Клик по строке точки переносит карту к точке и показывает адрес.</p>
+        <div class="address-box">
+          <div><strong>Старт:</strong> <span id="startAddress">—</span></div>
+          <div><strong>Финиш:</strong> <span id="endAddress">—</span></div>
+          <div><strong>Выбранная точка:</strong> <span id="selectedAddress">—</span></div>
+        </div>
+        <div id="historyMap"></div>
+      </div>
+
+      <div class="card">
+        <h2>История точек</h2>
+        <div style="overflow:auto">
+          <table>
+            <thead><tr><th>Время</th><th>Координаты</th><th>Точность</th><th>Скорость</th><th>Действие</th></tr></thead>
+            <tbody id="historyTbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div id="reportsPanel" class="hidden">
+      <div class="card">
+        <h2>Отчёты и графики</h2>
+        <div class="grid2">
+          <div class="chartWrap"><h3>Скорость по точкам</h3><canvas id="speedChart" height="200"></canvas></div>
+          <div class="chartWrap"><h3>Пробег по дням</h3><canvas id="distanceChart" height="200"></canvas></div>
+        </div>
+        <div class="notice">Графики строятся по выбранному периоду из вкладки «История». Если в Firebase нет поля <span class="mono">speed</span>, график скорости будет пустым.</div>
+      </div>
+    </div>
+
+    <div id="usagePanel" class="hidden">
+      <div class="card">
+        <h2>Объём данных</h2>
+        <div class="grid4">
+          <div class="stat"><div class="label">Оценка history/default</div><div class="value" id="historySize">—</div></div>
+          <div class="stat"><div class="label">Оценка live/default + liveSessions</div><div class="value" id="sessionsSize">—</div></div>
+          <div class="stat"><div class="label">Всего в базе</div><div class="value" id="totalSize">—</div></div>
+          <div class="stat"><div class="label">Точек в истории</div><div class="value" id="historyCount">0</div></div>
+        </div>
+        <div class="notice">Это оценка текущего объёма данных по содержимому базы. Точное дневное потребление и официальные лимиты смотри в Firebase Console → Usage and billing / Realtime Database → Usage.</div>
+      </div>
+    </div>
+
+    <div id="sessionsPanel" class="hidden">
+      <div class="card">
+        <h2>Live-сессии</h2>
+        <div class="row"><button id="refreshSessionsBtn">Обновить live-сессии</button><button id="cleanupSessionsBtn" class="warn">Очистить истёкшие сессии</button></div>
+        <div style="overflow:auto">
+          <table>
+            <thead><tr><th>Token</th><th>Статус</th><th>Истекает</th><th>Открытия</th><th>Первое / Последнее</th><th>Действия</th></tr></thead>
+            <tbody id="sessionsTbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+import { getDatabase, ref, get, onValue, remove, update } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCXNCY-IpkhAXb8jNPhN8gf2UdOfPBc5gM",
+  authDomain: "mygpslive-57196.firebaseapp.com",
+  databaseURL: "https://mygpslive-57196-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "mygpslive-57196",
+  storageBucket: "mygpslive-57196.firebasestorage.app",
+  messagingSenderId: "20781107701",
+  appId: "1:20781107701:web:bd47061b9aca13abbeb8bc",
+  measurementId: "G-BSCVNY9LH0"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getDatabase(app);
+const provider = new GoogleAuthProvider();
+
+const qs = (id)=>document.getElementById(id);
+const authCard=qs("authCard"), adminPanel=qs("adminPanel"), authMessage=qs("authMessage"), errorBox=qs("errorBox");
+const emailInput=qs("emailInput"), passwordInput=qs("passwordInput"), userInfo=qs("userInfo");
+const pointsCount=qs("pointsCount"), distanceValue=qs("distanceValue"), avgSpeedValue=qs("avgSpeedValue"), maxSpeedValue=qs("maxSpeedValue");
+const fromDate=qs("fromDate"), fromTime=qs("fromTime"), toDate=qs("toDate"), toTime=qs("toTime"), sessionsTbody=qs("sessionsTbody"), historyTbody=qs("historyTbody");
+const nowStatus=qs("nowStatus"), nowSpeed=qs("nowSpeed"), nowAccuracy=qs("nowAccuracy"), nowUpdated=qs("nowUpdated"), nowBearing=qs("nowBearing"), nowIdle=qs("nowIdle"), nowSource=qs("nowSource"), nowAddress=qs("nowAddress");
+const startAddress=qs("startAddress"), endAddress=qs("endAddress"), selectedAddress=qs("selectedAddress");
+const historySize=qs("historySize"), sessionsSize=qs("sessionsSize"), totalSize=qs("totalSize"), historyCount=qs("historyCount"), pageDateTime=qs("pageDateTime");
+
+let allHistoryPoints=[], allSessions={}, liveDefaultData=null, liveAutoCenter=true, speedChart=null, distanceChart=null;
+const geocodeCache = new Map();
+
+setInterval(()=>{ pageDateTime.textContent = new Date().toLocaleString("ru-RU"); }, 1000);
+pageDateTime.textContent = new Date().toLocaleString("ru-RU");
+
+const historyMap = L.map("historyMap").setView([56.95,24.10],12);
+const liveMap = L.map("liveMap").setView([56.95,24.10],12);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"&copy; OpenStreetMap"}).addTo(historyMap);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"&copy; OpenStreetMap"}).addTo(liveMap);
+const routeLine = L.polyline([], {weight:5}).addTo(historyMap);
+const startMarker = L.circleMarker([56.95,24.10], {radius:8,color:"#22c55e",fillColor:"#22c55e",fillOpacity:1}).addTo(historyMap);
+const endMarker = L.circleMarker([56.95,24.10], {radius:8,color:"#ef4444",fillColor:"#ef4444",fillOpacity:1}).addTo(historyMap);
+const selectedMarker = L.circleMarker([56.95,24.10], {radius:8,color:"#60a5fa",fillColor:"#60a5fa",fillOpacity:1}).addTo(historyMap);
+const liveTrail = L.polyline([], {weight:5}).addTo(liveMap);
+const liveMarker = L.circleMarker([56.95,24.10], {radius:8,color:"#22c55e",fillColor:"#22c55e",fillOpacity:1}).addTo(liveMap);
+
+function showError(text){ errorBox.textContent=text; errorBox.classList.remove("hidden"); }
+function hideError(){ errorBox.classList.add("hidden"); errorBox.textContent=""; }
+
+document.querySelectorAll(".tab-btn").forEach(btn=>{
+  btn.onclick=()=>{
+    document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
+    document.querySelectorAll("#nowPanel,#historyPanel,#reportsPanel,#usagePanel,#sessionsPanel").forEach(p=>p.classList.add("hidden"));
+    btn.classList.add("active");
+    qs(btn.dataset.tab).classList.remove("hidden");
+    setTimeout(()=>{historyMap.invalidateSize(); liveMap.invalidateSize(); speedChart?.resize(); distanceChart?.resize();}, 50);
+  };
+});
+
+function setDateTimeRange(start, end){
+  fromDate.value = start.toISOString().slice(0,10);
+  fromTime.value = `${String(start.getHours()).padStart(2,"0")}:${String(start.getMinutes()).padStart(2,"0")}`;
+  toDate.value = end.toISOString().slice(0,10);
+  toTime.value = `${String(end.getHours()).padStart(2,"0")}:${String(end.getMinutes()).padStart(2,"0")}`;
+}
+function setDefaultPeriodToday(){ const now=new Date(), start=new Date(); start.setHours(0,0,0,0); setDateTimeRange(start, now); }
+function parseDateTime(dateVal, timeVal){ if(!dateVal) return null; return new Date(`${dateVal}T${timeVal || "00:00"}:00`).getTime(); }
+function fmtTime(v){ return v ? new Date(v).toLocaleString("ru-RU") : "—"; }
+function formatIdle(ms){ if(!ms || ms<1000) return "—"; const s=Math.floor(ms/1000), h=Math.floor(s/3600), m=Math.floor((s%3600)/60), sec=s%60; return h>0?`${h}ч ${m}м ${sec}с`:`${m}м ${sec}с`; }
+function distanceMeters(a,b){ const toRad=(v)=>v*Math.PI/180, R=6371000, dLat=toRad(b.latitude-a.latitude), dLon=toRad(b.longitude-a.longitude), lat1=toRad(a.latitude), lat2=toRad(b.latitude); const x=Math.sin(dLat/2)**2 + Math.sin(dLon/2)**2*Math.cos(lat1)*Math.cos(lat2); return R*(2*Math.atan2(Math.sqrt(x), Math.sqrt(1-x))); }
+function filteredHistory(){ const from=parseDateTime(fromDate.value, fromTime.value), to=parseDateTime(toDate.value, toTime.value); return allHistoryPoints.filter(p=>{ const t=Number(p.timestamp||0); if(from&&t<from) return false; if(to&&t>to) return false; return true; }); }
+function computeSummary(points){ if(!points.length) return {count:0, km:0, avgSpeed:0, maxSpeed:0}; let meters=0; for(let i=1;i<points.length;i++) meters += distanceMeters(points[i-1], points[i]); const speeds=points.map(p=>Number(p.speed||0)).filter(v=>Number.isFinite(v)&&v>0); return {count:points.length, km:meters/1000, avgSpeed:speeds.length?speeds.reduce((a,b)=>a+b,0)/speeds.length:0, maxSpeed:speeds.length?Math.max(...speeds):0}; }
+function geocodeKey(lat,lon){ return `${lat.toFixed(5)},${lon.toFixed(5)}`; }
+async function reverseGeocode(lat,lon){
+  const key=geocodeKey(lat,lon);
+  if(geocodeCache.has(key)) return geocodeCache.get(key);
+  try{
+    const res=await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&zoom=18&addressdetails=1`, {headers:{Accept:"application/json"}});
+    const json=await res.json();
+    const addr=json.display_name || `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+    geocodeCache.set(key, addr); return addr;
+  }catch{
+    const addr=`${lat.toFixed(5)}, ${lon.toFixed(5)}`; geocodeCache.set(key, addr); return addr;
+  }
+}
+async function updateHistoryMap(points){
+  const latlngs=points.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]);
+  routeLine.setLatLngs(latlngs);
+  if(!latlngs.length) return;
+  const first=points[0], last=points[points.length-1];
+  startMarker.setLatLng([Number(first.latitude), Number(first.longitude)]).bindPopup("Старт");
+  endMarker.setLatLng([Number(last.latitude), Number(last.longitude)]).bindPopup("Финиш");
+  selectedMarker.setLatLng([Number(last.latitude), Number(last.longitude)]);
+  if(latlngs.length===1) historyMap.setView(latlngs[0],16); else historyMap.fitBounds(routeLine.getBounds(), {padding:[30,30]});
+  startAddress.textContent = await reverseGeocode(Number(first.latitude), Number(first.longitude));
+  endAddress.textContent = await reverseGeocode(Number(last.latitude), Number(last.longitude));
+}
+async function focusPoint(p){ const lat=Number(p.latitude), lon=Number(p.longitude); selectedMarker.setLatLng([lat,lon]).bindPopup(`${lat.toFixed(5)}, ${lon.toFixed(5)}<br>${fmtTime(p.timestamp)}`).openPopup(); historyMap.setView([lat,lon],17); selectedAddress.textContent = await reverseGeocode(lat,lon); }
+function formatSize(bytes){ if(bytes < 1024) return `${bytes} B`; if(bytes < 1024*1024) return `${(bytes/1024).toFixed(1)} KB`; return `${(bytes/(1024*1024)).toFixed(2)} MB`; }
+function updateUsage(){ const historyObj = Object.fromEntries(allHistoryPoints.map(p => [String(p.timestamp), p])); const historyBytes = new Blob([JSON.stringify(historyObj)]).size; const sessionsBytes = new Blob([JSON.stringify(allSessions || {})]).size + new Blob([JSON.stringify(liveDefaultData || {})]).size; historySize.textContent = formatSize(historyBytes); sessionsSize.textContent = formatSize(sessionsBytes); totalSize.textContent = formatSize(historyBytes + sessionsBytes); historyCount.textContent = String(allHistoryPoints.length); }
+function updateCharts(points){
+  const speedLabels = points.slice(-80).map(p => new Date(Number(p.timestamp||0)).toLocaleTimeString("ru-RU", {hour:"2-digit", minute:"2-digit"}));
+  const speedData = points.slice(-80).map(p => Number(p.speed || 0));
+  if(speedChart) speedChart.destroy();
+  speedChart = new Chart(qs("speedChart"), { type: "line", data: { labels: speedLabels, datasets: [{ label: "Скорость, км/ч", data: speedData, tension: 0.25 }] }, options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } } });
+  const byDay = {};
+  for(let i=1;i<points.length;i++){ const prev=points[i-1], cur=points[i]; const day=new Date(Number(cur.timestamp||0)).toLocaleDateString("ru-RU"); byDay[day]=(byDay[day]||0)+distanceMeters(prev, cur)/1000; }
+  const dayLabels = Object.keys(byDay), dayValues = dayLabels.map(d => Number(byDay[d].toFixed(2)));
+  if(distanceChart) distanceChart.destroy();
+  distanceChart = new Chart(qs("distanceChart"), { type: "bar", data: { labels: dayLabels, datasets: [{ label: "Пробег, км", data: dayValues }] }, options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } } });
+}
+function renderHistory(){
+  const pts=filteredHistory(), s=computeSummary(pts);
+  pointsCount.textContent=String(s.count); distanceValue.textContent=`${s.km.toFixed(2)} км`; avgSpeedValue.textContent=`${s.avgSpeed.toFixed(1)} км/ч`; maxSpeedValue.textContent=`${s.maxSpeed.toFixed(1)} км/ч`;
+  historyTbody.innerHTML="";
+  pts.slice().reverse().slice(0,500).forEach((p)=>{ const tr=document.createElement("tr"); tr.className="clickable"; tr.innerHTML=`<td>${fmtTime(p.timestamp)}</td><td class="mono">${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}</td><td>${p.accuracy ?? "—"}</td><td>${p.speed != null ? Number(p.speed).toFixed(1)+" км/ч" : "—"}</td><td><button class="danger small">Удалить</button></td>`; tr.onclick=(e)=>{ if(e.target.tagName==="BUTTON") return; focusPoint(p); }; tr.querySelector("button").onclick=async(e)=>{ e.stopPropagation(); if(!confirm(`Удалить точку ${fmtTime(p.timestamp)}?`)) return; await remove(ref(db, `history/default/${String(p.timestamp)}`)); }; historyTbody.appendChild(tr); });
+  updateHistoryMap(pts); updateCharts(pts);
+}
+function downloadText(name,content,type){ const blob=new Blob([content],{type}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=name; a.click(); URL.revokeObjectURL(url); }
+async function loadHistory(){ const snap=await get(ref(db, "history/default")); const raw=snap.val()||{}; allHistoryPoints=Object.values(raw).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0)); updateUsage(); renderHistory(); }
+function exportJson(){ downloadText("history_export.json", JSON.stringify(filteredHistory(), null, 2), "application/json"); }
+function exportCsv(){ const pts=filteredHistory(); const lines=["timestamp,latitude,longitude,accuracy,speed"]; pts.forEach(p=>lines.push([p.timestamp??"",p.latitude??"",p.longitude??"",p.accuracy??"",p.speed??""].join(","))); downloadText("history_export.csv", lines.join("\n"), "text/csv"); }
+function exportGpx(){ const pts=filteredHistory(); const lines=['<?xml version="1.0" encoding="UTF-8"?>','<gpx version="1.1" creator="MyGps Admin" xmlns="http://www.topografix.com/GPX/1/1">','<trk><name>History Export</name><trkseg>']; pts.forEach(p=>lines.push(`<trkpt lat="${p.latitude}" lon="${p.longitude}"><time>${new Date(Number(p.timestamp||0)).toISOString()}</time></trkpt>`)); lines.push('</trkseg></trk></gpx>'); downloadText("history_export.gpx", lines.join(""), "application/gpx+xml"); }
+async function exportPdf(){
+  const pts=filteredHistory(), s=computeSummary(pts), { jsPDF } = window.jspdf, doc=new jsPDF();
+  let startAddr = "—", endAddr = "—";
+  if(pts.length){ startAddr = await reverseGeocode(Number(pts[0].latitude), Number(pts[0].longitude)); endAddr = await reverseGeocode(Number(pts[pts.length-1].latitude), Number(pts[pts.length-1].longitude)); }
+  doc.setFontSize(16); doc.text("MyGps History Report",14,16);
+  doc.setFontSize(11); doc.text(`Period: ${fromDate.value || "-"} ${fromTime.value || "-"} -> ${toDate.value || "-"} ${toTime.value || "-"}`,14,26); doc.text(`Distance: ${s.km.toFixed(2)} km`,14,34); doc.text(`Average speed: ${s.avgSpeed.toFixed(1)} km/h`,14,40); doc.text(`Max speed: ${s.maxSpeed.toFixed(1)} km/h`,14,46);
+  const splitStart = doc.splitTextToSize(`Start address: ${startAddr}`, 180); const splitEnd = doc.splitTextToSize(`End address: ${endAddr}`, 180);
+  doc.text(splitStart, 14, 56); doc.text(splitEnd, 14, 56 + splitStart.length * 6 + 4);
+  const rows=pts.slice(0,250).map(p=>[fmtTime(p.timestamp), `${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}`, p.speed != null ? Number(p.speed).toFixed(1) : "—"]);
+  const startY = 56 + splitStart.length * 6 + splitEnd.length * 6 + 12;
+  doc.autoTable({startY, head:[["Time","Coordinates","Speed km/h"]], body:rows, styles:{fontSize:9}});
+  doc.save("history_report.pdf");
+}
+async function deleteRange(){ const pts=filteredHistory(); if(!pts.length) return alert("Нет точек в выбранном диапазоне."); if(!confirm(`Удалить ${pts.length} точек за выбранный период?`)) return; const updates={}; pts.forEach(p=>updates[`history/default/${String(p.timestamp)}`]=null); await update(ref(db), updates); alert("Период удалён."); }
+function renderSessions(){
+  sessionsTbody.innerHTML="";
+  const entries=Object.entries(allSessions).filter(([k])=>k!=="_init").sort((a,b)=>Number((b[1]?.meta?.createdAt||0))-Number((a[1]?.meta?.createdAt||0)));
+  if(!entries.length){ sessionsTbody.innerHTML='<tr><td colspan="6">Сессий пока нет</td></tr>'; return; }
+  entries.forEach(([token, session])=>{ const meta=session?.meta||{}, stats=session?.viewStats||{}, active=!!meta.active, expiresAt=Number(meta.expiresAt||0), now=Date.now(); let statusText="завершена"; if(active&&expiresAt>now) statusText="активна"; else if(active&&expiresAt<=now) statusText="истекла"; const tr=document.createElement("tr"); tr.innerHTML=`<td class="mono">${token}</td><td>${statusText}</td><td>${fmtTime(expiresAt)}</td><td>${stats.openCount||0}</td><td>${fmtTime(stats.firstOpenAt)}<br>${fmtTime(stats.lastOpenAt)}</td><td><div class="row"><button class="secondary small" data-copy="${token}">Копировать ссылку</button><button class="danger small" data-delete="${token}">Удалить</button></div></td>`; sessionsTbody.appendChild(tr); });
+  sessionsTbody.querySelectorAll("button[data-copy]").forEach((b)=>b.onclick=async()=>{ await navigator.clipboard.writeText(`https://mygpstrack.github.io/mygps/live.html?session=${b.dataset.copy}`); alert("Ссылка скопирована"); });
+  sessionsTbody.querySelectorAll("button[data-delete]").forEach((b)=>b.onclick=async()=>{ if(!confirm(`Удалить live-сессию ${b.dataset.delete}?`)) return; await remove(ref(db, `liveSessions/${b.dataset.delete}`)); });
+}
+async function loadSessions(){ const snap=await get(ref(db, "liveSessions")); allSessions=snap.val()||{}; updateUsage(); renderSessions(); updateNowFromAvailableSources(); }
+function updateNowUI(point, sourceLabel){
+  if(point && point.latitude != null && point.longitude != null){ const lat=Number(point.latitude), lon=Number(point.longitude); liveMarker.setLatLng([lat,lon]); if(liveAutoCenter) liveMap.setView([lat,lon],16); reverseGeocode(lat,lon).then(addr=>nowAddress.textContent=addr); }
+  const freshness = point?.timestamp ? Date.now() - Number(point.timestamp) : null;
+  const isOnline = freshness != null && freshness <= 3 * 60 * 1000;
+  nowStatus.textContent = isOnline ? "Онлайн" : "Оффлайн";
+  nowSource.textContent = sourceLabel || "—";
+  nowSpeed.textContent = point?.speed != null ? `${Number(point.speed).toFixed(1)} км/ч` : "—";
+  nowAccuracy.textContent = point?.accuracy != null ? `${point.accuracy} м` : "—";
+  nowUpdated.textContent = fmtTime(point?.timestamp);
+  nowBearing.textContent = point?.bearing != null ? `${Number(point.bearing).toFixed(0)}°` : "—";
+  nowIdle.textContent = point?.timestamp ? formatIdle(Date.now()-Number(point.timestamp)) : "—";
+}
+function updateNowFromAvailableSources(){
+  if(liveDefaultData && liveDefaultData.lastPoint){ updateNowUI(liveDefaultData.lastPoint, "live/default"); const pts = Object.values(liveDefaultData.recentPoints || {}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0)); liveTrail.setLatLngs(pts.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)])); return; }
+  const now = Date.now();
+  const active=Object.entries(allSessions).filter(([k,v])=>k!=="_init"&&v?.meta?.active&&Number(v?.meta?.expiresAt||0)>now).sort((a,b)=>Number((b[1]?.meta?.createdAt||0))-Number((a[1]?.meta?.createdAt||0)));
+  if(active.length){ updateNowUI(active[0][1].lastPoint || null, `liveSessions/${active[0][0]}`); const pts = Object.values(active[0][1].recentPoints || {}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0)); liveTrail.setLatLngs(pts.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)])); return; }
+  const point = allHistoryPoints.length ? allHistoryPoints[allHistoryPoints.length-1] : null;
+  liveTrail.setLatLngs([]);
+  updateNowUI(point, "history/default");
+}
+async function cleanupExpiredSessions(){ const now=Date.now(), updates={}; let count=0; Object.entries(allSessions).forEach(([token, session])=>{ if(token==="_init") return; const meta=session?.meta||{}, expiresAt=Number(meta.expiresAt||0), active=!!meta.active; if(!active||(expiresAt&&expiresAt<now)){ updates[`liveSessions/${token}`]=null; count++; } }); if(!count) return alert("Истёкших сессий не найдено."); if(!confirm(`Удалить ${count} старых/завершённых live-сессий?`)) return; await update(ref(db), updates); alert("Очистка завершена."); }
+
+qs("googleBtn").onclick=async()=>{ try{ hideError(); await signInWithPopup(auth, provider); }catch(e){ showError("Ошибка Google-входа: "+(e.message||e)); } };
+qs("emailLoginBtn").onclick=async()=>{ try{ hideError(); await signInWithEmailAndPassword(auth, emailInput.value.trim(), passwordInput.value); }catch(e){ showError("Ошибка входа по email: "+(e.message||e)); } };
+qs("emailRegisterBtn").onclick=async()=>{ try{ hideError(); await createUserWithEmailAndPassword(auth, emailInput.value.trim(), passwordInput.value); }catch(e){ showError("Ошибка создания email-аккаунта: "+(e.message||e)); } };
+qs("logoutBtn").onclick=async()=>{ await signOut(auth); };
+qs("todayBtn").onclick=()=>{ const now=new Date(), start=new Date(); start.setHours(0,0,0,0); setDateTimeRange(start, now); renderHistory(); };
+qs("yesterdayBtn").onclick=()=>{ const start=new Date(); start.setDate(start.getDate()-1); start.setHours(0,0,0,0); const end=new Date(start); end.setHours(23,59,0,0); setDateTimeRange(start, end); renderHistory(); };
+qs("weekBtn").onclick=()=>{ const now=new Date(), start=new Date(); start.setDate(start.getDate()-7); setDateTimeRange(start, now); renderHistory(); };
+qs("setStartDayBtn").onclick=()=>{ fromTime.value = "00:00"; };
+qs("setEndNowBtn").onclick=()=>{ const now=new Date(); toDate.value = now.toISOString().slice(0,10); toTime.value = `${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`; };
+qs("setEndDayBtn").onclick=()=>{ toTime.value = "23:59"; };
+qs("refreshHistoryBtn").onclick=loadHistory; qs("exportJsonBtn").onclick=exportJson; qs("exportCsvBtn").onclick=exportCsv; qs("exportGpxBtn").onclick=exportGpx; qs("exportPdfBtn").onclick=exportPdf; qs("deleteRangeBtn").onclick=deleteRange;
+qs("refreshSessionsBtn").onclick=loadSessions; qs("cleanupSessionsBtn").onclick=cleanupExpiredSessions; qs("refreshNowBtn").onclick=updateNowFromAvailableSources;
+qs("liveAutoCenterBtn").onclick=()=>{ liveAutoCenter=!liveAutoCenter; qs("liveAutoCenterBtn").textContent=`Автоцентр: ${liveAutoCenter?"вкл":"выкл"}`; };
+
+onAuthStateChanged(auth, async(user)=>{
+  if(!user){ authCard.classList.remove("hidden"); adminPanel.classList.add("hidden"); authMessage.innerHTML='Если после входа доступа нет, добавь свой UID в Firebase: <div class="mono">admins/ТВОЙ_UID = true</div>'; return; }
+  const adminSnap=await get(ref(db, `admins/${user.uid}`)); const allowed=adminSnap.val()===true;
+  if(!allowed){ authCard.classList.remove("hidden"); adminPanel.classList.add("hidden"); authMessage.innerHTML=`Ты вошёл, но ещё не добавлен как админ.<br><br>Добавь в Firebase:<br><span class="mono">admins/${user.uid} = true</span><br><br>Потом обнови страницу.`; return; }
+  authCard.classList.add("hidden"); adminPanel.classList.remove("hidden");
+  userInfo.textContent=user.email||"Google user";
+  setDefaultPeriodToday();
+  await loadHistory(); await loadSessions();
+  onValue(ref(db, "live/default"), (snap)=>{ liveDefaultData = snap.val() || null; updateUsage(); updateNowFromAvailableSources(); });
+  onValue(ref(db, "liveSessions"), (snap)=>{ allSessions=snap.val()||{}; updateUsage(); renderSessions(); updateNowFromAvailableSources(); });
+  onValue(ref(db, "history/default"), (snap)=>{ const raw=snap.val()||{}; allHistoryPoints=Object.values(raw).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0)); updateUsage(); renderHistory(); updateNowFromAvailableSources(); });
+});
+</script>
+</body>
+</html>
