@@ -7,23 +7,51 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
   <style>
     :root{--bg:#0f172a;--card:#111827;--muted:#94a3b8;--text:#e5e7eb;--accent:#22c55e;--warn:#eab308;--danger:#ef4444;--border:#1f2937;--blue:#2563eb}
-    *{box-sizing:border-box} body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text)}
-    .wrap{max-width:1280px;margin:0 auto;padding:16px}.card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:16px;margin-bottom:16px}
-    h1,h2,p{margin:0}.sub{color:var(--muted);margin-top:6px;line-height:1.6}.headerTime{margin-top:8px;color:var(--muted)}
-    .grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:12px}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text)}
+    .wrap{max-width:1320px;margin:0 auto;padding:16px}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:16px;margin-bottom:16px}
+    h1,h2,h3,p{margin:0}
+    .sub{color:var(--muted);margin-top:6px;line-height:1.6}
+    .headerTime{margin-top:8px;color:var(--muted)}
     .grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px}
-    .periodGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:12px}
-    .stat{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:14px;padding:12px}.label{color:var(--muted);font-size:13px;margin-bottom:6px}.value{font-size:18px;font-weight:700;line-height:1.2;word-break:break-word}
-    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.tab-btn{background:#1f2937}.tab-btn.active{background:var(--blue)}.hidden{display:none!important}
-    input,button{font:inherit} input{padding:12px 14px;border-radius:12px;border:1px solid var(--border);background:#0b1220;color:var(--text);min-width:160px}.timeInput{appearance:auto;-webkit-appearance:auto}
-    button{border:0;border-radius:12px;padding:10px 14px;font-weight:600;cursor:pointer;color:white;background:var(--blue)} button.secondary{background:#374151} button.warn{background:#b45309} button.danger{background:#b91c1c} button.success{background:#15803d} button.small{padding:6px 10px;font-size:13px}
-    .pill{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;border:1px solid var(--border);background:rgba(255,255,255,.03);font-size:14px}.dot{width:10px;height:10px;border-radius:50%;display:inline-block}.ok{background:var(--accent)}
-    .notice,.address-box,.error{padding:12px;border-radius:14px;border:1px solid var(--border);background:rgba(255,255,255,.03);margin-top:12px;line-height:1.6}.error{border-color:#7f1d1d;background:rgba(127,29,29,.25);color:#fecaca}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;word-break:break-all}
-    table{width:100%;border-collapse:collapse;margin-top:12px;font-size:14px} th,td{border-bottom:1px solid var(--border);padding:10px 8px;text-align:left;vertical-align:top} th{color:var(--muted)}
-    tr.clickable{cursor:pointer} tr.clickable:hover{background:rgba(255,255,255,.04)}
-    #historyMap,#liveMap{width:100%;height:420px;border-radius:16px;overflow:hidden;border:1px solid var(--border);margin-top:12px}.chartWrap{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:16px;padding:12px} canvas{max-width:100%}
-    @media (max-width:1100px){.grid4{grid-template-columns:repeat(2,minmax(0,1fr))}.periodGrid{grid-template-columns:repeat(2,minmax(0,1fr))}.grid2{grid-template-columns:1fr}}
-    @media (max-width:900px){.grid4,.periodGrid{grid-template-columns:1fr} input{min-width:unset;width:100%} .row>*{width:100%} #historyMap,#liveMap{height:320px}}
+    .grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:12px}
+    .grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:12px}
+    .grid6{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin-top:12px}
+    .stat{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:14px;padding:12px}
+    .label{color:var(--muted);font-size:13px;margin-bottom:6px}
+    .value{font-size:18px;font-weight:700;line-height:1.2;word-break:break-word}
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}
+    .tabs{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+    .tab-btn{background:#1f2937}
+    .tab-btn.active{background:var(--blue)}
+    .hidden{display:none!important}
+    input,button,select{font:inherit}
+    input,select{padding:12px 14px;border-radius:12px;border:1px solid var(--border);background:#0b1220;color:var(--text);min-width:120px}
+    button{border:0;border-radius:12px;padding:10px 14px;font-weight:600;cursor:pointer;color:white;background:var(--blue)}
+    button.secondary{background:#374151}
+    button.warn{background:#b45309}
+    button.danger{background:#b91c1c}
+    button.success{background:#15803d}
+    button.small{padding:6px 10px;font-size:13px}
+    .pill{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;border:1px solid var(--border);background:rgba(255,255,255,.03);font-size:14px}
+    .dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+    .ok{background:var(--accent)}
+    .notice,.address-box,.error{padding:12px;border-radius:14px;border:1px solid var(--border);background:rgba(255,255,255,.03);margin-top:12px;line-height:1.6}
+    .error{border-color:#7f1d1d;background:rgba(127,29,29,.25);color:#fecaca}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;word-break:break-all}
+    table{width:100%;border-collapse:collapse;margin-top:12px;font-size:14px}
+    th,td{border-bottom:1px solid var(--border);padding:10px 8px;text-align:left;vertical-align:top}
+    th{color:var(--muted)}
+    tr.clickable{cursor:pointer}
+    tr.clickable:hover{background:rgba(255,255,255,.04)}
+    #historyMap,#liveMap,#sessionMap{width:100%;height:420px;border-radius:16px;overflow:hidden;border:1px solid var(--border);margin-top:12px}
+    .chartWrap{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:16px;padding:12px}
+    canvas{max-width:100%}
+    .sectionTitle{margin-top:8px}
+    @media (max-width:1200px){.grid6{grid-template-columns:repeat(3,minmax(0,1fr))}}
+    @media (max-width:1000px){.grid4{grid-template-columns:repeat(2,minmax(0,1fr))}.grid3,.grid2{grid-template-columns:1fr}}
+    @media (max-width:900px){.grid4,.grid6{grid-template-columns:1fr} input,select{min-width:unset;width:100%} .row>*{width:100%} #historyMap,#liveMap,#sessionMap{height:320px}}
   </style>
 </head>
 <body>
@@ -52,6 +80,7 @@
         <button class="tab-btn" data-tab="reportsPanel">Отчёты и графики</button>
         <button class="tab-btn" data-tab="usagePanel">Объём данных</button>
         <button class="tab-btn" data-tab="sessionsPanel">Live-сессии</button>
+        <button class="tab-btn" data-tab="deletionsPanel">Журнал удалений</button>
       </div>
     </div>
 
@@ -82,18 +111,35 @@
           <div class="stat"><div class="label">Средняя скорость</div><div class="value" id="avgSpeedValue">0 км/ч</div></div>
           <div class="stat"><div class="label">Максимальная скорость</div><div class="value" id="maxSpeedValue">0 км/ч</div></div>
         </div>
-        <div class="periodGrid">
+
+        <div class="grid6">
           <div><div class="label">Дата от</div><input id="fromDate" type="date"/></div>
-          <div><div class="label">Время от</div><input id="fromTime" class="timeInput" type="time" step="60"/></div>
+          <div><div class="label">Часы от</div><select id="fromHour"></select></div>
+          <div><div class="label">Минуты от</div><select id="fromMinute"></select></div>
           <div><div class="label">Дата до</div><input id="toDate" type="date"/></div>
-          <div><div class="label">Время до</div><input id="toTime" class="timeInput" type="time" step="60"/></div>
+          <div><div class="label">Часы до</div><select id="toHour"></select></div>
+          <div><div class="label">Минуты до</div><select id="toMinute"></select></div>
         </div>
+
         <div class="row">
           <button id="todayBtn">Сегодня</button>
           <button id="yesterdayBtn" class="secondary">Вчера</button>
-          <button id="weekBtn" class="secondary">Неделя</button>        </div>
+          <button id="weekBtn" class="secondary">Неделя</button>
+          <input id="jumpDate" type="date"/>
+          <button id="jumpDateBtn" class="secondary">Перейти к дате</button>
+        </div>
+
+        <div class="row">
+          <input id="maxAccuracyFilter" type="number" min="0" step="1" placeholder="Макс. accuracy, м"/>
+          <input id="minSpeedFilter" type="number" min="0" step="0.1" placeholder="Скорость от, км/ч"/>
+          <input id="maxSpeedFilter" type="number" min="0" step="0.1" placeholder="Скорость до, км/ч"/>
+          <button id="applyFiltersBtn" class="secondary">Применить фильтры</button>
+          <button id="resetFiltersBtn" class="secondary">Сбросить фильтры</button>
+        </div>
+
         <div class="row">
           <button id="refreshHistoryBtn">Обновить историю</button>
+          <button id="fitRouteBtn" class="secondary">Центрировать маршрут</button>
           <button id="exportJsonBtn" class="secondary">Экспорт JSON</button>
           <button id="exportCsvBtn" class="secondary">Экспорт CSV</button>
           <button id="exportGpxBtn" class="secondary">Экспорт GPX</button>
@@ -103,8 +149,19 @@
       </div>
 
       <div class="card">
+        <h2>Сводка маршрута</h2>
+        <div class="grid4">
+          <div class="stat"><div class="label">Старт</div><div class="value" id="routeStartCoords">—</div></div>
+          <div class="stat"><div class="label">Финиш</div><div class="value" id="routeEndCoords">—</div></div>
+          <div class="stat"><div class="label">Длительность</div><div class="value" id="routeDuration">—</div></div>
+          <div class="stat"><div class="label">Стоянок</div><div class="value" id="routeStops">0</div></div>
+        </div>
+        <div class="notice" id="stopsNotice">Стоянки будут показаны ниже.</div>
+      </div>
+
+      <div class="card">
         <h2>Карта истории</h2>
-        <p class="sub">Старт зелёный, финиш красный. Клик по строке точки переносит карту к точке и показывает адрес.</p>
+        <p class="sub">Старт зелёный, финиш красный. Цвет маршрута меняется по скорости. Клик по строке точки переносит карту к точке и показывает адрес.</p>
         <div class="address-box">
           <div><strong>Старт:</strong> <span id="startAddress">—</span></div>
           <div><strong>Финиш:</strong> <span id="endAddress">—</span></div>
@@ -128,10 +185,9 @@
       <div class="card">
         <h2>Отчёты и графики</h2>
         <div class="grid2">
-          <div class="chartWrap"><h3>Скорость по точкам</h3><canvas id="speedChart" height="200"></canvas></div>
-          <div class="chartWrap"><h3>Пробег по дням</h3><canvas id="distanceChart" height="200"></canvas></div>
+          <div class="chartWrap"><h3>Скорость по точкам</h3><canvas id="speedChart" height="220"></canvas></div>
+          <div class="chartWrap"><h3>Пробег по дням</h3><canvas id="distanceChart" height="220"></canvas></div>
         </div>
-        <div class="notice">Графики строятся по выбранному периоду из вкладки «История». Если в Firebase нет поля <span class="mono">speed</span>, график скорости будет пустым.</div>
       </div>
     </div>
 
@@ -158,6 +214,19 @@
             <tbody id="sessionsTbody"></tbody>
           </table>
         </div>
+        <div id="sessionMap"></div>
+      </div>
+    </div>
+
+    <div id="deletionsPanel" class="hidden">
+      <div class="card">
+        <h2>Журнал удалений</h2>
+        <div style="overflow:auto">
+          <table>
+            <thead><tr><th>Время</th><th>Тип</th><th>Описание</th></tr></thead>
+            <tbody id="deletionsTbody"></tbody>
+          </table>
+        </div>
       </div>
     </div>
   </div>
@@ -170,7 +239,7 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-import { getDatabase, ref, get, onValue, remove, update } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
+import { getDatabase, ref, get, onValue, remove, update, push, set } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCXNCY-IpkhAXb8jNPhN8gf2UdOfPBc5gM",
@@ -192,27 +261,46 @@ const qs = (id)=>document.getElementById(id);
 const authCard=qs("authCard"), adminPanel=qs("adminPanel"), authMessage=qs("authMessage"), errorBox=qs("errorBox");
 const emailInput=qs("emailInput"), passwordInput=qs("passwordInput"), userInfo=qs("userInfo");
 const pointsCount=qs("pointsCount"), distanceValue=qs("distanceValue"), avgSpeedValue=qs("avgSpeedValue"), maxSpeedValue=qs("maxSpeedValue");
-const fromDate=qs("fromDate"), fromTime=qs("fromTime"), toDate=qs("toDate"), toTime=qs("toTime"), sessionsTbody=qs("sessionsTbody"), historyTbody=qs("historyTbody");
+const fromDate=qs("fromDate"), fromHour=qs("fromHour"), fromMinute=qs("fromMinute"), toDate=qs("toDate"), toHour=qs("toHour"), toMinute=qs("toMinute");
+const sessionsTbody=qs("sessionsTbody"), historyTbody=qs("historyTbody"), deletionsTbody=qs("deletionsTbody");
 const nowStatus=qs("nowStatus"), nowSpeed=qs("nowSpeed"), nowAccuracy=qs("nowAccuracy"), nowUpdated=qs("nowUpdated"), nowBearing=qs("nowBearing"), nowIdle=qs("nowIdle"), nowSource=qs("nowSource"), nowAddress=qs("nowAddress");
 const startAddress=qs("startAddress"), endAddress=qs("endAddress"), selectedAddress=qs("selectedAddress");
 const historySize=qs("historySize"), sessionsSize=qs("sessionsSize"), totalSize=qs("totalSize"), historyCount=qs("historyCount"), pageDateTime=qs("pageDateTime");
+const routeStartCoords=qs("routeStartCoords"), routeEndCoords=qs("routeEndCoords"), routeDuration=qs("routeDuration"), routeStops=qs("routeStops"), stopsNotice=qs("stopsNotice");
 
 let allHistoryPoints=[], allSessions={}, liveDefaultData=null, liveAutoCenter=true, speedChart=null, distanceChart=null;
+let currentSessionData = null;
+let deletionsLog = [];
 const geocodeCache = new Map();
 
-setInterval(()=>{ pageDateTime.textContent = new Date().toLocaleString("ru-RU"); }, 1000);
-pageDateTime.textContent = new Date().toLocaleString("ru-RU");
+function populateTimeSelects(){
+  const hourOpts = Array.from({length:24}, (_,i)=>`<option value="${String(i).padStart(2,"0")}">${String(i).padStart(2,"0")}</option>`).join("");
+  const minuteOpts = Array.from({length:60}, (_,i)=>`<option value="${String(i).padStart(2,"0")}">${String(i).padStart(2,"0")}</option>`).join("");
+  fromHour.innerHTML = hourOpts; toHour.innerHTML = hourOpts; fromMinute.innerHTML = minuteOpts; toMinute.innerHTML = minuteOpts;
+}
+populateTimeSelects();
+
+setInterval(()=>{
+  const d = new Date();
+  const days = ["воскресенье","понедельник","вторник","среда","четверг","пятница","суббота"];
+  pageDateTime.textContent = `${days[d.getDay()]}, ${d.toLocaleString("ru-RU")}`;
+}, 1000);
 
 const historyMap = L.map("historyMap").setView([56.95,24.10],12);
 const liveMap = L.map("liveMap").setView([56.95,24.10],12);
+const sessionMap = L.map("sessionMap").setView([56.95,24.10],12);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"&copy; OpenStreetMap"}).addTo(historyMap);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"&copy; OpenStreetMap"}).addTo(liveMap);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"&copy; OpenStreetMap"}).addTo(sessionMap);
 const routeLine = L.polyline([], {weight:5}).addTo(historyMap);
+const routeSegments = [];
 const startMarker = L.circleMarker([56.95,24.10], {radius:8,color:"#22c55e",fillColor:"#22c55e",fillOpacity:1}).addTo(historyMap);
 const endMarker = L.circleMarker([56.95,24.10], {radius:8,color:"#ef4444",fillColor:"#ef4444",fillOpacity:1}).addTo(historyMap);
 const selectedMarker = L.circleMarker([56.95,24.10], {radius:8,color:"#60a5fa",fillColor:"#60a5fa",fillOpacity:1}).addTo(historyMap);
 const liveTrail = L.polyline([], {weight:5}).addTo(liveMap);
 const liveMarker = L.circleMarker([56.95,24.10], {radius:8,color:"#22c55e",fillColor:"#22c55e",fillOpacity:1}).addTo(liveMap);
+const sessionTrail = L.polyline([], {weight:5}).addTo(sessionMap);
+const sessionMarker = L.circleMarker([56.95,24.10], {radius:8,color:"#22c55e",fillColor:"#22c55e",fillOpacity:1}).addTo(sessionMap);
 
 function showError(text){ errorBox.textContent=text; errorBox.classList.remove("hidden"); }
 function hideError(){ errorBox.classList.add("hidden"); errorBox.textContent=""; }
@@ -220,26 +308,75 @@ function hideError(){ errorBox.classList.add("hidden"); errorBox.textContent="";
 document.querySelectorAll(".tab-btn").forEach(btn=>{
   btn.onclick=()=>{
     document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
-    document.querySelectorAll("#nowPanel,#historyPanel,#reportsPanel,#usagePanel,#sessionsPanel").forEach(p=>p.classList.add("hidden"));
+    document.querySelectorAll("#nowPanel,#historyPanel,#reportsPanel,#usagePanel,#sessionsPanel,#deletionsPanel").forEach(p=>p.classList.add("hidden"));
     btn.classList.add("active");
     qs(btn.dataset.tab).classList.remove("hidden");
-    setTimeout(()=>{historyMap.invalidateSize(); liveMap.invalidateSize(); speedChart?.resize(); distanceChart?.resize();}, 50);
+    setTimeout(()=>{historyMap.invalidateSize(); liveMap.invalidateSize(); sessionMap.invalidateSize(); speedChart?.resize(); distanceChart?.resize();}, 50);
   };
 });
 
 function setDateTimeRange(start, end){
   fromDate.value = start.toISOString().slice(0,10);
-  fromTime.value = `${String(start.getHours()).padStart(2,"0")}:${String(start.getMinutes()).padStart(2,"0")}`;
+  fromHour.value = String(start.getHours()).padStart(2,"0");
+  fromMinute.value = String(start.getMinutes()).padStart(2,"0");
   toDate.value = end.toISOString().slice(0,10);
-  toTime.value = `${String(end.getHours()).padStart(2,"0")}:${String(end.getMinutes()).padStart(2,"0")}`;
+  toHour.value = String(end.getHours()).padStart(2,"0");
+  toMinute.value = String(end.getMinutes()).padStart(2,"0");
 }
 function setDefaultPeriodToday(){ const now=new Date(), start=new Date(); start.setHours(0,0,0,0); setDateTimeRange(start, now); }
-function parseDateTime(dateVal, timeVal){ if(!dateVal) return null; return new Date(`${dateVal}T${timeVal || "00:00"}:00`).getTime(); }
+function parseDateTime(dateVal, hVal, mVal){ if(!dateVal) return null; return new Date(`${dateVal}T${hVal || "00"}:${mVal || "00"}:00`).getTime(); }
 function fmtTime(v){ return v ? new Date(v).toLocaleString("ru-RU") : "—"; }
 function formatIdle(ms){ if(!ms || ms<1000) return "—"; const s=Math.floor(ms/1000), h=Math.floor(s/3600), m=Math.floor((s%3600)/60), sec=s%60; return h>0?`${h}ч ${m}м ${sec}с`:`${m}м ${sec}с`; }
+function formatDuration(ms){ if(!ms || ms < 0) return "—"; const s=Math.floor(ms/1000), h=Math.floor(s/3600), m=Math.floor((s%3600)/60); return h>0?`${h}ч ${m}м`:`${m}м`; }
 function distanceMeters(a,b){ const toRad=(v)=>v*Math.PI/180, R=6371000, dLat=toRad(b.latitude-a.latitude), dLon=toRad(b.longitude-a.longitude), lat1=toRad(a.latitude), lat2=toRad(b.latitude); const x=Math.sin(dLat/2)**2 + Math.sin(dLon/2)**2*Math.cos(lat1)*Math.cos(lat2); return R*(2*Math.atan2(Math.sqrt(x), Math.sqrt(1-x))); }
-function filteredHistory(){ const from=parseDateTime(fromDate.value, fromTime.value), to=parseDateTime(toDate.value, toTime.value); return allHistoryPoints.filter(p=>{ const t=Number(p.timestamp||0); if(from&&t<from) return false; if(to&&t>to) return false; return true; }); }
-function computeSummary(points){ if(!points.length) return {count:0, km:0, avgSpeed:0, maxSpeed:0}; let meters=0; for(let i=1;i<points.length;i++) meters += distanceMeters(points[i-1], points[i]); const speeds=points.map(p=>Number(p.speed||0)).filter(v=>Number.isFinite(v)&&v>0); return {count:points.length, km:meters/1000, avgSpeed:speeds.length?speeds.reduce((a,b)=>a+b,0)/speeds.length:0, maxSpeed:speeds.length?Math.max(...speeds):0}; }
+function filteredHistory(){
+  const from=parseDateTime(fromDate.value, fromHour.value, fromMinute.value), to=parseDateTime(toDate.value, toHour.value, toMinute.value);
+  const maxAcc = Number(qs("maxAccuracyFilter").value || 0);
+  const minSp = Number(qs("minSpeedFilter").value || 0);
+  const maxSp = Number(qs("maxSpeedFilter").value || 0);
+  return allHistoryPoints.filter(p=>{
+    const t=Number(p.timestamp||0), sp=Number(p.speed||0), acc=Number(p.accuracy||0);
+    if(from&&t<from) return false;
+    if(to&&t>to) return false;
+    if(maxAcc>0 && acc>maxAcc) return false;
+    if(minSp>0 && sp<minSp) return false;
+    if(maxSp>0 && sp>maxSp) return false;
+    return true;
+  });
+}
+function computeSummary(points){
+  if(!points.length) return {count:0, km:0, avgSpeed:0, maxSpeed:0};
+  let meters=0; for(let i=1;i<points.length;i++) meters += distanceMeters(points[i-1], points[i]);
+  const speeds=points.map(p=>Number(p.speed||0)).filter(v=>Number.isFinite(v)&&v>0);
+  return {count:points.length, km:meters/1000, avgSpeed:speeds.length?speeds.reduce((a,b)=>a+b,0)/speeds.length:0, maxSpeed:speeds.length?Math.max(...speeds):0};
+}
+function detectStops(points){
+  const stops = [];
+  let startIdx = 0;
+  for(let i=1;i<points.length;i++){
+    const sp = Number(points[i].speed || 0);
+    if(sp <= 2){
+      if(startIdx === null) startIdx = i-1;
+    }else{
+      const s = startIdx;
+      if(s !== null && i-s > 1){
+        const duration = Number(points[i-1].timestamp||0) - Number(points[s].timestamp||0);
+        if(duration >= 5*60*1000){
+          stops.push({start: points[s], end: points[i-1], duration});
+        }
+      }
+      startIdx = i;
+    }
+  }
+  if(points.length>1){
+    const s = startIdx;
+    const duration = Number(points[points.length-1].timestamp||0) - Number(points[s].timestamp||0);
+    if(duration >= 5*60*1000){
+      stops.push({start: points[s], end: points[points.length-1], duration});
+    }
+  }
+  return stops;
+}
 function geocodeKey(lat,lon){ return `${lat.toFixed(5)},${lon.toFixed(5)}`; }
 async function reverseGeocode(lat,lon){
   const key=geocodeKey(lat,lon);
@@ -253,21 +390,42 @@ async function reverseGeocode(lat,lon){
     const addr=`${lat.toFixed(5)}, ${lon.toFixed(5)}`; geocodeCache.set(key, addr); return addr;
   }
 }
+function clearRouteSegments(){ while(routeSegments.length){ historyMap.removeLayer(routeSegments.pop()); } }
+function speedColor(speed){
+  if(speed <= 5) return "#22c55e";
+  if(speed <= 20) return "#eab308";
+  return "#ef4444";
+}
 async function updateHistoryMap(points){
+  clearRouteSegments();
   const latlngs=points.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]);
   routeLine.setLatLngs(latlngs);
   if(!latlngs.length) return;
+  for(let i=1;i<points.length;i++){
+    const a=[Number(points[i-1].latitude), Number(points[i-1].longitude)];
+    const b=[Number(points[i].latitude), Number(points[i].longitude)];
+    const seg = L.polyline([a,b], {weight:5, color:speedColor(Number(points[i].speed||0))}).addTo(historyMap);
+    routeSegments.push(seg);
+  }
   const first=points[0], last=points[points.length-1];
   startMarker.setLatLng([Number(first.latitude), Number(first.longitude)]).bindPopup("Старт");
   endMarker.setLatLng([Number(last.latitude), Number(last.longitude)]).bindPopup("Финиш");
   selectedMarker.setLatLng([Number(last.latitude), Number(last.longitude)]);
-  if(latlngs.length===1) historyMap.setView(latlngs[0],16); else historyMap.fitBounds(routeLine.getBounds(), {padding:[30,30]});
+  if(latlngs.length===1) historyMap.setView(latlngs[0],16); else historyMap.fitBounds(L.latLngBounds(latlngs), {padding:[30,30]});
   startAddress.textContent = await reverseGeocode(Number(first.latitude), Number(first.longitude));
   endAddress.textContent = await reverseGeocode(Number(last.latitude), Number(last.longitude));
 }
 async function focusPoint(p){ const lat=Number(p.latitude), lon=Number(p.longitude); selectedMarker.setLatLng([lat,lon]).bindPopup(`${lat.toFixed(5)}, ${lon.toFixed(5)}<br>${fmtTime(p.timestamp)}`).openPopup(); historyMap.setView([lat,lon],17); selectedAddress.textContent = await reverseGeocode(lat,lon); }
 function formatSize(bytes){ if(bytes < 1024) return `${bytes} B`; if(bytes < 1024*1024) return `${(bytes/1024).toFixed(1)} KB`; return `${(bytes/(1024*1024)).toFixed(2)} MB`; }
-function updateUsage(){ const historyObj = Object.fromEntries(allHistoryPoints.map(p => [String(p.timestamp), p])); const historyBytes = new Blob([JSON.stringify(historyObj)]).size; const sessionsBytes = new Blob([JSON.stringify(allSessions || {})]).size + new Blob([JSON.stringify(liveDefaultData || {})]).size; historySize.textContent = formatSize(historyBytes); sessionsSize.textContent = formatSize(sessionsBytes); totalSize.textContent = formatSize(historyBytes + sessionsBytes); historyCount.textContent = String(allHistoryPoints.length); }
+function updateUsage(){
+  const historyObj = Object.fromEntries(allHistoryPoints.map(p => [String(p.timestamp), p]));
+  const historyBytes = new Blob([JSON.stringify(historyObj)]).size;
+  const sessionsBytes = new Blob([JSON.stringify(allSessions || {})]).size + new Blob([JSON.stringify(liveDefaultData || {})]).size;
+  historySize.textContent = formatSize(historyBytes);
+  sessionsSize.textContent = formatSize(sessionsBytes);
+  totalSize.textContent = formatSize(historyBytes + sessionsBytes);
+  historyCount.textContent = String(allHistoryPoints.length);
+}
 function updateCharts(points){
   const speedLabels = points.slice(-80).map(p => new Date(Number(p.timestamp||0)).toLocaleTimeString("ru-RU", {hour:"2-digit", minute:"2-digit"}));
   const speedData = points.slice(-80).map(p => Number(p.speed || 0));
@@ -280,10 +438,15 @@ function updateCharts(points){
   distanceChart = new Chart(qs("distanceChart"), { type: "bar", data: { labels: dayLabels, datasets: [{ label: "Пробег, км", data: dayValues }] }, options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } } });
 }
 function renderHistory(){
-  const pts=filteredHistory(), s=computeSummary(pts);
+  const pts=filteredHistory(), s=computeSummary(pts), stops = detectStops(pts);
   pointsCount.textContent=String(s.count); distanceValue.textContent=`${s.km.toFixed(2)} км`; avgSpeedValue.textContent=`${s.avgSpeed.toFixed(1)} км/ч`; maxSpeedValue.textContent=`${s.maxSpeed.toFixed(1)} км/ч`;
+  routeStartCoords.textContent = pts.length ? `${Number(pts[0].latitude).toFixed(5)}, ${Number(pts[0].longitude).toFixed(5)}` : "—";
+  routeEndCoords.textContent = pts.length ? `${Number(pts[pts.length-1].latitude).toFixed(5)}, ${Number(pts[pts.length-1].longitude).toFixed(5)}` : "—";
+  routeDuration.textContent = pts.length ? formatDuration(Number(pts[pts.length-1].timestamp||0)-Number(pts[0].timestamp||0)) : "—";
+  routeStops.textContent = String(stops.length);
+  stopsNotice.textContent = stops.length ? `Стоянки: ${stops.map(s=>formatDuration(s.duration)).join(", ")}` : "Стоянок не найдено.";
   historyTbody.innerHTML="";
-  pts.slice().reverse().slice(0,500).forEach((p)=>{ const tr=document.createElement("tr"); tr.className="clickable"; tr.innerHTML=`<td>${fmtTime(p.timestamp)}</td><td class="mono">${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}</td><td>${p.accuracy ?? "—"}</td><td>${p.speed != null ? Number(p.speed).toFixed(1)+" км/ч" : "—"}</td><td><button class="danger small">Удалить</button></td>`; tr.onclick=(e)=>{ if(e.target.tagName==="BUTTON") return; focusPoint(p); }; tr.querySelector("button").onclick=async(e)=>{ e.stopPropagation(); if(!confirm(`Удалить точку ${fmtTime(p.timestamp)}?`)) return; await remove(ref(db, `history/default/${String(p.timestamp)}`)); }; historyTbody.appendChild(tr); });
+  pts.slice().reverse().slice(0,500).forEach((p)=>{ const tr=document.createElement("tr"); tr.className="clickable"; tr.innerHTML=`<td>${fmtTime(p.timestamp)}</td><td class="mono">${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}</td><td>${p.accuracy ?? "—"}</td><td>${p.speed != null ? Number(p.speed).toFixed(1)+" км/ч" : "—"}</td><td><button class="danger small">Удалить</button></td>`; tr.onclick=(e)=>{ if(e.target.tagName==="BUTTON") return; focusPoint(p); }; tr.querySelector("button").onclick=async(e)=>{ e.stopPropagation(); if(!confirm(`Удалить точку ${fmtTime(p.timestamp)}?`)) return; await logDeletion("point", `${fmtTime(p.timestamp)} ${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}`); await remove(ref(db, `history/default/${String(p.timestamp)}`)); }; historyTbody.appendChild(tr); });
   updateHistoryMap(pts); updateCharts(pts);
 }
 function downloadText(name,content,type){ const blob=new Blob([content],{type}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=name; a.click(); URL.revokeObjectURL(url); }
@@ -291,16 +454,13 @@ async function loadHistory(){ const snap=await get(ref(db, "history/default")); 
 function exportJson(){ downloadText("history_export.json", JSON.stringify(filteredHistory(), null, 2), "application/json"); }
 function exportCsv(){ const pts=filteredHistory(); const lines=["timestamp,latitude,longitude,accuracy,speed"]; pts.forEach(p=>lines.push([p.timestamp??"",p.latitude??"",p.longitude??"",p.accuracy??"",p.speed??""].join(","))); downloadText("history_export.csv", lines.join("\n"), "text/csv"); }
 function exportGpx(){ const pts=filteredHistory(); const lines=['<?xml version="1.0" encoding="UTF-8"?>','<gpx version="1.1" creator="MyGps Admin" xmlns="http://www.topografix.com/GPX/1/1">','<trk><name>History Export</name><trkseg>']; pts.forEach(p=>lines.push(`<trkpt lat="${p.latitude}" lon="${p.longitude}"><time>${new Date(Number(p.timestamp||0)).toISOString()}</time></trkpt>`)); lines.push('</trkseg></trk></gpx>'); downloadText("history_export.gpx", lines.join(""), "application/gpx+xml"); }
-async function exportPdf(){
+function exportPdf(){
   const pts=filteredHistory(), s=computeSummary(pts), { jsPDF } = window.jspdf, doc=new jsPDF();
   let startCoords = "—", endCoords = "—";
-  if(pts.length){
-    startCoords = `${Number(pts[0].latitude).toFixed(5)}, ${Number(pts[0].longitude).toFixed(5)}`;
-    endCoords = `${Number(pts[pts.length-1].latitude).toFixed(5)}, ${Number(pts[pts.length-1].longitude).toFixed(5)}`;
-  }
+  if(pts.length){ startCoords = `${Number(pts[0].latitude).toFixed(5)}, ${Number(pts[0].longitude).toFixed(5)}`; endCoords = `${Number(pts[pts.length-1].latitude).toFixed(5)}, ${Number(pts[pts.length-1].longitude).toFixed(5)}`; }
   doc.setFontSize(16); doc.text("MyGps History Report",14,16);
   doc.setFontSize(11);
-  doc.text(`Period: ${fromDate.value || "-"} ${fromTime.value || "-"} -> ${toDate.value || "-"} ${toTime.value || "-"}`,14,26);
+  doc.text(`Period: ${fromDate.value || "-"} ${fromHour.value || "00"}:${fromMinute.value || "00"} -> ${toDate.value || "-"} ${toHour.value || "00"}:${toMinute.value || "00"}`,14,26);
   doc.text(`Distance: ${s.km.toFixed(2)} km`,14,34);
   doc.text(`Average speed: ${s.avgSpeed.toFixed(1)} km/h`,14,40);
   doc.text(`Max speed: ${s.maxSpeed.toFixed(1)} km/h`,14,46);
@@ -310,14 +470,33 @@ async function exportPdf(){
   doc.autoTable({startY:70, head:[["Time","Coordinates","Speed km/h"]], body:rows, styles:{fontSize:9}});
   doc.save("history_report.pdf");
 }
-async function deleteRange(){ const pts=filteredHistory(); if(!pts.length) return alert("Нет точек в выбранном диапазоне."); if(!confirm(`Удалить ${pts.length} точек за выбранный период?`)) return; const updates={}; pts.forEach(p=>updates[`history/default/${String(p.timestamp)}`]=null); await update(ref(db), updates); alert("Период удалён."); }
+async function logDeletion(kind, description){
+  const entryRef = push(ref(db, "adminLogs/deletions"));
+  await set(entryRef, { ts: Date.now(), kind, description });
+}
+async function deleteRange(){
+  const pts=filteredHistory();
+  if(!pts.length) return alert("Нет точек в выбранном диапазоне.");
+  if(!confirm(`Удалить ${pts.length} точек за выбранный период?`)) return;
+  const updates={}; pts.forEach(p=>updates[`history/default/${String(p.timestamp)}`]=null);
+  await logDeletion("range", `${pts.length} точек`);
+  await update(ref(db), updates);
+  alert("Период удалён.");
+}
 function renderSessions(){
   sessionsTbody.innerHTML="";
   const entries=Object.entries(allSessions).filter(([k])=>k!=="_init").sort((a,b)=>Number((b[1]?.meta?.createdAt||0))-Number((a[1]?.meta?.createdAt||0)));
   if(!entries.length){ sessionsTbody.innerHTML='<tr><td colspan="6">Сессий пока нет</td></tr>'; return; }
-  entries.forEach(([token, session])=>{ const meta=session?.meta||{}, stats=session?.viewStats||{}, active=!!meta.active, expiresAt=Number(meta.expiresAt||0), now=Date.now(); let statusText="завершена"; if(active&&expiresAt>now) statusText="активна"; else if(active&&expiresAt<=now) statusText="истекла"; const tr=document.createElement("tr"); tr.innerHTML=`<td class="mono">${token}</td><td>${statusText}</td><td>${fmtTime(expiresAt)}</td><td>${stats.openCount||0}</td><td>${fmtTime(stats.firstOpenAt)}<br>${fmtTime(stats.lastOpenAt)}</td><td><div class="row"><button class="secondary small" data-copy="${token}">Копировать ссылку</button><button class="danger small" data-delete="${token}">Удалить</button></div></td>`; sessionsTbody.appendChild(tr); });
+  entries.forEach(([token, session])=>{
+    const meta=session?.meta||{}, stats=session?.viewStats||{}, active=!!meta.active, expiresAt=Number(meta.expiresAt||0), now=Date.now();
+    let statusText="завершена"; if(active&&expiresAt>now) statusText="активна"; else if(active&&expiresAt<=now) statusText="истекла";
+    const tr=document.createElement("tr");
+    tr.innerHTML=`<td class="mono">${token}</td><td>${statusText}</td><td>${fmtTime(expiresAt)}</td><td>${stats.openCount||0}</td><td>${fmtTime(stats.firstOpenAt)}<br>${fmtTime(stats.lastOpenAt)}</td><td><div class="row"><button class="secondary small" data-copy="${token}">Копировать ссылку</button><button class="secondary small" data-view="${token}">Показать карту</button><button class="danger small" data-delete="${token}">Удалить</button></div></td>`;
+    sessionsTbody.appendChild(tr);
+  });
   sessionsTbody.querySelectorAll("button[data-copy]").forEach((b)=>b.onclick=async()=>{ await navigator.clipboard.writeText(`https://mygpstrack.github.io/mygps/live.html?session=${b.dataset.copy}`); alert("Ссылка скопирована"); });
-  sessionsTbody.querySelectorAll("button[data-delete]").forEach((b)=>b.onclick=async()=>{ if(!confirm(`Удалить live-сессию ${b.dataset.delete}?`)) return; await remove(ref(db, `liveSessions/${b.dataset.delete}`)); });
+  sessionsTbody.querySelectorAll("button[data-view]").forEach((b)=>b.onclick=()=>{ const token=b.dataset.view; const session=allSessions[token]||{}; currentSessionData=session; const pts=Object.values(session.recentPoints||{}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0)); const latlngs=pts.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]); sessionTrail.setLatLngs(latlngs); if(latlngs.length){ sessionMarker.setLatLng(latlngs[latlngs.length-1]); if(latlngs.length===1) sessionMap.setView(latlngs[0],16); else sessionMap.fitBounds(L.latLngBounds(latlngs), {padding:[30,30]}); } });
+  sessionsTbody.querySelectorAll("button[data-delete]").forEach((b)=>b.onclick=async()=>{ if(!confirm(`Удалить live-сессию ${b.dataset.delete}?`)) return; await logDeletion("session", b.dataset.delete); await remove(ref(db, `liveSessions/${b.dataset.delete}`)); });
 }
 async function loadSessions(){ const snap=await get(ref(db, "liveSessions")); allSessions=snap.val()||{}; updateUsage(); renderSessions(); updateNowFromAvailableSources(); }
 function updateNowUI(point, sourceLabel){
@@ -341,7 +520,26 @@ function updateNowFromAvailableSources(){
   liveTrail.setLatLngs([]);
   updateNowUI(point, "history/default");
 }
-async function cleanupExpiredSessions(){ const now=Date.now(), updates={}; let count=0; Object.entries(allSessions).forEach(([token, session])=>{ if(token==="_init") return; const meta=session?.meta||{}, expiresAt=Number(meta.expiresAt||0), active=!!meta.active; if(!active||(expiresAt&&expiresAt<now)){ updates[`liveSessions/${token}`]=null; count++; } }); if(!count) return alert("Истёкших сессий не найдено."); if(!confirm(`Удалить ${count} старых/завершённых live-сессий?`)) return; await update(ref(db), updates); alert("Очистка завершена."); }
+async function cleanupExpiredSessions(){
+  const now=Date.now(), updates={}; let count=0;
+  Object.entries(allSessions).forEach(([token, session])=>{
+    if(token==="_init") return;
+    const meta=session?.meta||{}, expiresAt=Number(meta.expiresAt||0), active=!!meta.active;
+    if(!active||(expiresAt&&expiresAt<now)){ updates[`liveSessions/${token}`]=null; count++; }
+  });
+  if(!count) return alert("Истёкших сессий не найдено.");
+  if(!confirm(`Удалить ${count} старых/завершённых live-сессий?`)) return;
+  await logDeletion("expired_sessions", `${count} сессий`);
+  await update(ref(db), updates); alert("Очистка завершена.");
+}
+function renderDeletions(){
+  deletionsTbody.innerHTML = "";
+  deletionsLog.slice().reverse().slice(0,300).forEach(item=>{
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${fmtTime(item.ts)}</td><td>${item.kind || "—"}</td><td>${item.description || "—"}</td>`;
+    deletionsTbody.appendChild(tr);
+  });
+}
 
 qs("googleBtn").onclick=async()=>{ try{ hideError(); await signInWithPopup(auth, provider); }catch(e){ showError("Ошибка Google-входа: "+(e.message||e)); } };
 qs("emailLoginBtn").onclick=async()=>{ try{ hideError(); await signInWithEmailAndPassword(auth, emailInput.value.trim(), passwordInput.value); }catch(e){ showError("Ошибка входа по email: "+(e.message||e)); } };
@@ -350,10 +548,12 @@ qs("logoutBtn").onclick=async()=>{ await signOut(auth); };
 qs("todayBtn").onclick=()=>{ const now=new Date(), start=new Date(); start.setHours(0,0,0,0); setDateTimeRange(start, now); renderHistory(); };
 qs("yesterdayBtn").onclick=()=>{ const start=new Date(); start.setDate(start.getDate()-1); start.setHours(0,0,0,0); const end=new Date(start); end.setHours(23,59,0,0); setDateTimeRange(start, end); renderHistory(); };
 qs("weekBtn").onclick=()=>{ const now=new Date(), start=new Date(); start.setDate(start.getDate()-7); setDateTimeRange(start, now); renderHistory(); };
-
-
-
-qs("refreshHistoryBtn").onclick=loadHistory; qs("exportJsonBtn").onclick=exportJson; qs("exportCsvBtn").onclick=exportCsv; qs("exportGpxBtn").onclick=exportGpx; qs("exportPdfBtn").onclick=exportPdf; qs("deleteRangeBtn").onclick=deleteRange;
+qs("jumpDateBtn").onclick=()=>{ const d = qs("jumpDate").value; if(!d) return; const start = new Date(`${d}T00:00:00`), end = new Date(`${d}T23:59:00`); setDateTimeRange(start, end); renderHistory(); };
+qs("applyFiltersBtn").onclick=renderHistory;
+qs("resetFiltersBtn").onclick=()=>{ qs("maxAccuracyFilter").value=""; qs("minSpeedFilter").value=""; qs("maxSpeedFilter").value=""; renderHistory(); };
+qs("refreshHistoryBtn").onclick=loadHistory;
+qs("fitRouteBtn").onclick=()=>{ const pts=filteredHistory().filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]); if(pts.length) historyMap.fitBounds(L.latLngBounds(pts), {padding:[30,30]}); };
+qs("exportJsonBtn").onclick=exportJson; qs("exportCsvBtn").onclick=exportCsv; qs("exportGpxBtn").onclick=exportGpx; qs("exportPdfBtn").onclick=exportPdf; qs("deleteRangeBtn").onclick=deleteRange;
 qs("refreshSessionsBtn").onclick=loadSessions; qs("cleanupSessionsBtn").onclick=cleanupExpiredSessions; qs("refreshNowBtn").onclick=updateNowFromAvailableSources;
 qs("liveAutoCenterBtn").onclick=()=>{ liveAutoCenter=!liveAutoCenter; qs("liveAutoCenterBtn").textContent=`Автоцентр: ${liveAutoCenter?"вкл":"выкл"}`; };
 
@@ -368,6 +568,7 @@ onAuthStateChanged(auth, async(user)=>{
   onValue(ref(db, "live/default"), (snap)=>{ liveDefaultData = snap.val() || null; updateUsage(); updateNowFromAvailableSources(); });
   onValue(ref(db, "liveSessions"), (snap)=>{ allSessions=snap.val()||{}; updateUsage(); renderSessions(); updateNowFromAvailableSources(); });
   onValue(ref(db, "history/default"), (snap)=>{ const raw=snap.val()||{}; allHistoryPoints=Object.values(raw).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0)); updateUsage(); renderHistory(); updateNowFromAvailableSources(); });
+  onValue(ref(db, "adminLogs/deletions"), (snap)=>{ const raw=snap.val()||{}; deletionsLog = Object.values(raw).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0)); renderDeletions(); });
 });
 </script>
 </body>
