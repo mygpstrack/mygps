@@ -53,6 +53,7 @@
     button.danger{background:#b91c1c}
     button.success{background:#15803d}
     button.small{padding:6px 10px;font-size:13px}
+    button:disabled{opacity:.55;cursor:not-allowed}
     .pill{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;border:1px solid var(--border);background:rgba(255,255,255,.03);font-size:14px}
     .dot{width:10px;height:10px;border-radius:50%;display:inline-block}
     .ok{background:var(--accent)}
@@ -591,6 +592,7 @@ let selectedAddressRequestId = 0;
 let liveAddressRequestId = 0;
 let lastLiveAddressKey = "";
 let autoSyncTimer = null;
+let isBusy = false;
 
 const geocodeCache = new Map();
 let routeSegments = [];
@@ -621,6 +623,34 @@ const mapStyleDefs = {
 let historyBaseLayer = null;
 let liveBaseLayer = null;
 let sessionBaseLayer = null;
+
+function setBusy(flag) {
+  isBusy = flag;
+  document.querySelectorAll("button").forEach(btn => {
+    if (btn.id === "logoutBtn") return;
+    btn.disabled = flag;
+  });
+}
+
+function errText(e) {
+  return e?.message || e?.code || String(e);
+}
+
+async function runSafe(title, fn, { silentSuccess = false, reloadSessions = false, reloadHistory = false } = {}) {
+  if (isBusy) return;
+  try {
+    setBusy(true);
+    await fn();
+    if (reloadSessions) await loadSessions();
+    if (reloadHistory) await loadHistory();
+    if (!silentSuccess) alert(`${title}: готово`);
+  } catch (e) {
+    console.error(e);
+    alert(`${title}: ошибка\n\n${errText(e)}`);
+  } finally {
+    setBusy(false);
+  }
+}
 
 function applyMapStyle(styleKey) {
   const style = mapStyleDefs[styleKey] || mapStyleDefs.osm;
@@ -969,13 +999,13 @@ function filteredHistory() {
 
 function computeSummary(points) {
   if (!points.length) return {count:0, km:0, avgSpeed:0, maxSpeed:0};
-  let meters = 0;
-  for (let i = 1; i < points.length; i++) meters += distanceMeters(points[i - 1], points[i]);
-  const speeds = points.map(p => Number(p.speed || 0)).filter(v => Number.isFinite(v) && v > 0);
+  let meters=0;
+  for (let i=1;i<points.length;i++) meters += distanceMeters(points[i-1], points[i]);
+  const speeds = points.map(p=>Number(p.speed||0)).filter(v=>Number.isFinite(v)&&v>0);
   return {
     count: points.length,
-    km: meters / 1000,
-    avgSpeed: speeds.length ? speeds.reduce((a,b)=>a+b, 0) / speeds.length : 0,
+    km: meters/1000,
+    avgSpeed: speeds.length ? speeds.reduce((a,b)=>a+b,0)/speeds.length : 0,
     maxSpeed: speeds.length ? Math.max(...speeds) : 0
   };
 }
@@ -984,19 +1014,19 @@ function detectStops(points) {
   const stops = [];
   let startIdx = null;
   const minDurationMs = settings.stopMinMinutes * 60 * 1000;
-  for (let i = 0; i < points.length; i++) {
+  for (let i=0;i<points.length;i++) {
     const stopped = isStopPoint(points[i]);
     if (stopped) {
       if (startIdx === null) startIdx = i;
     } else if (startIdx !== null) {
-      const duration = Number(points[i - 1].timestamp || 0) - Number(points[startIdx].timestamp || 0);
-      if (duration >= minDurationMs) stops.push({start: points[startIdx], end: points[i - 1], duration});
+      const duration = Number(points[i-1].timestamp||0) - Number(points[startIdx].timestamp||0);
+      if (duration >= minDurationMs) stops.push({start: points[startIdx], end: points[i-1], duration});
       startIdx = null;
     }
   }
   if (startIdx !== null && points.length) {
-    const duration = Number(points[points.length - 1].timestamp || 0) - Number(points[startIdx].timestamp || 0);
-    if (duration >= minDurationMs) stops.push({start: points[startIdx], end: points[points.length - 1], duration});
+    const duration = Number(points[points.length-1].timestamp||0) - Number(points[startIdx].timestamp||0);
+    if (duration >= minDurationMs) stops.push({start: points[startIdx], end: points[points.length-1], duration});
   }
   return stops;
 }
@@ -1006,14 +1036,12 @@ function splitTrips(points) {
   const trips = [];
   let cur = [points[0]];
   const gapMs = settings.tripGapMinutes * 60 * 1000;
-  for (let i = 1; i < points.length; i++) {
-    const gap = Number(points[i].timestamp || 0) - Number(points[i - 1].timestamp || 0);
+  for (let i=1;i<points.length;i++) {
+    const gap = Number(points[i].timestamp||0) - Number(points[i-1].timestamp||0);
     if (gap > gapMs) {
       trips.push(cur);
       cur = [points[i]];
-    } else {
-      cur.push(points[i]);
-    }
+    } else cur.push(points[i]);
   }
   trips.push(cur);
   return trips;
@@ -1027,7 +1055,9 @@ async function reverseGeocode(lat, lon) {
   const key = geocodeKey(lat, lon);
   if (geocodeCache.has(key)) return geocodeCache.get(key);
   try {
-    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&zoom=18&addressdetails=1`, { headers: { Accept: "application/json" } });
+    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&zoom=18&addressdetails=1`, {
+      headers: { Accept: "application/json" }
+    });
     const json = await res.json();
     const addr = json.display_name || `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
     geocodeCache.set(key, addr);
@@ -1049,8 +1079,8 @@ function downsamplePoints(points, maxPoints) {
   if (points.length <= maxPoints) return points;
   const step = Math.ceil(points.length / maxPoints);
   const result = [];
-  for (let i = 0; i < points.length; i += step) result.push(points[i]);
-  if (result[result.length - 1] !== points[points.length - 1]) result.push(points[points.length - 1]);
+  for (let i=0;i<points.length;i+=step) result.push(points[i]);
+  if (result[result.length-1] !== points[points.length-1]) result.push(points[points.length-1]);
   return result;
 }
 
@@ -1061,26 +1091,26 @@ function renderStopMarkers(stops) {
     if (stop.start?.latitude == null || stop.start?.longitude == null) return;
     const marker = L.marker([Number(stop.start.latitude), Number(stop.start.longitude)])
       .addTo(historyMap)
-      .bindPopup(`Стоянка #${idx + 1}<br>Начало: ${fmtTime(stop.start.timestamp)}<br>Конец: ${fmtTime(stop.end.timestamp)}<br>Длительность: ${formatDuration(stop.duration)}`);
+      .bindPopup(`Стоянка #${idx+1}<br>Начало: ${fmtTime(stop.start.timestamp)}<br>Конец: ${fmtTime(stop.end.timestamp)}<br>Длительность: ${formatDuration(stop.duration)}`);
     stopMarkers.push(marker);
   });
 }
 
-async function updateHistoryMap(points, stops = []) {
+async function updateHistoryMap(points, stops=[]) {
   clearRouteSegments();
-  const mapPoints = downsamplePoints(points.filter(p => p.latitude != null && p.longitude != null), settings.mapMaxPoints);
-  const latlngs = mapPoints.map(p => [Number(p.latitude), Number(p.longitude)]);
+  const mapPoints = downsamplePoints(points.filter(p=>p.latitude!=null&&p.longitude!=null), settings.mapMaxPoints);
+  const latlngs = mapPoints.map(p=>[Number(p.latitude), Number(p.longitude)]);
   if (!latlngs.length) return;
 
-  for (let i = 1; i < mapPoints.length; i++) {
-    const a = [Number(mapPoints[i - 1].latitude), Number(mapPoints[i - 1].longitude)];
+  for (let i=1;i<mapPoints.length;i++) {
+    const a = [Number(mapPoints[i-1].latitude), Number(mapPoints[i-1].longitude)];
     const b = [Number(mapPoints[i].latitude), Number(mapPoints[i].longitude)];
-    const seg = L.polyline([a, b], { weight: 5, color: speedColor(Number(mapPoints[i].speed || 0)) }).addTo(historyMap);
+    const seg = L.polyline([a,b], { weight:5, color:speedColor(Number(mapPoints[i].speed||0)) }).addTo(historyMap);
     routeSegments.push(seg);
   }
 
   const first = points[0];
-  const last = points[points.length - 1];
+  const last = points[points.length-1];
   startMarker.setLatLng([Number(first.latitude), Number(first.longitude)]);
   endMarker.setLatLng([Number(last.latitude), Number(last.longitude)]);
   selectedMarker.setLatLng([Number(last.latitude), Number(last.longitude)]);
@@ -1101,9 +1131,9 @@ async function focusPointByIndex(idx) {
   const lat = Number(p.latitude);
   const lon = Number(p.longitude);
 
-  selectedMarker.setLatLng([lat, lon]).bindPopup(`${lat.toFixed(5)}, ${lon.toFixed(5)}<br>${fmtTime(p.timestamp)}<br>Скорость: ${Number(p.speed || 0).toFixed(1)} км/ч`).openPopup();
-  historyMap.setView([lat, lon], 17);
-  qs("pointNavigatorLabel").textContent = `${currentPointIndex + 1} / ${currentFiltered.length}`;
+  selectedMarker.setLatLng([lat,lon]).bindPopup(`${lat.toFixed(5)}, ${lon.toFixed(5)}<br>${fmtTime(p.timestamp)}<br>Скорость: ${Number(p.speed||0).toFixed(1)} км/ч`).openPopup();
+  historyMap.setView([lat,lon],17);
+  qs("pointNavigatorLabel").textContent = `${currentPointIndex+1} / ${currentFiltered.length}`;
 
   const reqId = ++selectedAddressRequestId;
   const addr = await reverseGeocode(lat, lon);
@@ -1175,10 +1205,10 @@ function updateCharts(points) {
   });
 
   const byDay = {};
-  for (let i = 0; i < points.length; i++) {
+  for (let i=0;i<points.length;i++) {
     const day = new Date(Number(points[i].timestamp || 0)).toLocaleDateString("ru-RU");
     byDay[day] = byDay[day] || {dist:0, count:0, max:0, sumSpeed:0};
-    if (i > 0) byDay[day].dist += distanceMeters(points[i - 1], points[i]) / 1000;
+    if (i > 0) byDay[day].dist += distanceMeters(points[i-1], points[i]) / 1000;
     const sp = Number(points[i].speed || 0);
     byDay[day].count += 1;
     byDay[day].sumSpeed += sp;
@@ -1212,9 +1242,9 @@ function renderTrips(points) {
   trips.forEach((trip, idx) => {
     const s = computeSummary(trip);
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${idx + 1}</td><td>${fmtTime(trip[0]?.timestamp)}</td><td>${fmtTime(trip[trip.length - 1]?.timestamp)}</td><td>${formatDuration(Number(trip[trip.length - 1]?.timestamp || 0) - Number(trip[0]?.timestamp || 0))}</td><td>${s.km.toFixed(2)} км</td><td><button class="secondary small">Показать</button></td>`;
+    tr.innerHTML = `<td>${idx+1}</td><td>${fmtTime(trip[0]?.timestamp)}</td><td>${fmtTime(trip[trip.length-1]?.timestamp)}</td><td>${formatDuration(Number(trip[trip.length-1]?.timestamp || 0) - Number(trip[0]?.timestamp || 0))}</td><td>${s.km.toFixed(2)} км</td><td><button class="secondary small">Показать</button></td>`;
     tr.querySelector("button").onclick = () => {
-      setDateTimeRange(new Date(Number(trip[0].timestamp)), new Date(Number(trip[trip.length - 1].timestamp)));
+      setDateTimeRange(new Date(Number(trip[0].timestamp)), new Date(Number(trip[trip.length-1].timestamp)));
       renderHistory();
       document.querySelector('.tab-btn[data-tab="historyPanel"]').click();
     };
@@ -1248,10 +1278,10 @@ function renderHistory() {
   qs("avgSpeedValue").textContent = `${s.avgSpeed.toFixed(1)} км/ч`;
   qs("maxSpeedValue").textContent = `${s.maxSpeed.toFixed(1)} км/ч`;
   qs("routeStartCoords").textContent = `${Number(pts[0].latitude).toFixed(5)}, ${Number(pts[0].longitude).toFixed(5)}`;
-  qs("routeEndCoords").textContent = `${Number(pts[pts.length - 1].latitude).toFixed(5)}, ${Number(pts[pts.length - 1].longitude).toFixed(5)}`;
-  qs("routeDuration").textContent = formatDuration(Number(pts[pts.length - 1].timestamp || 0) - Number(pts[0].timestamp || 0));
+  qs("routeEndCoords").textContent = `${Number(pts[pts.length-1].latitude).toFixed(5)}, ${Number(pts[pts.length-1].longitude).toFixed(5)}`;
+  qs("routeDuration").textContent = formatDuration(Number(pts[pts.length-1].timestamp || 0) - Number(pts[0].timestamp || 0));
   qs("routeStops").textContent = String(stops.length);
-  qs("stopsNotice").textContent = stops.length ? `Стоянки: ${stops.map((s, i) => `#${i + 1} ${formatDuration(s.duration)}`).join(", ")}` : "Стоянок не найдено.";
+  qs("stopsNotice").textContent = stops.length ? `Стоянки: ${stops.map((s, i) => `#${i+1} ${formatDuration(s.duration)}`).join(", ")}` : "Стоянок не найдено.";
 
   const tbody = qs("historyTbody");
   tbody.innerHTML = "";
@@ -1280,8 +1310,10 @@ function renderHistory() {
     tr.querySelector("button").onclick = async (e) => {
       e.stopPropagation();
       if (!confirm(`Удалить точку ${fmtTime(p.timestamp)}?`)) return;
-      await logDeletion("point", `${fmtTime(p.timestamp)} ${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}`);
-      await remove(ref(db, `history/default/${String(p.timestamp)}`));
+      await runSafe("Удаление точки", async () => {
+        await logDeletion("point", `${fmtTime(p.timestamp)} ${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}`);
+        await remove(ref(db, `history/default/${String(p.timestamp)}`));
+      }, { reloadHistory: true, silentSuccess: true });
     };
     tbody.appendChild(tr);
   });
@@ -1289,7 +1321,7 @@ function renderHistory() {
   updateHistoryMap(pts, stops);
   updateCharts(pts);
   renderTrips(pts);
-  qs("pointNavigatorLabel").textContent = `${currentPointIndex + 1} / ${pts.length}`;
+  qs("pointNavigatorLabel").textContent = `${currentPointIndex+1} / ${pts.length}`;
 }
 
 function downloadText(name, content, type) {
@@ -1410,12 +1442,12 @@ async function deleteRange() {
   }
   if (!confirm(`Удалить ${pts.length} точек за выбранный период?`)) return;
 
-  const updatesObj = {};
-  pts.forEach(p => { updatesObj[`history/default/${String(p.timestamp)}`] = null; });
-
-  await logDeletion("range", `${pts.length} точек`);
-  await update(ref(db), updatesObj);
-  alert("Период удалён.");
+  await runSafe("Удаление периода", async () => {
+    const updatesObj = {};
+    pts.forEach(p => { updatesObj[`history/default/${String(p.timestamp)}`] = null; });
+    await logDeletion("range", `${pts.length} точек`);
+    await update(ref(db), updatesObj);
+  }, { reloadHistory: true, silentSuccess: false });
 }
 
 async function deleteVisibleJunkPoints() {
@@ -1426,12 +1458,12 @@ async function deleteVisibleJunkPoints() {
   }
   if (!confirm(`Удалить ${pts.length} мусорных точек за текущий период?`)) return;
 
-  const updatesObj = {};
-  pts.forEach(p => { updatesObj[`history/default/${String(p.timestamp)}`] = null; });
-
-  await logDeletion("junk_bulk_delete", `${pts.length} точек`);
-  await update(ref(db), updatesObj);
-  alert("Мусорные точки удалены.");
+  await runSafe("Удаление мусорных точек", async () => {
+    const updatesObj = {};
+    pts.forEach(p => { updatesObj[`history/default/${String(p.timestamp)}`] = null; });
+    await logDeletion("junk_bulk_delete", `${pts.length} точек`);
+    await update(ref(db), updatesObj);
+  }, { reloadHistory: true, silentSuccess: false });
 }
 
 function getSessionStatus(session) {
@@ -1454,8 +1486,10 @@ function getSessionStatusLabel(status) {
 
 async function endSession(token) {
   if (!confirm(`Завершить live-сессию ${token}?`)) return;
-  await update(ref(db, `liveSessions/${token}/meta`), { active: false, endedAt: Date.now() });
-  await logAction("session_end", `Завершена live-сессия ${token}`);
+  await runSafe("Завершение live-сессии", async () => {
+    await update(ref(db, `liveSessions/${token}/meta`), { active: false, endedAt: Date.now() });
+    await logAction("session_end", `Завершена live-сессия ${token}`);
+  }, { reloadSessions: true, silentSuccess: false });
 }
 
 async function extendSession(token) {
@@ -1475,9 +1509,10 @@ async function extendSession(token) {
   const base = Math.max(currentExpires, Date.now());
   const newExpiresAt = base + minutes * 60 * 1000;
 
-  await update(ref(db, `liveSessions/${token}/meta`), { expiresAt: newExpiresAt, active: true, extendedAt: Date.now() });
-  await logAction("session_extend", `Продлена live-сессия ${token} на ${minutes} мин`);
-  alert(`Сессия продлена до ${fmtTime(newExpiresAt)}`);
+  await runSafe("Продление live-сессии", async () => {
+    await update(ref(db, `liveSessions/${token}/meta`), { expiresAt: newExpiresAt, active: true, extendedAt: Date.now() });
+    await logAction("session_extend", `Продлена live-сессия ${token} на ${minutes} мин`);
+  }, { reloadSessions: true, silentSuccess: false });
 }
 
 function getRecentSourcePoints(mode, pointsLimit) {
@@ -1564,10 +1599,11 @@ async function createLiveSession() {
     }
   };
 
-  await set(ref(db, `liveSessions/${token}`), payload);
-  await logAction("session_create", `Создана live-сессия ${token} на ${durationMinutes} мин`);
-  showShareResult(buildShareUrl(token), expiresAt);
-  alert("Live-ссылка создана.");
+  await runSafe("Создание live-ссылки", async () => {
+    await set(ref(db, `liveSessions/${token}`), payload);
+    await logAction("session_create", `Создана live-сессия ${token} на ${durationMinutes} мин`);
+    showShareResult(buildShareUrl(token), expiresAt);
+  }, { reloadSessions: true, silentSuccess: false });
 }
 
 async function syncActiveSessionsFromLiveDefault(silent = false) {
@@ -1597,6 +1633,7 @@ async function syncActiveSessionsFromLiveDefault(silent = false) {
   await update(ref(db), updatesObj);
   if (!silent) {
     await logAction("session_sync_active", `Синхронизировано active-сессий: ${activeEntries.length}`);
+    await loadSessions();
     alert(`Синхронизировано ${activeEntries.length} active-сессий.`);
   }
 }
@@ -1611,15 +1648,15 @@ async function endAllActiveSessions() {
   }
   if (!confirm(`Завершить все активные live-сессии (${activeEntries.length})?`)) return;
 
-  const updatesObj = {};
-  activeEntries.forEach(([token]) => {
-    updatesObj[`liveSessions/${token}/meta/active`] = false;
-    updatesObj[`liveSessions/${token}/meta/endedAt`] = Date.now();
-  });
-
-  await update(ref(db), updatesObj);
-  await logAction("session_end_all", `Завершены все активные сессии: ${activeEntries.length}`);
-  alert("Все активные сессии завершены.");
+  await runSafe("Остановка всех активных live-сессий", async () => {
+    const updatesObj = {};
+    activeEntries.forEach(([token]) => {
+      updatesObj[`liveSessions/${token}/meta/active`] = false;
+      updatesObj[`liveSessions/${token}/meta/endedAt`] = Date.now();
+    });
+    await update(ref(db), updatesObj);
+    await logAction("session_end_all", `Завершены все активные сессии: ${activeEntries.length}`);
+  }, { reloadSessions: true, silentSuccess: false });
 }
 
 function renderSessions() {
@@ -1665,8 +1702,12 @@ function renderSessions() {
 
   tbody.querySelectorAll("button[data-copy]").forEach((b) => {
     b.onclick = async () => {
-      await navigator.clipboard.writeText(buildShareUrl(b.dataset.copy));
-      alert("Ссылка скопирована");
+      try {
+        await navigator.clipboard.writeText(buildShareUrl(b.dataset.copy));
+        alert("Ссылка скопирована");
+      } catch (e) {
+        alert("Копирование ссылки: ошибка\n\n" + errText(e));
+      }
     };
   });
 
@@ -1688,13 +1729,22 @@ function renderSessions() {
     };
   });
 
-  tbody.querySelectorAll("button[data-extend]").forEach((b) => { b.onclick = () => extendSession(b.dataset.extend); });
-  tbody.querySelectorAll("button[data-end]").forEach((b) => { b.onclick = () => endSession(b.dataset.end); });
+  tbody.querySelectorAll("button[data-extend]").forEach((b) => {
+    b.onclick = () => extendSession(b.dataset.extend);
+  });
+
+  tbody.querySelectorAll("button[data-end]").forEach((b) => {
+    b.onclick = () => endSession(b.dataset.end);
+  });
+
   tbody.querySelectorAll("button[data-delete]").forEach((b) => {
     b.onclick = async () => {
-      if (!confirm(`Удалить live-сессию ${b.dataset.delete}?`)) return;
-      await logAction("session_delete", `Удалена live-сессия ${b.dataset.delete}`);
-      await remove(ref(db, `liveSessions/${b.dataset.delete}`));
+      const token = b.dataset.delete;
+      if (!confirm(`Удалить live-сессию ${token}?`)) return;
+      await runSafe("Удаление live-сессии", async () => {
+        await logAction("session_delete", `Удалена live-сессия ${token}`);
+        await remove(ref(db, `liveSessions/${token}`));
+      }, { reloadSessions: true, silentSuccess: false });
     };
   });
 }
@@ -1716,7 +1766,7 @@ function findIdleDurationMs(points, lastPoint) {
   if (!ordered.length) return null;
 
   let idleStartTs = Number(lastPoint.timestamp);
-  for (let i = ordered.length - 1; i >= 0; i--) {
+  for (let i=ordered.length-1;i>=0;i--) {
     const p = ordered[i];
     const speed = Number(p.speed || 0);
     if (speed > settings.stopSpeedThreshold) break;
@@ -1809,12 +1859,12 @@ async function cleanupExpiredSessions() {
     alert("Истёкших сессий не найдено.");
     return;
   }
-
   if (!confirm(`Удалить ${count} истёкших live-сессий?`)) return;
 
-  await logAction("expired_sessions_cleanup", `Удалено истёкших сессий: ${count}`);
-  await update(ref(db), updatesObj);
-  alert("Очистка завершена.");
+  await runSafe("Очистка истёкших live-сессий", async () => {
+    await logAction("expired_sessions_cleanup", `Удалено истёкших сессий: ${count}`);
+    await update(ref(db), updatesObj);
+  }, { reloadSessions: true, silentSuccess: false });
 }
 
 function renderJournal() {
@@ -1838,7 +1888,7 @@ qs("googleBtn").onclick = async () => {
     hideError();
     await signInWithPopup(auth, provider);
   } catch (e) {
-    showError("Ошибка Google-входа: " + (e.message || e));
+    showError("Ошибка Google-входа: " + errText(e));
   }
 };
 
@@ -1847,7 +1897,7 @@ qs("emailLoginBtn").onclick = async () => {
     hideError();
     await signInWithEmailAndPassword(auth, qs("emailInput").value.trim(), qs("passwordInput").value);
   } catch (e) {
-    showError("Ошибка входа по email: " + (e.message || e));
+    showError("Ошибка входа по email: " + errText(e));
   }
 };
 
@@ -1856,7 +1906,7 @@ qs("emailRegisterBtn").onclick = async () => {
     hideError();
     await createUserWithEmailAndPassword(auth, qs("emailInput").value.trim(), qs("passwordInput").value);
   } catch (e) {
-    showError("Ошибка создания email-аккаунта: " + (e.message || e));
+    showError("Ошибка создания email-аккаунта: " + errText(e));
   }
 };
 
@@ -1922,7 +1972,7 @@ qs("showStopsOnMapToggle").onchange = () => {
   renderHistory();
 };
 
-qs("refreshHistoryBtn").onclick = loadHistory;
+qs("refreshHistoryBtn").onclick = () => runSafe("Обновление истории", loadHistory, { silentSuccess: true });
 qs("fitRouteBtn").onclick = () => {
   const pts = currentFiltered.filter(p => p.latitude != null && p.longitude != null).map(p => [Number(p.latitude), Number(p.longitude)]);
   if (pts.length) historyMap.fitBounds(L.latLngBounds(pts), {padding:[30,30]});
@@ -1938,13 +1988,13 @@ qs("exportPdfBtn").onclick = exportPdf;
 qs("deleteRangeBtn").onclick = deleteRange;
 qs("deleteVisibleJunkBtn").onclick = deleteVisibleJunkPoints;
 
-qs("exportFullDbBtn").onclick = exportFullDbBackup;
-qs("exportLiveSessionsBackupBtn").onclick = exportLiveSessionsBackup;
-qs("exportAdminLogsBackupBtn").onclick = exportAdminLogsBackup;
+qs("exportFullDbBtn").onclick = () => runSafe("Экспорт всей базы", exportFullDbBackup, { silentSuccess: true });
+qs("exportLiveSessionsBackupBtn").onclick = () => runSafe("Экспорт liveSessions", exportLiveSessionsBackup, { silentSuccess: true });
+qs("exportAdminLogsBackupBtn").onclick = () => runSafe("Экспорт adminLogs", exportAdminLogsBackup, { silentSuccess: true });
 
-qs("refreshSessionsBtn").onclick = loadSessions;
+qs("refreshSessionsBtn").onclick = () => runSafe("Обновление live-сессий", loadSessions, { silentSuccess: true });
 qs("cleanupSessionsBtn").onclick = cleanupExpiredSessions;
-qs("syncActiveSessionsBtn").onclick = () => syncActiveSessionsFromLiveDefault(false);
+qs("syncActiveSessionsBtn").onclick = () => runSafe("Синхронизация active-сессий", () => syncActiveSessionsFromLiveDefault(false), { silentSuccess: true });
 qs("endAllActiveSessionsBtn").onclick = endAllActiveSessions;
 qs("sessionSearchInput").oninput = renderSessions;
 qs("sessionStatusFilter").onchange = renderSessions;
@@ -1956,20 +2006,19 @@ qs("liveAutoCenterBtn").onclick = () => {
   qs("liveAutoCenterBtn").textContent = `Автоцентр: ${liveAutoCenter ? "вкл" : "выкл"}`;
 };
 
-qs("createShareBtn").onclick = async () => {
+qs("createShareBtn").onclick = createLiveSession;
+qs("clearShareResultBtn").onclick = hideShareResult;
+
+qs("copyCreatedShareBtn").onclick = async () => {
+  if (!createdShareUrl) return;
   try {
-    await createLiveSession();
+    await navigator.clipboard.writeText(createdShareUrl);
+    alert("Ссылка скопирована");
   } catch (e) {
-    alert("Ошибка создания live-ссылки: " + (e.message || e));
+    alert("Копирование ссылки: ошибка\n\n" + errText(e));
   }
 };
 
-qs("clearShareResultBtn").onclick = hideShareResult;
-qs("copyCreatedShareBtn").onclick = async () => {
-  if (!createdShareUrl) return;
-  await navigator.clipboard.writeText(createdShareUrl);
-  alert("Ссылка скопирована");
-};
 qs("openCreatedShareBtn").onclick = () => {
   if (!createdShareUrl) return;
   window.open(createdShareUrl, "_blank", "noopener,noreferrer");
@@ -2003,6 +2052,13 @@ qs("mapStyleSelect").onchange = () => {
   readSettingsFromUI();
   applyMapStyle(qs("mapStyleSelect").value);
 };
+
+async function loadActionLogs() {
+  const snap = await get(ref(db, "adminLogs/actions"));
+  const raw = snap.val() || {};
+  actionLogs = Object.values(raw).filter(Boolean).sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0));
+  renderJournal();
+}
 
 onAuthStateChanged(auth, async (user) => {
   detachRealtimeListeners();
@@ -2095,10 +2151,12 @@ onAuthStateChanged(auth, async (user) => {
       actionLogs = Object.values(raw).filter(Boolean).sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0));
       renderJournal();
     });
+
+    await loadActionLogs();
   } catch (e) {
     authCard.classList.remove("hidden");
     adminPanel.classList.add("hidden");
-    showError("Ошибка проверки доступа: " + (e.message || e));
+    showError("Ошибка проверки доступа: " + errText(e));
   }
 });
 </script>
