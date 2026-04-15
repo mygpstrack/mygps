@@ -9,7 +9,7 @@
     :root{
       --bg:#08111f;
       --bg2:#0b1730;
-      --card:rgba(17,24,39,.88);
+      --card:rgba(17,24,39,.9);
       --card-strong:#111827;
       --text:#e5e7eb;
       --muted:#94a3b8;
@@ -20,8 +20,10 @@
       --blue:#2563eb;
       --shadow:0 20px 60px rgba(0,0,0,.35);
     }
+
     *{box-sizing:border-box}
     html,body{height:100%}
+
     body{
       margin:0;
       color:var(--text);
@@ -31,17 +33,45 @@
         radial-gradient(circle at top right, #10203f 0%, transparent 28%),
         linear-gradient(180deg, var(--bg2), var(--bg));
     }
+
     .shell{
       max-width:1240px;
       margin:0 auto;
       padding:16px;
     }
+
+    .state-screen{
+      display:none;
+      margin-top:8px;
+      background:rgba(127,29,29,.18);
+      border:1px solid rgba(239,68,68,.35);
+      border-radius:24px;
+      padding:24px;
+      box-shadow:var(--shadow);
+    }
+    .state-screen.show{display:block}
+
+    .state-title{
+      font-size:28px;
+      font-weight:800;
+      line-height:1.1;
+      letter-spacing:-.02em;
+    }
+
+    .state-text{
+      margin-top:10px;
+      color:var(--muted);
+      line-height:1.7;
+      max-width:760px;
+    }
+
     .hero{
       display:grid;
       grid-template-columns:1.15fr .85fr;
       gap:16px;
       align-items:stretch;
     }
+
     .panel{
       background:var(--card);
       border:1px solid var(--border);
@@ -50,31 +80,37 @@
       backdrop-filter:blur(10px);
       overflow:hidden;
     }
+
     .panel-inner{padding:18px}
+
     .brand{
       display:flex;
       align-items:center;
       justify-content:space-between;
       gap:12px;
     }
+
     .brand h1{
       margin:0;
       font-size:30px;
       line-height:1.05;
       letter-spacing:-.02em;
     }
+
     .subtitle{
       margin-top:8px;
       color:var(--muted);
       line-height:1.6;
       font-size:15px;
     }
+
     .badge-row{
       display:flex;
       gap:10px;
       flex-wrap:wrap;
       margin-top:14px;
     }
+
     .badge{
       display:inline-flex;
       align-items:center;
@@ -86,6 +122,7 @@
       font-size:14px;
       color:var(--text);
     }
+
     .dot{
       width:10px;
       height:10px;
@@ -96,11 +133,13 @@
     .dot.green{background:var(--green)}
     .dot.yellow{background:var(--yellow)}
     .dot.red{background:var(--red)}
+
     .hero-side{
       display:grid;
       grid-template-rows:auto auto 1fr;
       gap:16px;
     }
+
     .mini-card{
       background:var(--card);
       border:1px solid var(--border);
@@ -109,52 +148,62 @@
       backdrop-filter:blur(10px);
       padding:18px;
     }
+
     .mini-title{
       color:var(--muted);
       font-size:13px;
       margin-bottom:8px;
     }
+
     .mini-value{
       font-size:26px;
       font-weight:800;
       line-height:1.15;
       letter-spacing:-.02em;
+      word-break:break-word;
     }
+
     .mini-sub{
       margin-top:8px;
       color:var(--muted);
       font-size:14px;
       line-height:1.5;
     }
+
     .stats{
       display:grid;
       grid-template-columns:repeat(4,minmax(0,1fr));
       gap:12px;
       margin-top:16px;
     }
+
     .stat{
       background:rgba(255,255,255,.04);
       border:1px solid var(--border);
       border-radius:18px;
       padding:14px;
     }
+
     .label{
       color:var(--muted);
       font-size:13px;
       margin-bottom:8px;
     }
+
     .value{
       font-size:18px;
       font-weight:700;
       line-height:1.2;
       word-break:break-word;
     }
+
     .controls{
       display:flex;
       gap:10px;
       flex-wrap:wrap;
       margin-top:16px;
     }
+
     button{
       border:0;
       border-radius:14px;
@@ -164,8 +213,10 @@
       color:white;
       background:var(--blue);
     }
+
     button.secondary{background:#374151}
     button:disabled{opacity:.6;cursor:not-allowed}
+
     .map-card{
       margin-top:16px;
       background:var(--card);
@@ -174,6 +225,7 @@
       box-shadow:var(--shadow);
       overflow:hidden;
     }
+
     .map-head{
       display:flex;
       justify-content:space-between;
@@ -183,26 +235,31 @@
       border-bottom:1px solid var(--border);
       background:rgba(255,255,255,.03);
     }
+
     .map-title{
       font-size:18px;
       font-weight:800;
       letter-spacing:-.02em;
     }
+
     .map-sub{
       color:var(--muted);
       font-size:14px;
     }
+
     #map{
       width:100%;
       height:62vh;
       min-height:420px;
     }
+
     .bottom-grid{
       display:grid;
       grid-template-columns:1fr 1fr;
       gap:16px;
       margin-top:16px;
     }
+
     .info-card{
       background:var(--card);
       border:1px solid var(--border);
@@ -210,14 +267,17 @@
       box-shadow:var(--shadow);
       padding:18px;
     }
+
     .info-card h3{
       margin:0 0 12px;
       font-size:18px;
     }
+
     .info-list{
       display:grid;
       gap:10px;
     }
+
     .info-row{
       display:flex;
       justify-content:space-between;
@@ -225,38 +285,20 @@
       padding:10px 0;
       border-bottom:1px solid rgba(148,163,184,.12);
     }
+
     .info-row:last-child{border-bottom:0}
+
     .info-row .k{
       color:var(--muted);
       min-width:120px;
     }
+
     .info-row .v{
       text-align:right;
       font-weight:600;
       word-break:break-word;
     }
-    .state-screen{
-      display:none;
-      margin-top:16px;
-      background:rgba(127,29,29,.16);
-      border:1px solid rgba(239,68,68,.35);
-      border-radius:24px;
-      padding:24px;
-      box-shadow:var(--shadow);
-    }
-    .state-screen.show{display:block}
-    .state-title{
-      font-size:28px;
-      font-weight:800;
-      line-height:1.1;
-      letter-spacing:-.02em;
-    }
-    .state-text{
-      margin-top:10px;
-      color:var(--muted);
-      line-height:1.7;
-      max-width:760px;
-    }
+
     .footer-note{
       margin-top:16px;
       color:var(--muted);
@@ -264,11 +306,13 @@
       text-align:center;
       padding-bottom:8px;
     }
+
     @media (max-width: 1100px){
       .hero{grid-template-columns:1fr}
       .hero-side{grid-template-columns:1fr 1fr;grid-template-rows:none}
       .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
     }
+
     @media (max-width: 760px){
       .shell{padding:12px}
       .stats{grid-template-columns:1fr 1fr}
@@ -356,7 +400,7 @@
           </div>
 
           <div class="mini-card">
-            <div class="mini-title">Что это</div>
+            <div class="mini-title">Live-доступ</div>
             <div class="mini-sub">
               Эта страница открывается только по временной ссылке из админки.
               Если срок доступа закончился или сессия остановлена, карта и маршрут скрываются.
