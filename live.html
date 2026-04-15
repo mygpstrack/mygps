@@ -9,43 +9,78 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
-    :root{--bg:#07101d;--panel:#0e1728;--panel2:#13213a;--text:#edf3ff;--muted:#9eb0d2;--line:rgba(255,255,255,.08);--blue:#4f8cff;--blue2:#73aaff;--green:#22c55e;--red:#ef4444;--shadow:0 20px 44px rgba(0,0,0,.36);--safe-bottom:max(14px, env(safe-area-inset-bottom));--safe-top:max(14px, env(safe-area-inset-top))}
+    :root{
+      --bg:#08101d; --panel:#0d172a; --panel2:#14213b; --text:#eef3ff; --muted:#a3b3d2; --line:rgba(255,255,255,.08);
+      --blue:#4f8cff; --blue2:#77acff; --green:#22c55e; --yellow:#f59e0b; --red:#ef4444;
+      --shadow:0 22px 46px rgba(0,0,0,.38); --safe-bottom:max(14px, env(safe-area-inset-bottom)); --safe-top:max(14px, env(safe-area-inset-top));
+    }
     *{box-sizing:border-box} html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;overflow:hidden}
     #map{position:fixed;inset:0;z-index:1;background:#09101d}
     .overlay-top{position:fixed;top:0;left:0;right:0;z-index:600;padding:var(--safe-top) 14px 0;pointer-events:none}
-    .top-pill{display:flex;justify-content:space-between;align-items:center;gap:10px;max-width:920px;margin:0 auto;background:rgba(10,18,32,.78);backdrop-filter: blur(12px);border:1px solid var(--line);border-radius:18px;padding:12px 14px;box-shadow:var(--shadow);pointer-events:auto}
-    .top-left{display:flex;flex-direction:column;gap:4px;min-width:0}.eyebrow{font-size:12px;color:var(--muted);letter-spacing:.12em;text-transform:uppercase}.headline{font-size:16px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .status{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)} .dot{width:10px;height:10px;border-radius:50%;background:var(--green);box-shadow:0 0 0 6px rgba(34,197,94,.14)} .dot.off{background:var(--red);box-shadow:0 0 0 6px rgba(239,68,68,.14)}
+    .top-pill{display:flex;justify-content:space-between;align-items:center;gap:10px;max-width:940px;margin:0 auto;background:rgba(8,15,28,.74);backdrop-filter:blur(16px);border:1px solid var(--line);border-radius:20px;padding:12px 14px;box-shadow:var(--shadow);pointer-events:auto}
+    .top-left{display:flex;flex-direction:column;gap:4px;min-width:0}.eyebrow{font-size:11px;color:var(--muted);letter-spacing:.16em;text-transform:uppercase}.headline{font-size:17px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .status{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
+    .dot{width:10px;height:10px;border-radius:50%}
+    .dot.green{background:var(--green);box-shadow:0 0 0 6px rgba(34,197,94,.16)}
+    .dot.yellow{background:var(--yellow);box-shadow:0 0 0 6px rgba(245,158,11,.16)}
+    .dot.red{background:var(--red);box-shadow:0 0 0 6px rgba(239,68,68,.16)}
     .top-actions{display:flex;gap:8px;align-items:center}
-    button{appearance:none;border:0;outline:none;border-radius:14px;padding:11px 13px;min-height:44px;font:700 14px/1 inherit;color:#fff;cursor:pointer;background:linear-gradient(180deg,var(--blue2),var(--blue));box-shadow:0 10px 22px rgba(79,140,255,.26)}
+    button{appearance:none;border:0;outline:none;border-radius:14px;padding:11px 13px;min-height:44px;font:800 14px/1 inherit;color:#fff;cursor:pointer;background:linear-gradient(180deg,var(--blue2),var(--blue));box-shadow:0 10px 22px rgba(79,140,255,.26)}
     button.secondary{background:rgba(255,255,255,.06);box-shadow:none;border:1px solid var(--line);color:var(--text)}
-    .center-btn{position:fixed;right:14px;bottom:calc(118px + var(--safe-bottom));z-index:550;display:none}.center-btn.show{display:block}.install-btn{display:none}.install-btn.show{display:inline-flex}
+    .center-btn{position:fixed;right:14px;bottom:calc(118px + var(--safe-bottom));z-index:550;display:none}.center-btn.show{display:block}
+    .install-btn{display:none}.install-btn.show{display:inline-flex}
     .sheet{position:fixed;left:0;right:0;bottom:0;z-index:700;padding:0 10px var(--safe-bottom);pointer-events:none}
-    .sheet-inner{max-width:920px;margin:0 auto;background:linear-gradient(180deg,rgba(18,31,54,.96),rgba(10,18,32,.98));border:1px solid var(--line);border-radius:24px 24px 0 0;box-shadow:var(--shadow);overflow:hidden;pointer-events:auto;transform:translateY(calc(100% - 112px));transition:transform .28s ease;will-change:transform}
-    .sheet.open .sheet-inner{transform:translateY(0)} .sheet.peek .sheet-inner{transform:translateY(calc(100% - 140px))}
+    .sheet-inner{max-width:940px;margin:0 auto;background:linear-gradient(180deg,rgba(19,33,58,.96),rgba(10,18,32,.98));border:1px solid var(--line);border-radius:28px 28px 0 0;box-shadow:var(--shadow);overflow:hidden;pointer-events:auto;transform:translateY(calc(100% - 108px));transition:transform .28s ease;will-change:transform}
+    .sheet.open .sheet-inner{transform:translateY(0)} .sheet.peek .sheet-inner{transform:translateY(calc(100% - 136px))}
     .sheet-header{padding:10px 16px 12px;cursor:pointer;user-select:none}.grabber{width:44px;height:5px;border-radius:999px;background:rgba(255,255,255,.24);margin:0 auto 12px}
-    .sheet-title{display:flex;justify-content:space-between;align-items:center;gap:10px}.sheet-title h2{margin:0;font-size:17px}.expires{font-size:13px;color:#c5d7fb;background:rgba(79,140,255,.12);padding:8px 10px;border-radius:999px;border:1px solid rgba(79,140,255,.18)}
+    .sheet-title{display:flex;justify-content:space-between;align-items:center;gap:10px}.sheet-title h2{margin:0;font-size:17px;font-weight:900}
+    .expires-wrap{display:flex;align-items:center;gap:10px}
+    .expires{font-size:13px;color:#d5e4ff;background:rgba(79,140,255,.12);padding:8px 11px;border-radius:999px;border:1px solid rgba(79,140,255,.18);font-weight:700}
+    .countdown-ring{position:relative;width:44px;height:44px}
+    .countdown-ring svg{transform:rotate(-90deg)}
+    .countdown-ring .center{position:absolute;inset:0;display:grid;place-items:center;font-size:10px;color:#d6e4ff;font-weight:900}
     .sheet-body{padding:0 16px 16px;max-height:min(58vh,520px);overflow:auto}
-    .cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.card{background:rgba(255,255,255,.045);border:1px solid var(--line);border-radius:18px;padding:12px}.card .k{font-size:12px;color:var(--muted);margin-bottom:8px}.card .v{font-size:22px;font-weight:800}.card .s{font-size:12px;color:var(--muted);margin-top:6px}
+    .cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+    .card{background:rgba(255,255,255,.045);border:1px solid var(--line);border-radius:18px;padding:12px}
+    .card .k{font-size:12px;color:var(--muted);margin-bottom:8px}.card .v{font-size:22px;font-weight:900}.card .s{font-size:12px;color:var(--muted);margin-top:6px}
     .mini-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:10px}
     .meta{margin-top:12px;padding:12px;border-radius:18px;background:rgba(255,255,255,.04);border:1px solid var(--line);color:var(--muted);font-size:13px;line-height:1.55}
     .bottom-actions{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:12px}
     .access{position:fixed;inset:0;z-index:1000;background:radial-gradient(circle at top,#12203a,var(--bg));display:flex;align-items:center;justify-content:center;padding:20px}
-    .access-card{width:min(100%,420px);background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:28px;box-shadow:var(--shadow);padding:24px;text-align:center}
-    .access-card h1{margin:0 0 10px;font-size:28px}.access-card p{margin:0;color:var(--muted);line-height:1.55}
-    .hidden{display:none !important} .leaflet-control-attribution{font-size:11px} .pulse{width:18px;height:18px;border-radius:50%;background:#4f8cff;border:3px solid rgba(255,255,255,.9)}
+    .access-card{width:min(100%,440px);background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:30px;box-shadow:var(--shadow);padding:24px;text-align:center}
+    .access-card h1{margin:0 0 10px;font-size:30px;font-weight:900}.access-card p{margin:0;color:var(--muted);line-height:1.55}
+    .hidden{display:none !important}
+    .leaflet-control-attribution{font-size:11px}
+    .car-wrap{position:relative;width:24px;height:24px}
+    .car-wrap::before{content:"";position:absolute;inset:-10px;border-radius:50%;background:rgba(79,140,255,.18);animation:pulse 2s infinite}
+    .car{position:absolute;inset:0;border-radius:50%;background:#4f8cff;border:3px solid rgba(255,255,255,.9);box-shadow:0 6px 16px rgba(79,140,255,.35)}
+    .pin-modal{position:fixed;inset:0;z-index:1200;display:none;place-items:center;background:rgba(0,0,0,.55);backdrop-filter:blur(10px);padding:16px}
+    .pin-modal.open{display:grid}
+    .pin-card{width:min(100%,430px);background:linear-gradient(180deg,#172645,#10192f);border:1px solid var(--line);border-radius:30px;box-shadow:var(--shadow);padding:24px}
+    .pin-card h2{margin:0 0 8px;font-size:28px;font-weight:900}
+    .pin-card p{margin:0;color:var(--muted);line-height:1.55}
+    .pin-field{margin-top:16px}.pin-field input{width:100%;min-height:54px;border-radius:18px;padding:0 16px;background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--text);font:800 20px/1 var(--mono, ui-monospace, monospace);letter-spacing:.22em;text-align:center}
+    .pin-actions{display:grid;grid-template-columns:1fr;gap:10px;margin-top:14px}
+    .pin-error{margin-top:10px;color:#ffb5b5;font-size:13px;display:none}
+    @keyframes pulse{0%{transform:scale(.95);opacity:.8}70%{transform:scale(1.45);opacity:0}100%{transform:scale(1.45);opacity:0}}
     @media (max-width:860px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))}.mini-row{grid-template-columns:1fr 1fr}}
-    @media (max-width:640px){.top-pill{padding:10px 12px;border-radius:16px}.headline{font-size:15px}.top-actions{gap:6px}button{padding:10px 12px;min-height:42px}.sheet{padding:0 8px var(--safe-bottom)}.sheet-inner{transform:translateY(calc(100% - 92px))}.sheet.peek .sheet-inner{transform:translateY(calc(100% - 112px))}.sheet-body{max-height:min(52vh,420px)}.cards{grid-template-columns:1fr 1fr;gap:8px}.card{padding:11px}.card .v{font-size:20px}.bottom-actions{grid-template-columns:1fr}.center-btn{bottom:calc(96px + var(--safe-bottom))}}
+    @media (max-width:640px){
+      .top-pill{padding:10px 12px;border-radius:16px}.headline{font-size:15px}.top-actions{gap:6px}button{padding:10px 12px;min-height:42px}
+      .sheet{padding:0 8px var(--safe-bottom)} .sheet-inner{transform:translateY(calc(100% - 90px))}.sheet.peek .sheet-inner{transform:translateY(calc(100% - 108px))}
+      .sheet-body{max-height:min(52vh,420px)} .cards{grid-template-columns:1fr 1fr;gap:8px}.card{padding:11px}.card .v{font-size:20px}.bottom-actions{grid-template-columns:1fr}.center-btn{bottom:calc(96px + var(--safe-bottom))}
+      .expires-wrap{gap:8px}.countdown-ring{width:40px;height:40px}
+    }
   </style>
 </head>
 <body>
 <div id="map"></div>
+
 <div class="overlay-top hidden" id="topBar">
   <div class="top-pill">
     <div class="top-left">
       <div class="eyebrow">live tracking</div>
       <div class="headline">MyGpsTrack</div>
-      <div class="status"><span class="dot" id="statusDot"></span><span id="statusText">Подключение…</span></div>
+      <div class="status"><span class="dot green" id="statusDot"></span><span id="statusText">Подключение…</span></div>
     </div>
     <div class="top-actions">
       <button class="secondary install-btn" id="installBtn">Установить</button>
@@ -62,24 +97,36 @@
       <div class="grabber"></div>
       <div class="sheet-title">
         <h2>Текущее движение</h2>
-        <div class="expires" id="expiresLabel">—</div>
+        <div class="expires-wrap">
+          <div class="countdown-ring">
+            <svg width="44" height="44" viewBox="0 0 44 44">
+              <circle cx="22" cy="22" r="18" stroke="rgba(255,255,255,.12)" stroke-width="4" fill="none"></circle>
+              <circle id="countdownCircle" cx="22" cy="22" r="18" stroke="#77acff" stroke-width="4" stroke-linecap="round" fill="none" stroke-dasharray="113.097" stroke-dashoffset="0"></circle>
+            </svg>
+            <div class="center" id="countdownShort">--</div>
+          </div>
+          <div class="expires" id="expiresLabel">—</div>
+        </div>
       </div>
     </div>
     <div class="sheet-body">
       <div class="cards">
+        <div class="card"><div class="k">Статус</div><div class="v" id="motionValue">—</div><div class="s" id="motionSub">ожидание данных</div></div>
         <div class="card"><div class="k">Скорость</div><div class="v" id="speedValue">0</div><div class="s">км/ч</div></div>
         <div class="card"><div class="k">Расстояние</div><div class="v" id="distanceValue">0</div><div class="s">км за сессию</div></div>
         <div class="card"><div class="k">В пути</div><div class="v" id="elapsedValue">0м</div><div class="s">с момента создания</div></div>
-        <div class="card"><div class="k">Зрители</div><div class="v" id="viewersValue">0</div><div class="s">всего: <span id="totalViewsValue">0</span></div></div>
       </div>
 
       <div class="mini-row">
         <div class="card"><div class="k">Последняя точка</div><div class="v" id="lastSeenValue">—</div><div class="s" id="lastPointTime">—</div></div>
-        <div class="card"><div class="k">Точек на карте</div><div class="v" id="pointsValue">0</div><div class="s">только текущая сессия</div></div>
+        <div class="card"><div class="k">Зрители</div><div class="v" id="viewersValue">0</div><div class="s">всего: <span id="totalViewsValue">0</span></div></div>
         <div class="card"><div class="k">Точность</div><div class="v" id="accuracyValue">—</div><div class="s">метров</div></div>
       </div>
 
-      <div class="meta">Карта обновляется только пока live-сессия активна и не истекла. Старые точки не подмешиваются: маршрут рисуется только из данных с timestamp не старше момента создания этой сессии.</div>
+      <div class="meta">
+        Карта видна только пока сессия активна и не истекла. На экране не показывается token/session.
+        Если для ссылки включён PIN, сначала требуется ввод кода.
+      </div>
 
       <div class="bottom-actions">
         <button class="secondary" id="toggleSheetBtn">Свернуть / развернуть</button>
@@ -97,6 +144,16 @@
   </div>
 </div>
 
+<div class="pin-modal" id="pinModal">
+  <div class="pin-card">
+    <h2>Защищённый доступ</h2>
+    <p>Для просмотра live-маршрута введи PIN-код. Ссылка остаётся скрытой, а маршрут откроется только после проверки.</p>
+    <div class="pin-field"><input id="pinInput" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="••••" /></div>
+    <div class="pin-error" id="pinError">Неверный PIN-код.</div>
+    <div class="pin-actions"><button id="pinSubmitBtn">Открыть live</button></div>
+  </div>
+</div>
+
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.3/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.3/firebase-database-compat.js"></script>
@@ -111,18 +168,19 @@ const MAX_RECENT_POINTS_DEFAULT = 300;
 const MIN_POINT_DISTANCE_M_DEFAULT = 15;
 const MIN_POINT_GAP_MS_DEFAULT = 10 * 1000;
 const STALE_OFFLINE_MS = 2 * 60 * 1000;
-
+const MOVING_SPEED_KMH = 6;
+const LONG_STAND_MS = 5 * 60 * 1000;
 const $ = id => document.getElementById(id);
+
 let map, routeLine, lastMarker, accuracyCircle;
-let programmaticMove=false, autoCenterEnabled=true, meta=null, points=[], lastPoint=null, viewStats={}, expiresTimer=null, deferredPrompt=null;
+let programmaticMove=false, autoCenterEnabled=true, meta=null, points=[], lastPoint=null, viewStats={}, security=null, expiresTimer=null, deferredPrompt=null, pinPassed=false, markerAnimFrame=null, markerAnimState=null;
 
 const viewerId = (()=>{ const key="mygpstrack_viewer_id"; let v=sessionStorage.getItem(key); if(!v){ v=(crypto.randomUUID?crypto.randomUUID():Math.random().toString(36).slice(2))+"-"+Date.now().toString(36); sessionStorage.setItem(key,v); } return v; })();
 
 function setupManifest(){ const manifest={name:"MyGpsTrack Live",short_name:"MyGpsTrack",start_url:location.pathname+location.search,display:"standalone",background_color:"#07101d",theme_color:"#0b1220",icons:[]}; const blob=new Blob([JSON.stringify(manifest)],{type:"application/manifest+json"}); const url=URL.createObjectURL(blob); const link=document.createElement("link"); link.rel="manifest"; link.href=url; document.head.appendChild(link); }
 function formatDateTime(ts){ return ts ? new Date(ts).toLocaleString("ru-RU") : "—"; }
 function formatAgo(ms){ if(!Number.isFinite(ms)||ms<0) return "только что"; const s=Math.floor(ms/1000); if(s<60) return `${s}с назад`; const m=Math.floor(s/60); if(m<60) return `${m}м назад`; const h=Math.floor(m/60); if(h<24) return `${h}ч ${m%60}м назад`; const d=Math.floor(h/24); return `${d}д назад`; }
-function formatRemaining(ms){ if(ms<=0) return "истекла"; const totalSec=Math.floor(ms/1000), h=Math.floor(totalSec/3600), m=Math.floor((totalSec%3600)/60), s=totalSec%60; if(h>0) return `ещё ${h}ч ${m}м`; if(m>0) return `ещё ${m}м ${s}с`; return `ещё ${s}с`; }
-function formatDistance(meters){ if(!Number.isFinite(meters)||meters<=0) return "0"; if(meters<1000) return (Math.round(meters/10)*10).toString(); return (meters/1000).toFixed(1); }
+function formatRemaining(ms){ if(ms<=0) return "истекла"; const totalSec=Math.floor(ms/1000), h=Math.floor(totalSec/3600), m=Math.floor((totalSec%3600)/60), s=totalSec%60; if(h>0) return `${h}ч ${m}м`; if(m>0) return `${m}м ${s}с`; return `${s}с`; }
 function pointTs(p){ return Number(p?.timestamp ?? p?.ts ?? p?.time ?? p?.createdAt ?? p?.serverTime ?? 0) || 0; }
 function pointLat(p){ return Number(p?.lat ?? p?.latitude); }
 function pointLng(p){ return Number(p?.lng ?? p?.lon ?? p?.longitude); }
@@ -136,47 +194,138 @@ function filterSessionPoints(pointsObj){
   return filtered.slice(-maxPoints);
 }
 function totalDistanceMeters(list){ let total=0; for(let i=1;i<list.length;i++) total += distanceMeters(list[i-1], list[i]); return total; }
+function formatDistanceValue(m){ return m < 1000 ? `${Math.round(m/10)*10}` : `${(m/1000).toFixed(1)}`; }
+function formatDistanceUnit(m){ return m < 1000 ? "метров за сессию" : "км за сессию"; }
 function isAccessible(m){ return !!m && m.active===true && Number(m.expiresAt||0)>Date.now(); }
-function showAccess(title,text){ $("accessTitle").textContent=title; $("accessText").textContent=text; $("accessScreen").classList.remove("hidden"); $("topBar").classList.add("hidden"); $("sheet").classList.add("hidden"); $("centerBtn").classList.remove("show"); if(routeLine) routeLine.setLatLngs([]); if(lastMarker) map.removeLayer(lastMarker), lastMarker=null; if(accuracyCircle) map.removeLayer(accuracyCircle), accuracyCircle=null; }
+function showAccess(title,text){ $("accessTitle").textContent=title; $("accessText").textContent=text; $("accessScreen").classList.remove("hidden"); $("topBar").classList.add("hidden"); $("sheet").classList.add("hidden"); $("centerBtn").classList.remove("show"); }
 function hideAccess(){ $("accessScreen").classList.add("hidden"); $("topBar").classList.remove("hidden"); $("sheet").classList.remove("hidden"); }
+
 function initMap(){
-  map=L.map("map",{zoomControl:false,preferCanvas:true}).setView([56.9496,24.1052],13); L.control.zoom({position:"topright"}).addTo(map);
+  map=L.map("map",{zoomControl:false,preferCanvas:true}).setView([56.9496,24.1052],13);
+  L.control.zoom({position:"topright"}).addTo(map);
   L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",{subdomains:"abcd",maxZoom:20,attribution:'&copy; OpenStreetMap &copy; CARTO'}).addTo(map);
-  routeLine=L.polyline([], {weight:5,opacity:.95,color:"#61a0ff",lineJoin:"round",lineCap:"round"}).addTo(map);
+  routeLine=L.polyline([], {weight:5,opacity:.95,color:"#68a3ff",lineJoin:"round",lineCap:"round"}).addTo(map);
   map.on("dragstart zoomstart",()=>{ if(programmaticMove) return; autoCenterEnabled=false; $("centerBtn").classList.add("show"); });
 }
-function createMarker(latlng){ const icon=L.divIcon({className:"",html:'<div style="position:relative;width:18px;height:18px"><div style="position:absolute;inset:-8px;border-radius:50%;background:rgba(79,140,255,.25);animation:pulse 2s infinite"></div><div class="pulse"></div></div>',iconSize:[18,18],iconAnchor:[9,9]}); return L.marker(latlng,{icon}).addTo(map); }
+function createMarker(latlng){ const icon=L.divIcon({className:"",html:'<div class="car-wrap"><div class="car"></div></div>',iconSize:[24,24],iconAnchor:[12,12]}); return L.marker(latlng,{icon}).addTo(map); }
+function animateMarkerTo(latlng){
+  if(!lastMarker){ lastMarker=createMarker(latlng); markerAnimState={lat:latlng[0],lng:latlng[1]}; return; }
+  cancelAnimationFrame(markerAnimFrame);
+  const from = markerAnimState ? {lat:markerAnimState.lat,lng:markerAnimState.lng} : {lat:lastMarker.getLatLng().lat,lng:lastMarker.getLatLng().lng};
+  const to = {lat:latlng[0], lng:latlng[1]};
+  const start = performance.now();
+  const duration = 900;
+  function step(now){
+    const t = Math.min(1, (now-start)/duration);
+    const ease = 1 - Math.pow(1-t, 3);
+    const lat = from.lat + (to.lat-from.lat)*ease;
+    const lng = from.lng + (to.lng-from.lng)*ease;
+    markerAnimState = {lat,lng};
+    lastMarker.setLatLng([lat,lng]);
+    if(t<1) markerAnimFrame = requestAnimationFrame(step);
+  }
+  markerAnimFrame = requestAnimationFrame(step);
+}
 function updateMap(){
   const latlngs=points.map(p=>[p.lat,p.lng]); routeLine.setLatLngs(latlngs);
   const activePoint=lastPoint || points[points.length-1]; if(!activePoint) return;
   const latlng=[activePoint.lat,activePoint.lng];
-  if(!lastMarker) lastMarker=createMarker(latlng); else lastMarker.setLatLng(latlng);
-  if(activePoint.accuracy>0){ if(!accuracyCircle){ accuracyCircle=L.circle(latlng,{radius:activePoint.accuracy,weight:1,color:"#8db7ff",opacity:.8,fillColor:"#8db7ff",fillOpacity:.12}).addTo(map); } else { accuracyCircle.setLatLng(latlng); accuracyCircle.setRadius(activePoint.accuracy); } } else if(accuracyCircle){ map.removeLayer(accuracyCircle); accuracyCircle=null; }
-  if(autoCenterEnabled){ programmaticMove=true; if(points.length>1){ map.fitBounds(L.latLngBounds(latlngs).pad(.22), {animate:true,padding:[24,24]}); } else { map.setView(latlng,15,{animate:true}); } setTimeout(()=>programmaticMove=false,400); }
+  animateMarkerTo(latlng);
+  if(activePoint.accuracy>0){
+    if(!accuracyCircle){ accuracyCircle=L.circle(latlng,{radius:activePoint.accuracy,weight:1,color:"#8db7ff",opacity:.8,fillColor:"#8db7ff",fillOpacity:.12}).addTo(map); }
+    else { accuracyCircle.setLatLng(latlng); accuracyCircle.setRadius(activePoint.accuracy); }
+  } else if(accuracyCircle){ map.removeLayer(accuracyCircle); accuracyCircle=null; }
+
+  if(autoCenterEnabled){
+    programmaticMove=true;
+    if(points.length>1) map.fitBounds(L.latLngBounds(latlngs).pad(.22), {animate:true,padding:[24,24]});
+    else map.setView(latlng, 15, {animate:true});
+    setTimeout(()=>programmaticMove=false, 450);
+  }
+}
+function getMotionState(){
+  if(!lastPoint?.timestamp) return {label:"—", sub:"ожидание данных", color:"red"};
+  const age = Date.now() - lastPoint.timestamp;
+  const speed = Math.max(0, Number(lastPoint.speed || 0));
+  if(speed >= MOVING_SPEED_KMH) return {label:"🟢 Едет", sub:`скорость ~ ${Math.round(speed)} км/ч`, color:"green"};
+  if(age >= LONG_STAND_MS) return {label:"🔴 Долго стоит", sub:formatAgo(age), color:"red"};
+  return {label:"🟡 Стоит", sub:formatAgo(age), color:"yellow"};
 }
 function updateStatsUI(){
-  const trackDistance=totalDistanceMeters(points), speed=Math.max(0, Math.round(lastPoint?.speed || 0));
+  const trackDistance=totalDistanceMeters(points);
+  const speed=Math.max(0, Math.round(lastPoint?.speed || 0));
   $("speedValue").textContent=speed;
-  $("distanceValue").textContent=formatDistance(trackDistance);
-  $("distanceValue").nextElementSibling.textContent=trackDistance < 1000 ? "метров за сессию" : "км за сессию";
-  $("elapsedValue").textContent=meta?.createdAt ? formatRemaining(Date.now()-Number(meta.createdAt||0)).replace("ещё ","") : "—";
+  $("distanceValue").textContent=formatDistanceValue(trackDistance);
+  $("distanceValue").nextElementSibling.textContent=formatDistanceUnit(trackDistance);
+  $("elapsedValue").textContent=meta?.createdAt ? formatRemaining(Date.now()-Number(meta.createdAt||0)) : "—";
   $("viewersValue").textContent=viewStats.viewers ? Object.keys(viewStats.viewers).length : 0;
   $("totalViewsValue").textContent=Number(viewStats.totalViews || 0);
-  $("pointsValue").textContent=points.length;
   $("accuracyValue").textContent=lastPoint?.accuracy ? Math.round(lastPoint.accuracy) : "—";
-  if(lastPoint?.timestamp){ $("lastSeenValue").textContent=formatAgo(Date.now()-lastPoint.timestamp); $("lastPointTime").textContent=formatDateTime(lastPoint.timestamp); } else { $("lastSeenValue").textContent="—"; $("lastPointTime").textContent="—"; }
-  const fresh=lastPoint?.timestamp && (Date.now()-lastPoint.timestamp) <= STALE_OFFLINE_MS;
-  $("statusDot").className="dot"+(fresh ? "" : " off");
-  $("statusText").textContent=fresh ? "Онлайн" : "Нет новых точек";
+  if(lastPoint?.timestamp){ $("lastSeenValue").textContent=formatAgo(Date.now()-lastPoint.timestamp); $("lastPointTime").textContent=formatDateTime(lastPoint.timestamp); }
+  else { $("lastSeenValue").textContent="—"; $("lastPointTime").textContent="—"; }
+  const motion=getMotionState();
+  $("motionValue").textContent=motion.label;
+  $("motionSub").textContent=motion.sub;
+  $("statusDot").className=`dot ${motion.color}`;
+  $("statusText").textContent=motion.label.replace(/[🟢🟡🔴]\s?/g,"");
 }
-function updateExpires(){ clearInterval(expiresTimer); const tick=()=>{ if(!meta){ $("expiresLabel").textContent="—"; return; } const left=Number(meta.expiresAt||0)-Date.now(); $("expiresLabel").textContent=left>0 ? `Ссылка ${formatRemaining(left)}` : "Ссылка истекла"; }; tick(); expiresTimer=setInterval(tick,1000); }
-function subscribeMeta(){ db.ref(`liveSessions/${sessionToken}/meta`).on("value", snap=>{ meta=snap.val()||null; if(!meta){ showAccess("Нет доступа","Сессия не найдена или была удалена."); return; } if(!isAccessible(meta)){ showAccess("Сессия завершена","Эта live-ссылка больше недоступна: сессия завершена или уже истекла."); return; } hideAccess(); updateExpires(); updateStatsUI(); }); }
-function subscribeRecentPoints(){ db.ref(`liveSessions/${sessionToken}/public/recentPoints`).on("value", snap=>{ points=filterSessionPoints(snap.val()||{}); updateMap(); updateStatsUI(); }); }
-function subscribeLastPoint(){ db.ref(`liveSessions/${sessionToken}/public/lastPoint`).on("value", snap=>{ const p=normalizePoint(snap.val()); lastPoint = (p && meta?.createdAt && p.timestamp && p.timestamp < Number(meta.createdAt)) ? null : p; updateMap(); updateStatsUI(); }); }
+function updateExpires(){
+  clearInterval(expiresTimer);
+  const circle=$("countdownCircle");
+  const total = Math.max(1, Number(meta?.expiresAt || 0) - Number(meta?.createdAt || Date.now()));
+  const circumference = 2 * Math.PI * 18;
+  const tick=()=>{
+    if(!meta){ $("expiresLabel").textContent="—"; return; }
+    const left=Number(meta.expiresAt||0)-Date.now();
+    $("expiresLabel").textContent=left>0 ? `Ссылка истекает через ${formatRemaining(left)}` : "Ссылка истекла";
+    const pct=Math.max(0, Math.min(1, left / total));
+    circle.style.strokeDasharray = String(circumference);
+    circle.style.strokeDashoffset = String(circumference * (1-pct));
+    circle.style.stroke = pct > .45 ? "#22c55e" : pct > .18 ? "#f59e0b" : "#ef4444";
+    $("countdownShort").textContent = left > 0 ? (left >= 3600000 ? `${Math.ceil(left/3600000)}ч` : `${Math.ceil(left/60000)}м`) : "0";
+  };
+  tick(); expiresTimer=setInterval(tick,1000);
+}
+
+function showPinModal(){ $("pinModal").classList.add("open"); $("pinInput").focus(); }
+function hidePinModal(){ $("pinModal").classList.remove("open"); $("pinError").style.display="none"; }
+function checkPin(){
+  const entered=$("pinInput").value.trim();
+  const expected=String(security?.pin || "");
+  if(entered && entered===expected){
+    pinPassed=true;
+    sessionStorage.setItem(`mygpstrack_pin_ok:${sessionToken}`, "1");
+    hidePinModal();
+    hideAccess();
+    return;
+  }
+  $("pinError").style.display="block";
+}
+function isPinAlreadyPassed(){ return sessionStorage.getItem(`mygpstrack_pin_ok:${sessionToken}`) === "1"; }
+
+function maybeGateAccess(){
+  if(!meta){ showAccess("Нет доступа","Сессия не найдена или была удалена."); return false; }
+  if(!isAccessible(meta)){ showAccess("Сессия завершена","Эта live-ссылка больше недоступна: сессия завершена или уже истекла."); return false; }
+  if(meta.requirePin === true){
+    if(isPinAlreadyPassed()) pinPassed=true;
+    if(!pinPassed){ showAccess("Защищённый live","Для просмотра маршрута нужен PIN-код."); showPinModal(); return false; }
+  }
+  hidePinModal();
+  hideAccess();
+  return true;
+}
+
+function subscribeMeta(){ db.ref(`liveSessions/${sessionToken}/meta`).on("value", snap=>{ meta=snap.val()||null; const ok=maybeGateAccess(); if(!ok) return; updateExpires(); updateStatsUI(); }); }
+function subscribeSecurity(){ db.ref(`liveSessions/${sessionToken}/security`).on("value", snap=>{ security=snap.val()||null; maybeGateAccess(); }); }
+function subscribeRecentPoints(){ db.ref(`liveSessions/${sessionToken}/public/recentPoints`).on("value", snap=>{ points=filterSessionPoints(snap.val()||{}); if(maybeGateAccess()){ updateMap(); updateStatsUI(); } }); }
+function subscribeLastPoint(){ db.ref(`liveSessions/${sessionToken}/public/lastPoint`).on("value", snap=>{ const p=normalizePoint(snap.val()); lastPoint = (p && meta?.createdAt && p.timestamp && p.timestamp < Number(meta.createdAt)) ? null : p; if(maybeGateAccess()){ updateMap(); updateStatsUI(); } }); }
 function subscribeViewStats(){ db.ref(`liveSessions/${sessionToken}/viewStats`).on("value", snap=>{ viewStats=snap.val()||{}; updateStatsUI(); }); }
+
 async function registerViewer(){
-  const base=db.ref(`liveSessions/${sessionToken}/viewStats`), viewerRef=base.child(`viewers/${viewerId}`);
-  await viewerRef.set({connectedAt: firebase.database.ServerValue.TIMESTAMP}); viewerRef.onDisconnect().remove();
+  const base=db.ref(`liveSessions/${sessionToken}/viewStats`);
+  const viewerRef=base.child(`viewers/${viewerId}`);
+  await viewerRef.set({connectedAt: firebase.database.ServerValue.TIMESTAMP});
+  viewerRef.onDisconnect().remove();
   await base.child("lastViewedAt").set(firebase.database.ServerValue.TIMESTAMP);
   const viewFlagKey=`mygpstrack_viewed_once:${sessionToken}`;
   if(!sessionStorage.getItem(viewFlagKey)){ sessionStorage.setItem(viewFlagKey,"1"); await base.child("totalViews").transaction(v => Number(v||0)+1); }
@@ -185,19 +334,44 @@ function centerOnLatest(){ autoCenterEnabled=true; $("centerBtn").classList.remo
 function toggleSheet(force){ const sheet=$("sheet"); const open=typeof force==="boolean" ? force : !sheet.classList.contains("open"); sheet.classList.toggle("open", open); sheet.classList.toggle("peek", !open); }
 function bindSheetGesture(){
   const header=$("sheetHeader"); let startY=0, deltaY=0, dragging=false;
-  const onStart=y=>{ dragging=true; startY=y; deltaY=0; }; const onMove=y=>{ if(!dragging) return; deltaY=y-startY; }; const onEnd=()=>{ if(!dragging) return; dragging=false; if(Math.abs(deltaY)<24){ toggleSheet(); return; } if(deltaY<0) toggleSheet(true); if(deltaY>0) toggleSheet(false); };
-  header.addEventListener("click",()=>toggleSheet()); header.addEventListener("touchstart",e=>onStart(e.touches[0].clientY),{passive:true}); header.addEventListener("touchmove",e=>onMove(e.touches[0].clientY),{passive:true}); header.addEventListener("touchend",onEnd); header.addEventListener("mousedown",e=>onStart(e.clientY)); window.addEventListener("mousemove",e=>onMove(e.clientY)); window.addEventListener("mouseup",onEnd); $("toggleSheetBtn").addEventListener("click",()=>toggleSheet());
+  const onStart=y=>{ dragging=true; startY=y; deltaY=0; };
+  const onMove=y=>{ if(!dragging) return; deltaY=y-startY; };
+  const onEnd=()=>{ if(!dragging) return; dragging=false; if(Math.abs(deltaY)<24){ toggleSheet(); return; } if(deltaY<0) toggleSheet(true); if(deltaY>0) toggleSheet(false); };
+  header.addEventListener("click",()=>toggleSheet());
+  header.addEventListener("touchstart",e=>onStart(e.touches[0].clientY),{passive:true});
+  header.addEventListener("touchmove",e=>onMove(e.touches[0].clientY),{passive:true});
+  header.addEventListener("touchend",onEnd);
+  header.addEventListener("mousedown",e=>onStart(e.clientY));
+  window.addEventListener("mousemove",e=>onMove(e.clientY));
+  window.addEventListener("mouseup",onEnd);
+  $("toggleSheetBtn").addEventListener("click",()=>toggleSheet());
 }
 async function shareLive(){ try{ if(navigator.share){ await navigator.share({title:"MyGpsTrack Live",text:"Смотри live-маршрут",url:location.href}); return; } await navigator.clipboard.writeText(location.href); alert("Ссылка скопирована"); }catch(e){} }
 function bindActions(){
-  $("shareBtn").addEventListener("click",shareLive); $("shareBtn2").addEventListener("click",shareLive); $("centerBtn").addEventListener("click",centerOnLatest); $("centerBtn2").addEventListener("click",centerOnLatest);
+  $("shareBtn").addEventListener("click",shareLive);
+  $("shareBtn2").addEventListener("click",shareLive);
+  $("centerBtn").addEventListener("click",centerOnLatest);
+  $("centerBtn2").addEventListener("click",centerOnLatest);
+  $("pinSubmitBtn").addEventListener("click", checkPin);
+  $("pinInput").addEventListener("keydown", e=>{ if(e.key==="Enter") checkPin(); });
   window.addEventListener("beforeinstallprompt", e=>{ e.preventDefault(); deferredPrompt=e; $("installBtn").classList.add("show"); });
   $("installBtn").addEventListener("click", async ()=>{ if(!deferredPrompt) return; deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt=null; $("installBtn").classList.remove("show"); });
 }
 async function init(){
-  setupManifest(); initMap(); bindSheetGesture(); bindActions();
+  setupManifest();
+  initMap();
+  bindSheetGesture();
+  bindActions();
+
   if(!sessionToken){ showAccess("Нет доступа","Открой страницу только по корректной live-ссылке с параметром session."); return; }
-  subscribeMeta(); subscribeRecentPoints(); subscribeLastPoint(); subscribeViewStats(); registerViewer().catch(()=>{}); toggleSheet(false);
+
+  subscribeMeta();
+  subscribeSecurity();
+  subscribeRecentPoints();
+  subscribeLastPoint();
+  subscribeViewStats();
+  registerViewer().catch(()=>{});
+  toggleSheet(false);
 }
 init();
 </script>

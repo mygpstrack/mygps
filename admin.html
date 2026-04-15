@@ -4,43 +4,71 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>MyGpsTrack — Admin</title>
-  <meta name="theme-color" content="#0f172a" />
+  <meta name="theme-color" content="#0b1220" />
   <style>
     :root{
-      --bg:#08111f; --bg2:#0d1729; --card:#111c31; --card2:#16233c; --text:#eaf2ff; --muted:#98a6c4;
-      --line:rgba(255,255,255,.08); --blue:#4f8cff; --blue2:#6aa5ff; --green:#22c55e; --red:#ef4444; --amber:#f59e0b;
-      --shadow:0 18px 40px rgba(0,0,0,.28); --radius:20px; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --bg:#0a1020; --bg2:#111a2f; --card:#121d34; --card2:#182542; --line:rgba(255,255,255,.08);
+      --text:#edf3ff; --muted:#9dafd2; --blue:#3b82f6; --blue2:#60a5fa; --green:#22c55e; --yellow:#f59e0b; --red:#ef4444;
+      --shadow:0 20px 50px rgba(0,0,0,.34); --radius:22px; --mono: ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
     }
-    *{box-sizing:border-box} html,body{margin:0;padding:0;background:linear-gradient(180deg,var(--bg),#0a1220 38%, #08111f);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
-    body{min-height:100vh}.wrap{max-width:1180px;margin:0 auto;padding:16px 16px 28px}.hero{position:sticky;top:0;z-index:20;padding:14px 0 12px;backdrop-filter: blur(12px);background:linear-gradient(180deg,rgba(8,17,31,.92),rgba(8,17,31,.74),rgba(8,17,31,.32))}
-    .hero-card{background:linear-gradient(180deg,rgba(22,35,60,.95),rgba(14,25,44,.95));border:1px solid var(--line);box-shadow:var(--shadow);border-radius:24px;padding:18px}
-    .top{display:flex;gap:14px;justify-content:space-between;align-items:flex-start;flex-wrap:wrap}.title{font-size:28px;font-weight:800;letter-spacing:.2px}.subtitle{color:var(--muted);margin-top:6px;font-size:14px;line-height:1.45}
-    .stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:14px}.stat{background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:16px;padding:12px;min-height:82px}.stat .k{font-size:12px;color:var(--muted);margin-bottom:8px}.stat .v{font-size:22px;font-weight:800}
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0;background:radial-gradient(circle at top,#162542 0%,#0d1427 32%,#0a1020 100%);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+    body{min-height:100vh}
+    .wrap{max-width:1180px;margin:0 auto;padding:16px 16px 28px}
+    .hero{position:sticky;top:0;z-index:20;padding:14px 0 12px;background:linear-gradient(180deg,rgba(10,16,32,.92),rgba(10,16,32,.74),rgba(10,16,32,.18));backdrop-filter:blur(14px)}
+    .hero-card,.session,.modal-card,.stat,.mini,.link-box,.help{border:1px solid var(--line);box-shadow:var(--shadow)}
+    .hero-card{background:linear-gradient(180deg,rgba(24,37,66,.96),rgba(13,24,46,.96));border-radius:28px;padding:18px}
+    .top{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;flex-wrap:wrap}
+    .title{font-size:30px;font-weight:900;letter-spacing:.2px}
+    .subtitle{margin-top:6px;color:var(--muted);font-size:14px;line-height:1.5}
+    .stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:14px}
+    .stat{background:rgba(255,255,255,.04);border-radius:18px;padding:12px;min-height:84px}
+    .stat .k{font-size:12px;color:var(--muted);margin-bottom:8px}.stat .v{font-size:23px;font-weight:900}
     .actions{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-top:14px}
-    button,.btn,select,input{appearance:none;border:0;outline:none;border-radius:16px;font:inherit}
-    button,.btn{min-height:48px;padding:12px 14px;font-weight:700;cursor:pointer;color:white;background:linear-gradient(180deg,var(--blue2),var(--blue));box-shadow:0 10px 24px rgba(79,140,255,.25);transition:transform .12s ease, filter .2s ease, opacity .2s ease}
-    button:hover,.btn:hover{filter:brightness(1.04)} button:active,.btn:active{transform:translateY(1px)}
-    button.secondary{background:rgba(255,255,255,.06);color:var(--text);box-shadow:none;border:1px solid var(--line)}
-    button.warn{background:linear-gradient(180deg,#f6b94f,var(--amber));box-shadow:0 10px 24px rgba(245,158,11,.18)}
-    button.danger{background:linear-gradient(180deg,#ff7b7b,var(--red));box-shadow:0 10px 24px rgba(239,68,68,.18)}
-    button.success{background:linear-gradient(180deg,#39d47a,var(--green));box-shadow:0 10px 24px rgba(34,197,94,.18)}
+    button,input,select{appearance:none;border:0;outline:none;border-radius:16px;font:inherit}
+    button{min-height:48px;padding:12px 14px;font-weight:800;cursor:pointer;color:#fff;background:linear-gradient(180deg,var(--blue2),var(--blue));box-shadow:0 10px 24px rgba(59,130,246,.28);transition:.18s ease}
+    button:hover{filter:brightness(1.05)} button:active{transform:translateY(1px)}
+    button.secondary{background:rgba(255,255,255,.06);box-shadow:none;border:1px solid var(--line);color:var(--text)}
+    button.warn{background:linear-gradient(180deg,#f7bc5f,var(--yellow));box-shadow:0 10px 24px rgba(245,158,11,.2)}
+    button.danger{background:linear-gradient(180deg,#ff8383,var(--red));box-shadow:0 10px 24px rgba(239,68,68,.2)}
+    button.success{background:linear-gradient(180deg,#44d27b,var(--green));box-shadow:0 10px 24px rgba(34,197,94,.2)}
     .toolbar{display:grid;grid-template-columns:1.2fr .8fr auto;gap:10px;margin-top:14px}
     .search,.duration{min-height:48px;padding:0 14px;background:rgba(255,255,255,.06);color:var(--text);border:1px solid var(--line)}
     .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:16px}
-    .session{background:linear-gradient(180deg,var(--card),var(--card2));border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px;overflow:hidden}
-    .session-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.token{display:inline-flex;align-items:center;gap:8px;font:600 12px/1 var(--mono);color:#cdd9f6;background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:999px;padding:8px 10px;max-width:100%;word-break:break-all}
-    .badge{display:inline-flex;align-items:center;gap:6px;padding:8px 10px;border-radius:999px;font-size:12px;font-weight:800;border:1px solid transparent}
-    .badge.ok{background:rgba(34,197,94,.14);color:#9df3ba;border-color:rgba(34,197,94,.25)} .badge.off{background:rgba(239,68,68,.12);color:#ffb1b1;border-color:rgba(239,68,68,.24)} .badge.exp{background:rgba(245,158,11,.12);color:#ffd394;border-color:rgba(245,158,11,.24)}
-    .session-sub{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:14px}.mini{background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:14px;padding:10px}.mini .k{font-size:12px;color:var(--muted);margin-bottom:6px}.mini .v{font-size:15px;font-weight:800}.mini .s{font-size:12px;color:var(--muted)}
-    .link-box{margin-top:12px;padding:12px;border-radius:16px;background:rgba(255,255,255,.04);border:1px solid var(--line)} .link-row{display:flex;gap:10px;align-items:center}.link{flex:1;min-width:0;word-break:break-all;font-size:13px;color:#bfd3ff}
-    .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}.row > *{flex:1 1 160px}
-    .qr{display:none;margin-top:12px;background:rgba(255,255,255,.035);border:1px solid var(--line);border-radius:18px;padding:14px;text-align:center}.qr.open{display:block}.qr img{width:220px;max-width:100%;border-radius:16px;background:white;padding:10px}
+    .session{background:linear-gradient(180deg,var(--card),var(--card2));border-radius:24px;padding:16px;overflow:hidden}
+    .session-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+    .token{display:inline-flex;align-items:center;gap:8px;font:700 12px/1 var(--mono);color:#d9e6ff;background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:999px;padding:9px 11px;max-width:100%;word-break:break-all}
+    .badge{display:inline-flex;align-items:center;gap:8px;padding:8px 11px;border-radius:999px;font-size:12px;font-weight:900;border:1px solid transparent}
+    .badge.ok{background:rgba(34,197,94,.14);color:#9df3ba;border-color:rgba(34,197,94,.25)}
+    .badge.off{background:rgba(239,68,68,.12);color:#ffb1b1;border-color:rgba(239,68,68,.24)}
+    .badge.exp{background:rgba(245,158,11,.12);color:#ffd394;border-color:rgba(245,158,11,.24)}
+    .session-sub{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:14px}
+    .mini{background:rgba(255,255,255,.04);border-radius:16px;padding:10px}
+    .mini .k{font-size:12px;color:var(--muted);margin-bottom:6px}.mini .v{font-size:15px;font-weight:900}.mini .s{font-size:12px;color:var(--muted)}
+    .link-box{margin-top:12px;padding:12px;border-radius:18px;background:rgba(255,255,255,.04)}
+    .link-row{display:flex;gap:10px;align-items:center}.link{flex:1;min-width:0;word-break:break-all;font-size:13px;color:#bfd3ff}
+    .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}.row>*{flex:1 1 160px}
     .empty{margin-top:16px;background:rgba(255,255,255,.04);border:1px dashed rgba(255,255,255,.12);border-radius:22px;padding:32px;text-align:center;color:var(--muted)}
-    .help{margin-top:16px;padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.035);border:1px solid var(--line);color:var(--muted);font-size:13px;line-height:1.55}.footer-note{margin-top:14px;color:var(--muted);font-size:12px}
-    .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%) translateY(20px);padding:12px 16px;border-radius:999px;background:rgba(14,25,44,.98);border:1px solid var(--line);box-shadow:var(--shadow);opacity:0;pointer-events:none;transition:.2s ease;z-index:999;max-width:calc(100vw - 24px);text-align:center}.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+    .help{margin-top:16px;padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.035);color:var(--muted);font-size:13px;line-height:1.55}
+    .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%) translateY(20px);padding:12px 16px;border-radius:999px;background:rgba(14,25,44,.98);border:1px solid var(--line);box-shadow:var(--shadow);opacity:0;pointer-events:none;transition:.2s ease;z-index:999;max-width:calc(100vw - 24px);text-align:center}
+    .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
     .muted{color:var(--muted)} .nowrap{white-space:nowrap}
-    @media (max-width:980px){.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.actions{grid-template-columns:repeat(2,minmax(0,1fr))}.toolbar{grid-template-columns:1fr 1fr}.toolbar .full{grid-column:1/-1}.grid{grid-template-columns:1fr}.session-sub{grid-template-columns:repeat(2,minmax(0,1fr))}}
-    @media (max-width:640px){.wrap{padding:12px 12px 24px}.title{font-size:24px}.hero-card{padding:14px}.stats{gap:8px}.stat .v{font-size:20px}.actions{grid-template-columns:1fr}.toolbar{grid-template-columns:1fr}.session{padding:14px}.session-sub{grid-template-columns:1fr 1fr;gap:8px}.link-row{flex-direction:column;align-items:stretch}.row{gap:8px}.row > *{flex:1 1 calc(50% - 8px)}.token{font-size:11px}}
+    .qr-preview{margin-top:12px;display:none}.qr-preview.open{display:block}
+    .qr-card{display:flex;gap:14px;align-items:center;background:rgba(255,255,255,.035);border:1px solid var(--line);border-radius:20px;padding:14px}
+    .qr-card img{width:180px;max-width:42vw;border-radius:18px;background:#fff;padding:10px}
+    .pin-chip{display:inline-flex;align-items:center;gap:8px;padding:8px 10px;border-radius:999px;background:rgba(255,255,255,.06);border:1px solid var(--line);font:700 12px/1 var(--mono)}
+    .modal{position:fixed;inset:0;display:none;place-items:center;background:rgba(0,0,0,.54);backdrop-filter:blur(10px);z-index:1000;padding:16px}
+    .modal.open{display:grid}
+    .modal-card{width:min(100%,460px);background:linear-gradient(180deg,#172645,#0f1a31);border-radius:28px;padding:18px}
+    .modal-title{font-size:24px;font-weight:900;margin-bottom:6px}
+    .modal-sub{font-size:14px;color:var(--muted);line-height:1.5;margin-bottom:14px}
+    .field{display:grid;gap:8px;margin-top:12px}
+    .field label{font-size:13px;color:var(--muted)}
+    .field input,.field select{min-height:48px;padding:0 14px;background:rgba(255,255,255,.06);color:var(--text);border:1px solid var(--line)}
+    .inline-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px}
+    .mini-note{font-size:12px;color:var(--muted);margin-top:10px;line-height:1.45}
+    @media (max-width:980px){.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.actions{grid-template-columns:repeat(2,minmax(0,1fr))}.toolbar{grid-template-columns:1fr 1fr}.grid{grid-template-columns:1fr}.session-sub{grid-template-columns:repeat(2,minmax(0,1fr))}}
+    @media (max-width:640px){.wrap{padding:12px}.title{font-size:24px}.hero-card{padding:14px}.actions,.toolbar{grid-template-columns:1fr}.session{padding:14px}.session-sub{grid-template-columns:1fr 1fr;gap:8px}.link-row{flex-direction:column;align-items:stretch}.row{gap:8px}.row>*{flex:1 1 calc(50% - 8px)}.token{font-size:11px}.qr-card{flex-direction:column;align-items:stretch}.qr-card img{width:100%;max-width:100%}.inline-actions{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
@@ -50,18 +78,16 @@
       <div class="top">
         <div>
           <div class="title">MyGpsTrack Admin</div>
-          <div class="subtitle">Управление live-ссылками, QR, просмотрами, авто-продлением, авто-остановкой и лёгкой очисткой данных для бесплатного Firebase.</div>
+          <div class="subtitle">Стиль ближе к Uber / Glovo: live-ссылки, QR, PIN-защита, viewers, авто-поддержка и лёгкая логика для бесплатного Firebase.</div>
         </div>
         <div class="muted" id="nowLabel">—</div>
       </div>
-
       <div class="stats">
         <div class="stat"><div class="k">Всего сессий</div><div class="v" id="statTotal">0</div></div>
         <div class="stat"><div class="k">Активные</div><div class="v" id="statActive">0</div></div>
         <div class="stat"><div class="k">Истёкшие</div><div class="v" id="statExpired">0</div></div>
         <div class="stat"><div class="k">Зрителей сейчас</div><div class="v" id="statViewers">0</div></div>
       </div>
-
       <div class="actions">
         <button id="createBtn">Создать live-ссылку</button>
         <button class="secondary" id="refreshBtn">Обновить live-сессии</button>
@@ -69,9 +95,8 @@
         <button class="danger" id="stopAllBtn">Остановить все активные</button>
         <button class="secondary" id="toggleAutoMaintainBtn">Автоподдержка: вкл</button>
       </div>
-
       <div class="toolbar">
-        <input id="searchInput" class="search full" placeholder="Поиск по token или статусу" />
+        <input id="searchInput" class="search" placeholder="Поиск по token или статусу" />
         <select id="createDuration" class="duration">
           <option value="15">Новая ссылка: 15 мин</option>
           <option value="60" selected>Новая ссылка: 1 час</option>
@@ -79,8 +104,7 @@
         </select>
         <button class="secondary" id="copyBaseBtn">Копировать base URL</button>
       </div>
-
-      <div class="footer-note">Важно: новая сессия создаётся с пустым <span class="nowrap">public.recentPoints</span>, а текущий <span class="nowrap">lastPoint</span> копируется только как стартовая позиция.</div>
+      <div class="mini-note">Новая сессия создаётся с пустым <span class="nowrap">public.recentPoints</span>. Текущий <span class="nowrap">lastPoint</span> берётся только как стартовая позиция. При желании можно сразу задать PIN-код для live.</div>
     </div>
   </div>
 
@@ -88,11 +112,36 @@
   <div id="emptyState" class="empty" style="display:none">Сессий пока нет.</div>
 
   <div class="help">
-    Ожидаемый формат точки для совместимости: <code>{ lat, lng, timestamp }</code> или <code>{ latitude, longitude, ts }</code>.
-    Для защиты от старых данных в новую live-сессию маршрут берётся только из точек, у которых timestamp не старше <code>meta.createdAt</code>.
-    В админке включены: фильтрация шумных точек, ограничение количества recentPoints, ручное продление, отдельный переключатель авто-продления, авто-остановка неактивной сессии и QR без сервера.
+    Усиленная защита live без сервера: <b>случайный длинный token + опциональный PIN</b>. 
+    Live-страница не показывает token на экране. Старые точки отсекаются по <code>meta.createdAt</code>.
+    QR-код строится сразу на клиенте через внешний image URL.
   </div>
 </div>
+
+<div class="modal" id="createModal">
+  <div class="modal-card">
+    <div class="modal-title">Новая live-ссылка</div>
+    <div class="modal-sub">Можно создать ссылку без PIN или сразу усилить доступ кодом из 4–8 символов.</div>
+    <div class="field">
+      <label>Срок действия</label>
+      <select id="modalDuration">
+        <option value="15">15 минут</option>
+        <option value="60" selected>1 час</option>
+        <option value="180">3 часа</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>PIN-код для live (необязательно)</label>
+      <input id="modalPin" maxlength="8" placeholder="Например 1234" />
+    </div>
+    <div class="mini-note">Если PIN задан, live.html попросит ввести его перед показом маршрута. Сам PIN не отображается на live-экране.</div>
+    <div class="inline-actions">
+      <button class="secondary" id="cancelCreateBtn">Отмена</button>
+      <button id="confirmCreateBtn">Создать</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script src="https://www.gstatic.com/firebasejs/9.22.3/firebase-app-compat.js"></script>
@@ -113,16 +162,15 @@ const MIN_POINT_GAP_MS = 10 * 1000;
 let sessionsCache = {};
 let autoMaintain = true;
 let currentLiveState = null;
-
 const $ = id => document.getElementById(id);
+
 function showToast(text){ const el=$("toast"); el.textContent=text; el.classList.add("show"); clearTimeout(showToast._t); showToast._t=setTimeout(()=>el.classList.remove("show"),2200); }
-function formatSize(bytes){ if (!Number.isFinite(bytes)||bytes<=0) return "0 B"; const units=["B","KB","MB","GB"]; let i=0,n=bytes; while(n>=1024&&i<units.length-1){n/=1024;i++;} return `${n.toFixed(n>=100||i===0?0:1)} ${units[i]}`; }
 function pad(n){ return String(n).padStart(2,"0"); }
 function formatDateTime(ts){ if(!ts) return "—"; const d=new Date(ts); return `${pad(d.getDate())}.${pad(d.getMonth()+1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; }
 function formatRelative(ms){ if(!Number.isFinite(ms)) return "—"; const sign=ms<0?"-":""; const abs=Math.abs(ms); const totalSec=Math.floor(abs/1000); const d=Math.floor(totalSec/86400); const h=Math.floor((totalSec%86400)/3600); const m=Math.floor((totalSec%3600)/60); const s=totalSec%60; if(d>0) return `${sign}${d}д ${h}ч`; if(h>0) return `${sign}${h}ч ${m}м`; if(m>0) return `${sign}${m}м ${s}с`; return `${sign}${s}с`; }
 function minutesFromNow(ts){ return Math.max(0, Math.ceil((ts - Date.now()) / 60000)); }
 function buildLiveUrl(token){ return new URL(`${LIVE_PAGE_NAME}?session=${encodeURIComponent(token)}`, location.href).href; }
-function randomToken(len=18){ const chars="abcdefghijkmnpqrstuvwxyz23456789"; const arr=new Uint32Array(len); crypto.getRandomValues(arr); return Array.from(arr,n=>chars[n%chars.length]).join(""); }
+function randomToken(len=22){ const chars="abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"; const arr=new Uint32Array(len); crypto.getRandomValues(arr); return Array.from(arr,n=>chars[n%chars.length]).join(""); }
 function pointTs(p){ return Number(p?.timestamp ?? p?.ts ?? p?.time ?? p?.createdAt ?? p?.serverTime ?? 0) || 0; }
 function pointLat(p){ return Number(p?.lat ?? p?.latitude); }
 function pointLng(p){ return Number(p?.lng ?? p?.lon ?? p?.longitude); }
@@ -138,11 +186,36 @@ function filterAndLimitPoints(pointsObj, createdAt, maxPoints=MAX_RECENT_POINTS)
 }
 function statusInfo(meta){ if(!meta) return {cls:"off",label:"нет meta"}; if(meta.active!==true) return {cls:"off",label:"завершена"}; if(Number(meta.expiresAt||0)<=Date.now()) return {cls:"exp",label:"истекла"}; return {cls:"ok",label:"активна"}; }
 async function getCurrentLivePoint(){ if(currentLiveState) return currentLiveState; const snap=await db.ref("live/default").once("value"); currentLiveState=snap.val(); return currentLiveState; }
+
+function openCreateModal(){ $("modalDuration").value=$("createDuration").value || "60"; $("modalPin").value=""; $("createModal").classList.add("open"); }
+function closeCreateModal(){ $("createModal").classList.remove("open"); }
+
 async function createSession(){
-  const token=randomToken(), now=Date.now(), durationMin=Number($("createDuration").value||DEFAULT_DURATION_MIN), expiresAt=now+durationMin*60*1000;
-  const live=await getCurrentLivePoint(); const currentPoint=normalizePoint(live?.lastPoint || live?.point || live);
-  const payload={ meta:{ active:true, createdAt:now, expiresAt, autoExtend:false, autoStopAfterMs:AUTO_STOP_AFTER_MS, autoExtendByMs:AUTO_EXTEND_MS, maxRecentPoints:MAX_RECENT_POINTS, minPointDistanceM:MIN_POINT_DISTANCE_M, minPointGapMs:MIN_POINT_GAP_MS }, public:{ lastPoint: currentPoint ? { lat:currentPoint.lat, lng:currentPoint.lng, timestamp:currentPoint.timestamp||now, speed:toKmH(currentPoint.speed), accuracy:currentPoint.accuracy||0 } : null, recentPoints:{} }, viewStats:{ totalViews:0, lastViewedAt:0, viewers:{} } };
-  await db.ref(`liveSessions/${token}`).set(payload); await db.ref("adminLogs/actions").push({ action:"createSession", token, at:now, expiresAt }); showToast("Live-ссылка создана");
+  const token=randomToken();
+  const now=Date.now();
+  const durationMin=Number($("modalDuration").value || $("createDuration").value || DEFAULT_DURATION_MIN);
+  const pin=$("modalPin").value.trim();
+  const expiresAt=now+durationMin*60*1000;
+  const live=await getCurrentLivePoint();
+  const currentPoint=normalizePoint(live?.lastPoint || live?.point || live);
+  const payload={
+    meta:{
+      active:true, createdAt:now, expiresAt,
+      autoExtend:false, autoStopAfterMs:AUTO_STOP_AFTER_MS, autoExtendByMs:AUTO_EXTEND_MS,
+      maxRecentPoints:MAX_RECENT_POINTS, minPointDistanceM:MIN_POINT_DISTANCE_M, minPointGapMs:MIN_POINT_GAP_MS,
+      requirePin: !!pin
+    },
+    public:{
+      lastPoint: currentPoint ? { lat:currentPoint.lat, lng:currentPoint.lng, timestamp:currentPoint.timestamp||now, speed:toKmH(currentPoint.speed), accuracy:currentPoint.accuracy||0 } : null,
+      recentPoints:{}
+    },
+    security:{ pin: pin || null },
+    viewStats:{ totalViews:0, lastViewedAt:0, viewers:{} }
+  };
+  await db.ref(`liveSessions/${token}`).set(payload);
+  await db.ref("adminLogs/actions").push({ action:"createSession", token, at:now, expiresAt, requirePin: !!pin });
+  closeCreateModal();
+  showToast(pin ? "Live-ссылка с PIN создана" : "Live-ссылка создана");
 }
 async function stopAllActive(){ const snap=await db.ref("liveSessions").once("value"); const now=Date.now(); const updates={}; snap.forEach(child=>{ const v=child.val()||{}; if(v.meta?.active===true){ updates[`liveSessions/${child.key}/meta/active`]=false; updates[`adminLogs/actions/${db.ref().push().key}`]={action:"stopAllSingle",token:child.key,at:now}; }}); if(!Object.keys(updates).length){ showToast("Активных сессий нет"); return; } await db.ref().update(updates); showToast("Все активные сессии остановлены"); }
 async function clearExpiredSessions(){ const snap=await db.ref("liveSessions").once("value"); const now=Date.now(); const updates={}; let count=0; snap.forEach(child=>{ const meta=child.val()?.meta||{}; if(Number(meta.expiresAt||0)<=now){ updates[`liveSessions/${child.key}`]=null; updates[`adminLogs/deletions/${db.ref().push().key}`]={action:"deleteExpiredSession",token:child.key,at:now}; count++; }}); if(!count){ showToast("Истёкших сессий нет"); return; } await db.ref().update(updates); showToast(`Удалено сессий: ${count}`); }
@@ -154,19 +227,20 @@ async function maintainSessions(manual=false){
   const snap=await db.ref("liveSessions").once("value"); const now=Date.now(); const updates={}; let touched=0;
   snap.forEach(child=>{
     const token=child.key, data=child.val()||{}, meta=data.meta||{}, pub=data.public||{}, createdAt=Number(meta.createdAt||0), autoStopAfterMs=Number(meta.autoStopAfterMs||AUTO_STOP_AFTER_MS), autoExtendByMs=Number(meta.autoExtendByMs||AUTO_EXTEND_MS), maxPoints=Number(meta.maxRecentPoints||MAX_RECENT_POINTS);
-    const filtered=filterAndLimitPoints(pub.recentPoints||{}, createdAt, maxPoints), originalKeys=Object.keys(pub.recentPoints||{}), filteredKeys=filtered.map(p=>p.key), filteredMap={};
+    const filtered=filterAndLimitPoints(pub.recentPoints||{}, createdAt, maxPoints), originalKeys=Object.keys(pub.recentPoints||{}), filteredMap={};
     filtered.forEach(p=>{ filteredMap[p.key]={ lat:p.lat, lng:p.lng, timestamp:p.timestamp||0, speed:toKmH(p.speed), accuracy:p.accuracy||0 }; });
-    if(filteredKeys.length !== originalKeys.length){ updates[`liveSessions/${token}/public/recentPoints`]=filteredMap; touched++; }
+    if(filtered.length !== originalKeys.length){ updates[`liveSessions/${token}/public/recentPoints`]=filteredMap; touched++; }
     const lastPoint=normalizePoint(pub.lastPoint || (filtered.length ? filtered[filtered.length-1] : null)); const lastTs=Number(lastPoint?.timestamp || 0);
-    if(meta.active===true && lastTs && (now-lastTs) > autoStopAfterMs){ updates[`liveSessions/${token}/meta/active`]=false; touched++; }
-    if(meta.active===true && meta.autoExtend===true && lastTs && (now-lastTs) <= autoStopAfterMs){ const expiresAt=Number(meta.expiresAt||0), target=now+autoExtendByMs; if(expiresAt < target - 60*1000){ updates[`liveSessions/${token}/meta/expiresAt`]=target; touched++; } }
+    if(meta.active===true && lastTs && (now-lastTs)>autoStopAfterMs){ updates[`liveSessions/${token}/meta/active`]=false; touched++; }
+    if(meta.active===true && meta.autoExtend===true && lastTs && (now-lastTs)<=autoStopAfterMs){ const expiresAt=Number(meta.expiresAt||0), target=now+autoExtendByMs; if(expiresAt<target-60*1000){ updates[`liveSessions/${token}/meta/expiresAt`]=target; touched++; } }
     if(lastPoint){ const existing=normalizePoint(pub.lastPoint); const changed=!existing || existing.lat!==lastPoint.lat || existing.lng!==lastPoint.lng || (existing.timestamp||0)!==(lastPoint.timestamp||0); if(changed){ updates[`liveSessions/${token}/public/lastPoint`]={ lat:lastPoint.lat, lng:lastPoint.lng, timestamp:lastPoint.timestamp||0, speed:toKmH(lastPoint.speed), accuracy:lastPoint.accuracy||0 }; touched++; } }
   });
-  if(Object.keys(updates).length) await db.ref().update(updates); if(manual) showToast(touched ? `Сессии обновлены (${touched} изменений)` : "Обновление завершено, изменений нет");
+  if(Object.keys(updates).length) await db.ref().update(updates);
+  if(manual) showToast(touched ? `Сессии обновлены (${touched} изменений)` : "Изменений нет");
 }
 function sessionCard(token,data){
-  const meta=data.meta||{}, pub=data.public||{}, viewStats=data.viewStats||{}, status=statusInfo(meta), viewersNow=calcViewers(viewStats), totalViews=Number(viewStats.totalViews||0), lastPoint=normalizePoint(pub.lastPoint), lastSeen=lastPoint?.timestamp ? formatRelative(Date.now()-lastPoint.timestamp)+" назад" : "—", expiresAt=Number(meta.expiresAt||0), points=filterAndLimitPoints(pub.recentPoints||{}, Number(meta.createdAt||0), Number(meta.maxRecentPoints||MAX_RECENT_POINTS)), liveUrl=buildLiveUrl(token), autoExtendOn=meta.autoExtend===true;
-  return `<div class="session" data-token="${token}" data-status="${status.label}">
+  const meta=data.meta||{}, pub=data.public||{}, security=data.security||{}, viewStats=data.viewStats||{}, status=statusInfo(meta), viewersNow=calcViewers(viewStats), totalViews=Number(viewStats.totalViews||0), lastPoint=normalizePoint(pub.lastPoint), lastSeen=lastPoint?.timestamp ? formatRelative(Date.now()-lastPoint.timestamp)+" назад" : "—", expiresAt=Number(meta.expiresAt||0), points=filterAndLimitPoints(pub.recentPoints||{}, Number(meta.createdAt||0), Number(meta.maxRecentPoints||MAX_RECENT_POINTS)), liveUrl=buildLiveUrl(token), autoExtendOn=meta.autoExtend===true;
+  return `<div class="session">
     <div class="session-head"><div class="token">session • ${token}</div><div class="badge ${status.cls}">${status.label}</div></div>
     <div class="session-sub">
       <div class="mini"><div class="k">Создана</div><div class="v">${formatDateTime(meta.createdAt)}</div></div>
@@ -174,30 +248,58 @@ function sessionCard(token,data){
       <div class="mini"><div class="k">Зрители</div><div class="v">${viewersNow}</div><div class="s">всего: ${totalViews}</div></div>
       <div class="mini"><div class="k">Точек</div><div class="v">${points.length}</div><div class="s">last seen: ${lastSeen}</div></div>
     </div>
-    <div class="link-box"><div class="link-row"><div class="link">${liveUrl}</div><button class="secondary" onclick='copyText(${JSON.stringify(liveUrl)})'>Копировать</button></div></div>
+    <div class="link-box">
+      <div class="link-row"><div class="link">${liveUrl}</div><button class="secondary" onclick='copyText(${JSON.stringify(liveUrl)})'>Копировать</button></div>
+      <div class="row">
+        <div class="pin-chip">${meta.requirePin ? "🔐 PIN включён" : "🔓 без PIN"}</div>
+        ${meta.requirePin ? `<div class="pin-chip">код: ${String(security.pin || "—")}</div>` : ``}
+      </div>
+    </div>
     <div class="row"><button onclick='openLive(${JSON.stringify(liveUrl)})'>Открыть live</button><button class="secondary" onclick='toggleQr(${JSON.stringify(token)})'>Показать QR</button><button class="${autoExtendOn ? "success" : "secondary"}" onclick='toggleAutoExtendAction(${JSON.stringify(token)}, ${!autoExtendOn})'>${autoExtendOn ? "Авто-продление: вкл" : "Авто-продление: выкл"}</button></div>
     <div class="row"><button class="secondary" onclick='extendAction(${JSON.stringify(token)}, 15)'>Продлить 15 мин</button><button class="secondary" onclick='extendAction(${JSON.stringify(token)}, 60)'>Продлить 1 час</button><button class="secondary" onclick='extendAction(${JSON.stringify(token)}, 180)'>Продлить 3 часа</button></div>
     <div class="row"><button class="warn" onclick='stopAction(${JSON.stringify(token)})'>Завершить</button><button class="danger" onclick='deleteAction(${JSON.stringify(token)})'>Удалить</button></div>
-    <div class="qr" id="qr-${token}"><img loading="lazy" alt="QR code" src="https://api.qrserver.com/v1/create-qr-code/?size=360x360&data=${encodeURIComponent(liveUrl)}"><div class="footer-note">Сканируй QR для быстрого открытия live на телефоне.</div></div>
+    <div class="qr-preview" id="qr-${token}">
+      <div class="qr-card">
+        <img loading="lazy" alt="QR code" src="https://api.qrserver.com/v1/create-qr-code/?size=420x420&data=${encodeURIComponent(liveUrl)}">
+        <div>
+          <div style="font-size:20px;font-weight:900;margin-bottom:6px">QR для live</div>
+          <div class="muted" style="line-height:1.55">Сканируй на телефоне для мгновенного открытия live-ссылки. ${meta.requirePin ? "После открытия потребуется PIN." : ""}</div>
+          <div class="row">
+            <button class="secondary" onclick='copyText(${JSON.stringify(liveUrl)})'>Копировать ссылку</button>
+            ${meta.requirePin ? `<button class="secondary" onclick='copyText(${JSON.stringify(String(security.pin || ""))})'>Копировать PIN</button>` : ``}
+          </div>
+        </div>
+      </div>
+    </div>
   </div>`;
 }
 function renderSessions(sessions){
-  const grid=$("sessionGrid"), empty=$("emptyState"), q=$("searchInput").value.trim().toLowerCase();
+  const q=$("searchInput").value.trim().toLowerCase();
   const entries=Object.entries(sessions).sort((a,b)=>Number(b[1]?.meta?.expiresAt||0)-Number(a[1]?.meta?.expiresAt||0)).filter(([token,data])=>!q || token.toLowerCase().includes(q) || statusInfo(data?.meta).label.includes(q));
-  if(!entries.length){ grid.innerHTML=""; empty.style.display="block"; } else { empty.style.display="none"; grid.innerHTML=entries.map(([token,data])=>sessionCard(token,data)).join(""); }
-  let total=0, active=0, expired=0, viewers=0; Object.values(sessions).forEach(data=>{ total++; const meta=data?.meta||{}; if(meta.active===true && Number(meta.expiresAt||0)>Date.now()) active++; if(Number(meta.expiresAt||0)<=Date.now()) expired++; viewers += calcViewers(data?.viewStats||{}); });
+  $("sessionGrid").innerHTML = entries.length ? entries.map(([token,data])=>sessionCard(token,data)).join("") : "";
+  $("emptyState").style.display = entries.length ? "none" : "block";
+  let total=0, active=0, expired=0, viewers=0; Object.values(sessions).forEach(data=>{ total++; const meta=data?.meta||{}; if(meta.active===true && Number(meta.expiresAt||0)>Date.now()) active++; if(Number(meta.expiresAt||0)<=Date.now()) expired++; viewers+=calcViewers(data?.viewStats||{}); });
   $("statTotal").textContent=total; $("statActive").textContent=active; $("statExpired").textContent=expired; $("statViewers").textContent=viewers;
 }
 async function copyText(text){ try{ await navigator.clipboard.writeText(text); showToast("Скопировано"); }catch(e){ showToast("Не удалось скопировать"); } }
 function openLive(url){ window.open(url, "_blank", "noopener,noreferrer"); }
-function toggleQr(token){ const box=document.getElementById(`qr-${token}`); if(box) box.classList.toggle("open"); }
-async function extendAction(token, minutes){ await extendSession(token, minutes); }
+function toggleQr(token){ document.getElementById(`qr-${token}`)?.classList.toggle("open"); }
+async function extendAction(token, m){ await extendSession(token,m); }
 async function stopAction(token){ await stopSession(token); }
 async function deleteAction(token){ if(!confirm("Удалить эту live-сессию?")) return; await deleteSession(token); }
-async function toggleAutoExtendAction(token, value){ await toggleAutoExtend(token, value); }
+async function toggleAutoExtendAction(token, value){ await toggleAutoExtend(token,value); }
 function updateClock(){ $("nowLabel").textContent=new Date().toLocaleString("ru-RU"); renderSessions(sessionsCache); }
 function bindUI(){
-  $("createBtn").addEventListener("click", createSession); $("refreshBtn").addEventListener("click",()=>maintainSessions(true)); $("clearExpiredBtn").addEventListener("click", clearExpiredSessions); $("stopAllBtn").addEventListener("click", stopAllActive); $("searchInput").addEventListener("input",()=>renderSessions(sessionsCache)); $("copyBaseBtn").addEventListener("click",()=>copyText(new URL(LIVE_PAGE_NAME, location.href).href)); $("toggleAutoMaintainBtn").addEventListener("click",()=>{ autoMaintain=!autoMaintain; $("toggleAutoMaintainBtn").textContent=`Автоподдержка: ${autoMaintain?"вкл":"выкл"}`; showToast(autoMaintain?"Автоподдержка включена":"Автоподдержка выключена"); });
+  $("createBtn").addEventListener("click", openCreateModal);
+  $("confirmCreateBtn").addEventListener("click", createSession);
+  $("cancelCreateBtn").addEventListener("click", closeCreateModal);
+  $("createModal").addEventListener("click", e=>{ if(e.target.id==="createModal") closeCreateModal(); });
+  $("refreshBtn").addEventListener("click",()=>maintainSessions(true));
+  $("clearExpiredBtn").addEventListener("click", clearExpiredSessions);
+  $("stopAllBtn").addEventListener("click", stopAllActive);
+  $("searchInput").addEventListener("input",()=>renderSessions(sessionsCache));
+  $("copyBaseBtn").addEventListener("click",()=>copyText(new URL(LIVE_PAGE_NAME, location.href).href));
+  $("toggleAutoMaintainBtn").addEventListener("click",()=>{ autoMaintain=!autoMaintain; $("toggleAutoMaintainBtn").textContent=`Автоподдержка: ${autoMaintain?"вкл":"выкл"}`; showToast(autoMaintain?"Автоподдержка включена":"Автоподдержка выключена"); });
 }
 function subscribe(){ db.ref("live/default").on("value", snap=>currentLiveState=snap.val()||null); db.ref("liveSessions").on("value", snap=>{ sessionsCache=snap.val()||{}; renderSessions(sessionsCache); }); }
 bindUI(); subscribe(); updateClock(); setInterval(updateClock,1000); setInterval(()=>{ if(autoMaintain) maintainSessions(false); }, 60*1000);
