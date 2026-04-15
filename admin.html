@@ -522,7 +522,6 @@ const firebaseConfig = {
 };
 
 const SETTINGS_KEY = "mygps_admin_settings_prod_v2";
-
 const DEFAULT_SETTINGS = {
   onlineFreshnessMin: 3,
   junkMaxAccuracy: 100,
@@ -549,7 +548,6 @@ function loadSettings() {
     return { ...DEFAULT_SETTINGS };
   }
 }
-
 function saveSettingsToStorage(next) {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
 }
@@ -562,7 +560,6 @@ const db = getDatabase(app);
 const provider = new GoogleAuthProvider();
 
 const qs = (id) => document.getElementById(id);
-
 const authCard = qs("authCard");
 const adminPanel = qs("adminPanel");
 const authMessage = qs("authMessage");
@@ -631,11 +628,9 @@ function setBusy(flag) {
     btn.disabled = flag;
   });
 }
-
 function errText(e) {
   return e?.message || e?.code || String(e);
 }
-
 async function runSafe(title, fn, { silentSuccess = false, reloadSessions = false, reloadHistory = false } = {}) {
   if (isBusy) return;
   try {
@@ -671,7 +666,6 @@ function applyMapStyle(styleKey) {
   qs("mapStyleCurrentLabel").textContent = style.label;
   qs("mapStyleSelect").value = styleKey;
 }
-
 applyMapStyle(settings.mapStyle);
 
 const startMarker = L.marker([56.95,24.10]).addTo(historyMap).bindTooltip("Старт", {permanent:true, direction:"top"});
@@ -749,12 +743,10 @@ function clearRouteSegments() {
   routeSegments.forEach(layer => historyMap.removeLayer(layer));
   routeSegments = [];
 }
-
 function clearStopMarkers() {
   stopMarkers.forEach(marker => historyMap.removeLayer(marker));
   stopMarkers = [];
 }
-
 function detachRealtimeListeners() {
   unsubLiveDefault?.();
   unsubLiveSessions?.();
@@ -767,14 +759,12 @@ function detachRealtimeListeners() {
   unsubDeletions = null;
   unsubActions = null;
 }
-
 function stopAutoSyncTimer() {
   if (autoSyncTimer) {
     clearInterval(autoSyncTimer);
     autoSyncTimer = null;
   }
 }
-
 function maybeStartAutoSync() {
   stopAutoSyncTimer();
   const seconds = Number(qs("autoSyncIntervalSelect").value || 0);
@@ -789,20 +779,17 @@ function showError(text) {
   box.textContent = text;
   box.classList.remove("hidden");
 }
-
 function hideError() {
   const box = qs("errorBox");
   box.classList.add("hidden");
   box.textContent = "";
 }
-
 function showShareResult(url, expiresAt) {
   createdShareUrl = url;
   qs("shareLinkText").textContent = url;
   qs("shareExpiresText").textContent = fmtTime(expiresAt);
   qs("shareResultBox").classList.remove("hidden");
 }
-
 function hideShareResult() {
   createdShareUrl = "";
   qs("shareLinkText").textContent = "—";
@@ -822,7 +809,6 @@ function resetNowPanel() {
   liveTrail.setLatLngs([]);
   liveMarker.setLatLng([56.95,24.10]);
 }
-
 function resetHealthPanel() {
   qs("healthLastPointTime").textContent = "—";
   qs("healthLastPointAge").textContent = "—";
@@ -834,7 +820,6 @@ function resetHealthPanel() {
   qs("healthLiveSource").textContent = "—";
   qs("healthNotice").textContent = "Состояние системы будет показано здесь.";
 }
-
 function resetHistoryPanel() {
   currentFiltered = [];
   currentPointIndex = 0;
@@ -862,14 +847,12 @@ function resetHistoryPanel() {
   if (speedChart) { speedChart.destroy(); speedChart = null; }
   if (distanceChart) { distanceChart.destroy(); distanceChart = null; }
 }
-
 function resetSessionsPanel() {
   qs("sessionsTbody").innerHTML = '<tr><td colspan="6">Сессий пока нет</td></tr>';
   sessionTrail.setLatLngs([]);
   sessionMarker.setLatLng([56.95,24.10]);
   hideShareResult();
 }
-
 function resetJournalPanel() {
   qs("journalTbody").innerHTML = "";
 }
@@ -899,30 +882,25 @@ function setDateTimeRange(start, end) {
   qs("toHour").value = String(end.getHours()).padStart(2,"0");
   qs("toMinute").value = String(end.getMinutes()).padStart(2,"0");
 }
-
 function setRangeFromMinutesBack(minutes) {
   const now = new Date();
   const start = new Date(Date.now() - minutes * 60 * 1000);
   setDateTimeRange(start, now);
   renderHistory();
 }
-
 function setDefaultPeriodToday() {
   const now = new Date();
   const start = new Date();
   start.setHours(0,0,0,0);
   setDateTimeRange(start, now);
 }
-
 function parseDateTime(dateVal, hVal, mVal) {
   if (!dateVal) return null;
   return new Date(`${dateVal}T${hVal || "00"}:${mVal || "00"}:00`).getTime();
 }
-
 function fmtTime(v) {
   return v ? new Date(v).toLocaleString("ru-RU") : "—";
 }
-
 function formatIdle(ms) {
   if (!ms || ms < 1000) return "—";
   const s = Math.floor(ms / 1000);
@@ -931,7 +909,6 @@ function formatIdle(ms) {
   const sec = s % 60;
   return h > 0 ? `${h}ч ${m}м ${sec}с` : `${m}м ${sec}с`;
 }
-
 function formatDuration(ms) {
   if (!ms || ms < 0) return "—";
   const s = Math.floor(ms / 1000);
@@ -939,7 +916,6 @@ function formatDuration(ms) {
   const m = Math.floor((s % 3600) / 60);
   return h > 0 ? `${h}ч ${m}м` : `${m}м`;
 }
-
 function distanceMeters(a, b) {
   const toRad = (v) => v * Math.PI / 180;
   const R = 6371000;
@@ -950,7 +926,6 @@ function distanceMeters(a, b) {
   const x = Math.sin(dLat / 2) ** 2 + Math.sin(dLon / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2);
   return R * (2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x)));
 }
-
 function looksJunk(prev, cur) {
   const acc = Number(cur.accuracy || 0);
   const sp = Number(cur.speed || 0);
@@ -964,7 +939,6 @@ function looksJunk(prev, cur) {
   }
   return false;
 }
-
 function isStopPoint(point) {
   return Number(point?.speed || 0) <= settings.stopSpeedThreshold;
 }
@@ -1009,7 +983,6 @@ function computeSummary(points) {
     maxSpeed: speeds.length ? Math.max(...speeds) : 0
   };
 }
-
 function detectStops(points) {
   const stops = [];
   let startIdx = null;
@@ -1030,7 +1003,6 @@ function detectStops(points) {
   }
   return stops;
 }
-
 function splitTrips(points) {
   if (!points.length) return [];
   const trips = [];
@@ -1046,11 +1018,9 @@ function splitTrips(points) {
   trips.push(cur);
   return trips;
 }
-
 function geocodeKey(lat, lon) {
   return `${lat.toFixed(5)},${lon.toFixed(5)}`;
 }
-
 async function reverseGeocode(lat, lon) {
   const key = geocodeKey(lat, lon);
   if (geocodeCache.has(key)) return geocodeCache.get(key);
@@ -1068,13 +1038,11 @@ async function reverseGeocode(lat, lon) {
     return fallback;
   }
 }
-
 function speedColor(speed) {
   if (speed <= settings.stopSpeedThreshold) return "#22c55e";
   if (speed <= 20) return "#eab308";
   return "#ef4444";
 }
-
 function downsamplePoints(points, maxPoints) {
   if (points.length <= maxPoints) return points;
   const step = Math.ceil(points.length / maxPoints);
@@ -1095,7 +1063,6 @@ function renderStopMarkers(stops) {
     stopMarkers.push(marker);
   });
 }
-
 async function updateHistoryMap(points, stops=[]) {
   clearRouteSegments();
   const mapPoints = downsamplePoints(points.filter(p=>p.latitude!=null&&p.longitude!=null), settings.mapMaxPoints);
@@ -1123,7 +1090,6 @@ async function updateHistoryMap(points, stops=[]) {
   qs("startAddress").textContent = await reverseGeocode(Number(first.latitude), Number(first.longitude));
   qs("endAddress").textContent = await reverseGeocode(Number(last.latitude), Number(last.longitude));
 }
-
 async function focusPointByIndex(idx) {
   if (!currentFiltered.length) return;
   currentPointIndex = Math.max(0, Math.min(idx, currentFiltered.length - 1));
@@ -1140,12 +1106,6 @@ async function focusPointByIndex(idx) {
   if (reqId === selectedAddressRequestId) qs("selectedAddress").textContent = addr;
 }
 
-function formatSize(bytes) {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-}
-
 function updateUsage() {
   const historyObj = Object.fromEntries(allHistoryPoints.map(p => [String(p.timestamp), p]));
   const historyBytes = new Blob([JSON.stringify(historyObj)]).size;
@@ -1155,7 +1115,6 @@ function updateUsage() {
   qs("totalSize").textContent = formatSize(historyBytes + sessionsBytes);
   qs("historyCount").textContent = String(allHistoryPoints.length);
 }
-
 function updateHealthPanel() {
   const now = Date.now();
   const lastPoint = allHistoryPoints.length ? allHistoryPoints[allHistoryPoints.length - 1] : null;
@@ -1234,7 +1193,6 @@ function updateCharts(points) {
     tbody.appendChild(tr);
   });
 }
-
 function renderTrips(points) {
   const trips = splitTrips(points);
   const tbody = qs("tripsTbody");
@@ -1251,7 +1209,6 @@ function renderTrips(points) {
     tbody.appendChild(tr);
   });
 }
-
 function pointTags(prev, cur) {
   const tags = [];
   if (looksJunk(prev, cur)) tags.push("мусор");
@@ -1260,7 +1217,6 @@ function pointTags(prev, cur) {
   if (isStopPoint(cur)) tags.push("стоянка");
   return tags;
 }
-
 function renderHistory() {
   const pts = filteredHistory();
   if (!pts.length) {
@@ -1333,7 +1289,6 @@ function downloadText(name, content, type) {
   a.click();
   URL.revokeObjectURL(url);
 }
-
 function exportWithTimestamp(prefix, data) {
   const ts = new Date().toISOString().replace(/[:.]/g, "-");
   downloadText(`${prefix}_${ts}.json`, JSON.stringify(data, null, 2), "application/json");
@@ -1348,7 +1303,6 @@ async function loadHistory() {
   updateNowFromAvailableSources();
   updateHealthPanel();
 }
-
 async function loadSessions() {
   const snap = await get(ref(db, "liveSessions"));
   allSessions = snap.val() || {};
@@ -1363,29 +1317,24 @@ function getPeriodFileSuffix() {
   const to = `${qs("toDate").value || "to"}_${qs("toHour").value || "00"}-${qs("toMinute").value || "00"}`;
   return `${from}__${to}`;
 }
-
 function exportJson() {
   downloadText(`history_${getPeriodFileSuffix()}.json`, JSON.stringify(filteredHistory(), null, 2), "application/json");
 }
-
 function exportCsv() {
   const pts = filteredHistory();
   const lines = ["timestamp,latitude,longitude,accuracy,speed"];
   pts.forEach(p => lines.push([p.timestamp ?? "", p.latitude ?? "", p.longitude ?? "", p.accuracy ?? "", p.speed ?? ""].join(",")));
   downloadText(`history_${getPeriodFileSuffix()}.csv`, lines.join("\n"), "text/csv");
 }
-
 function exportGpxFromPoints(pts, filename) {
   const lines = ['<?xml version="1.0" encoding="UTF-8"?>','<gpx version="1.1" creator="MyGps Admin" xmlns="http://www.topografix.com/GPX/1/1">','<trk><name>History Export</name><trkseg>'];
   pts.forEach(p => lines.push(`<trkpt lat="${p.latitude}" lon="${p.longitude}"><time>${new Date(Number(p.timestamp || 0)).toISOString()}</time></trkpt>`));
   lines.push("</trkseg></trk></gpx>");
   downloadText(filename, lines.join(""), "application/gpx+xml");
 }
-
 function exportGpx() {
   exportGpxFromPoints(filteredHistory(), `history_${getPeriodFileSuffix()}.gpx`);
 }
-
 function exportPdf() {
   const pts = filteredHistory();
   const s = computeSummary(pts);
@@ -1413,32 +1362,26 @@ function exportPdf() {
   doc.autoTable({ startY: 70, head: [["Time", "Coordinates", "Speed km/h"]], body: rows, styles: {fontSize: 9} });
   doc.save(`history_${getPeriodFileSuffix()}.pdf`);
 }
-
 async function exportFullDbBackup() {
   const snap = await get(ref(db));
   exportWithTimestamp("full_db_backup", snap.val() || {});
 }
-
 async function exportLiveSessionsBackup() {
   const snap = await get(ref(db, "liveSessions"));
   exportWithTimestamp("liveSessions_backup", snap.val() || {});
 }
-
 async function exportAdminLogsBackup() {
   const snap = await get(ref(db, "adminLogs"));
   exportWithTimestamp("adminLogs_backup", snap.val() || {});
 }
-
 async function logDeletion(kind, description) {
   const entryRef = push(ref(db, "adminLogs/deletions"));
   await set(entryRef, { ts: Date.now(), kind, description, uid: auth.currentUser?.uid || null, email: auth.currentUser?.email || null });
 }
-
 async function logAction(kind, description) {
   const entryRef = push(ref(db, "adminLogs/actions"));
   await set(entryRef, { ts: Date.now(), kind, description, uid: auth.currentUser?.uid || null, email: auth.currentUser?.email || null });
 }
-
 async function deleteRange() {
   const pts = filteredHistory();
   if (!pts.length) {
@@ -1457,7 +1400,6 @@ async function deleteRange() {
     await update(ref(db), updatesObj);
   }, { reloadHistory: true, silentSuccess: false });
 }
-
 async function deleteVisibleJunkPoints() {
   const pts = filteredHistory().filter((p, idx, arr) => looksJunk(arr[idx - 1], p));
   if (!pts.length) {
@@ -1484,14 +1426,12 @@ function getSessionStatus(session) {
   if (!active && expiresAt > now) return "ended";
   return "expired";
 }
-
 function getSessionStatusLabel(status) {
   if (status === "active") return "активна";
   if (status === "expired") return "истекла";
   if (status === "ended") return "завершена вручную";
   return "—";
 }
-
 async function endSession(token) {
   if (!confirm(`Завершить live-сессию ${token}?`)) return;
   await runSafe("Завершение live-сессии", async () => {
@@ -1499,7 +1439,6 @@ async function endSession(token) {
     await logAction("session_end", `Завершена live-сессия ${token}`);
   }, { reloadSessions: true, silentSuccess: false });
 }
-
 async function extendSession(token) {
   const minutes = Number(qs("extendSessionMinutesInput").value || 0);
   if (!minutes || minutes <= 0) {
@@ -1523,27 +1462,36 @@ async function extendSession(token) {
   }, { reloadSessions: true, silentSuccess: false });
 }
 
+/* ОБНОВЛЁННАЯ ЛОГИКА LIVE-СЕССИЙ */
 function getRecentSourcePoints(mode, pointsLimit) {
   const limit = Math.max(2, Math.min(500, Number(pointsLimit || settings.liveShareDefaultPoints)));
-  const livePoints = Object.values(liveDefaultData?.recentPoints || {}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
-  const historyPoints = allHistoryPoints.filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+
+  const livePoints = Object.values(liveDefaultData?.recentPoints || {})
+    .filter(Boolean)
+    .sort((a, b) => Number(a.timestamp || 0) - Number(b.timestamp || 0));
+
+  const historyPoints = allHistoryPoints
+    .filter(Boolean)
+    .sort((a, b) => Number(a.timestamp || 0) - Number(b.timestamp || 0));
 
   if (mode === "live") return livePoints.slice(-limit);
   if (mode === "history") return historyPoints.slice(-limit);
   if (livePoints.length) return livePoints.slice(-limit);
   return historyPoints.slice(-limit);
 }
-
 function getLastPointForShare(points) {
   return points.length ? points[points.length - 1] : null;
 }
-
+function getCurrentPointForShare(mode) {
+  if (mode === "live") return liveDefaultData?.lastPoint || null;
+  if (mode === "history") return allHistoryPoints.length ? allHistoryPoints[allHistoryPoints.length - 1] : null;
+  return liveDefaultData?.lastPoint || (allHistoryPoints.length ? allHistoryPoints[allHistoryPoints.length - 1] : null);
+}
 function generateSessionToken() {
   const arr = new Uint8Array(24);
   crypto.getRandomValues(arr);
   return Array.from(arr, b => b.toString(16).padStart(2, "0")).join("");
 }
-
 function getShareDurationMinutes() {
   const preset = qs("shareDurationPreset").value;
   if (preset === "custom") {
@@ -1553,7 +1501,6 @@ function getShareDurationMinutes() {
   }
   return Number(preset);
 }
-
 function buildShareUrl(token) {
   return `https://mygpstrack.github.io/mygps/live.html?session=${encodeURIComponent(token)}`;
 }
@@ -1566,24 +1513,20 @@ async function createLiveSession() {
   }
 
   const sourceMode = qs("shareSource").value;
-  const pointsLimit = Number(qs("sharePointsLimit").value || settings.liveShareDefaultPoints);
-  const sourcePoints = getRecentSourcePoints(sourceMode, pointsLimit);
+  const pointsLimit = Math.max(
+    2,
+    Math.min(500, Number(qs("sharePointsLimit").value || settings.liveShareDefaultPoints))
+  );
+  const currentPoint = getCurrentPointForShare(sourceMode);
 
-  if (!sourcePoints.length) {
-    alert("Нет данных для создания live-ссылки.");
+  if (!currentPoint) {
+    alert("Нет текущей точки для создания live-ссылки.");
     return;
   }
 
   const token = generateSessionToken();
   const now = Date.now();
   const expiresAt = now + durationMinutes * 60 * 1000;
-  const lastPoint = getLastPointForShare(sourcePoints);
-
-  const recentPointsObj = {};
-  sourcePoints.forEach((p) => {
-    const key = String(p.timestamp || Date.now() + Math.random());
-    recentPointsObj[key] = p;
-  });
 
   const currentUser = auth.currentUser;
   const payload = {
@@ -1593,11 +1536,12 @@ async function createLiveSession() {
       expiresAt,
       createdBy: currentUser?.uid || null,
       createdByEmail: currentUser?.email || null,
-      durationMinutes
+      durationMinutes,
+      pointsLimit
     },
     public: {
-      lastPoint,
-      recentPoints: recentPointsObj
+      lastPoint: currentPoint,
+      recentPoints: {}
     },
     viewStats: {
       openCount: 0,
@@ -1620,37 +1564,73 @@ async function syncActiveSessionsFromLiveDefault(silent = false) {
   }
 
   const now = Date.now();
-  const activeEntries = Object.entries(allSessions).filter(([k, v]) => k !== "_init" && v?.meta?.active && Number(v?.meta?.expiresAt || 0) > now);
+  const activeEntries = Object.entries(allSessions).filter(([k, v]) =>
+    k !== "_init" && v?.meta?.active && Number(v?.meta?.expiresAt || 0) > now
+  );
+
   if (!activeEntries.length) {
     if (!silent) alert("Активных live-сессий нет.");
     return;
   }
 
-  const livePoints = Object.values(liveDefaultData.recentPoints || {}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0)).slice(-settings.liveShareDefaultPoints);
-  const recentPointsObj = {};
-  livePoints.forEach((p) => { recentPointsObj[String(p.timestamp || Date.now() + Math.random())] = p; });
-
   if (silent) {
-    const updatesObj = {};
-    activeEntries.forEach(([token]) => {
-      updatesObj[`liveSessions/${token}/public/lastPoint`] = liveDefaultData.lastPoint;
-      updatesObj[`liveSessions/${token}/public/recentPoints`] = recentPointsObj;
-      updatesObj[`liveSessions/${token}/meta/lastSyncedAt`] = Date.now();
-    });
-    await update(ref(db), updatesObj);
-    return;
-  }
+    for (const [token, session] of activeEntries) {
+      const createdAt = Number(session?.meta?.createdAt || 0);
+      const pointsLimit = Math.max(
+        2,
+        Math.min(500, Number(session?.meta?.pointsLimit || settings.liveShareDefaultPoints))
+      );
 
-  await runSafe("Синхронизация active-сессий", async () => {
-    for (const [token] of activeEntries) {
+      const livePoints = Object.values(liveDefaultData?.recentPoints || {})
+        .filter(Boolean)
+        .filter((p) => Number(p.timestamp || 0) >= createdAt)
+        .sort((a, b) => Number(a.timestamp || 0) - Number(b.timestamp || 0))
+        .slice(-pointsLimit);
+
+      const recentPointsObj = {};
+      livePoints.forEach((p) => {
+        recentPointsObj[String(p.timestamp || (Date.now() + Math.random()))] = p;
+      });
+
       await update(ref(db, `liveSessions/${token}/public`), {
-        lastPoint: liveDefaultData.lastPoint,
+        lastPoint: liveDefaultData.lastPoint || null,
         recentPoints: recentPointsObj
       });
       await update(ref(db, `liveSessions/${token}/meta`), {
         lastSyncedAt: Date.now()
       });
     }
+    return;
+  }
+
+  await runSafe("Синхронизация active-сессий", async () => {
+    for (const [token, session] of activeEntries) {
+      const createdAt = Number(session?.meta?.createdAt || 0);
+      const pointsLimit = Math.max(
+        2,
+        Math.min(500, Number(session?.meta?.pointsLimit || settings.liveShareDefaultPoints))
+      );
+
+      const livePoints = Object.values(liveDefaultData?.recentPoints || {})
+        .filter(Boolean)
+        .filter((p) => Number(p.timestamp || 0) >= createdAt)
+        .sort((a, b) => Number(a.timestamp || 0) - Number(b.timestamp || 0))
+        .slice(-pointsLimit);
+
+      const recentPointsObj = {};
+      livePoints.forEach((p) => {
+        recentPointsObj[String(p.timestamp || (Date.now() + Math.random()))] = p;
+      });
+
+      await update(ref(db, `liveSessions/${token}/public`), {
+        lastPoint: liveDefaultData.lastPoint || null,
+        recentPoints: recentPointsObj
+      });
+      await update(ref(db, `liveSessions/${token}/meta`), {
+        lastSyncedAt: Date.now()
+      });
+    }
+
     await logAction("session_sync_active", `Синхронизировано active-сессий: ${activeEntries.length}`);
   }, { reloadSessions: true, silentSuccess: false });
 }
@@ -1677,7 +1657,6 @@ async function endAllActiveSessions() {
     await logAction("session_end_all", `Завершены все активные сессии: ${activeTokens.length}`);
   }, { reloadSessions: true, silentSuccess: false });
 }
-
 async function cleanupExpiredSessions() {
   const now = Date.now();
   const tokensToDelete = Object.entries(allSessions)
@@ -1701,7 +1680,6 @@ async function cleanupExpiredSessions() {
     await logAction("expired_sessions_cleanup", `Удалено истёкших сессий: ${tokensToDelete.length}`);
   }, { reloadSessions: true, silentSuccess: false });
 }
-
 function renderSessions() {
   const tbody = qs("sessionsTbody");
   tbody.innerHTML = "";
@@ -1775,11 +1753,9 @@ function renderSessions() {
   tbody.querySelectorAll("button[data-extend]").forEach((b) => {
     b.onclick = () => extendSession(b.dataset.extend);
   });
-
   tbody.querySelectorAll("button[data-end]").forEach((b) => {
     b.onclick = () => endSession(b.dataset.end);
   });
-
   tbody.querySelectorAll("button[data-delete]").forEach((b) => {
     b.onclick = async () => {
       const token = b.dataset.delete;
@@ -1808,7 +1784,6 @@ function findIdleDurationMs(points, lastPoint) {
   }
   return Math.max(0, Number(lastPoint.timestamp) - idleStartTs);
 }
-
 function updateNowUI(point, sourceLabel, recentPoints = []) {
   currentNowSourceLabel = sourceLabel || "—";
 
@@ -1843,7 +1818,6 @@ function updateNowUI(point, sourceLabel, recentPoints = []) {
   qs("nowBearing").textContent = point?.bearing != null ? `${Number(point.bearing).toFixed(0)}°` : "—";
   qs("nowIdle").textContent = idleMs == null ? "—" : idleMs === 0 ? "нет" : formatIdle(idleMs);
 }
-
 function updateNowFromAvailableSources() {
   if (liveDefaultData && liveDefaultData.lastPoint) {
     const pts = Object.values(liveDefaultData.recentPoints || {}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
@@ -1899,7 +1873,6 @@ qs("googleBtn").onclick = async () => {
     showError("Ошибка Google-входа: " + errText(e));
   }
 };
-
 qs("emailLoginBtn").onclick = async () => {
   try {
     hideError();
@@ -1908,7 +1881,6 @@ qs("emailLoginBtn").onclick = async () => {
     showError("Ошибка входа по email: " + errText(e));
   }
 };
-
 qs("emailRegisterBtn").onclick = async () => {
   try {
     hideError();
@@ -1917,7 +1889,6 @@ qs("emailRegisterBtn").onclick = async () => {
     showError("Ошибка создания email-аккаунта: " + errText(e));
   }
 };
-
 qs("logoutBtn").onclick = async () => {
   detachRealtimeListeners();
   stopAutoSyncTimer();
@@ -1931,7 +1902,6 @@ qs("todayBtn").onclick = () => {
   setDateTimeRange(start, now);
   renderHistory();
 };
-
 qs("yesterdayBtn").onclick = () => {
   const start = new Date();
   start.setDate(start.getDate() - 1);
@@ -1941,7 +1911,6 @@ qs("yesterdayBtn").onclick = () => {
   setDateTimeRange(start, end);
   renderHistory();
 };
-
 qs("weekBtn").onclick = () => {
   const now = new Date();
   const start = new Date();
@@ -1949,7 +1918,6 @@ qs("weekBtn").onclick = () => {
   setDateTimeRange(start, now);
   renderHistory();
 };
-
 qs("range30mBtn").onclick = () => setRangeFromMinutesBack(30);
 qs("range1hBtn").onclick = () => setRangeFromMinutesBack(60);
 qs("range6hBtn").onclick = () => setRangeFromMinutesBack(360);
@@ -1973,7 +1941,6 @@ qs("resetFiltersBtn").onclick = () => {
   qs("movementFilter").value = "all";
   renderHistory();
 };
-
 qs("showStopsOnMapToggle").onchange = () => {
   settings.showStopsOnMap = qs("showStopsOnMapToggle").checked;
   saveSettingsToStorage(settings);
@@ -2016,7 +1983,6 @@ qs("liveAutoCenterBtn").onclick = () => {
 
 qs("createShareBtn").onclick = createLiveSession;
 qs("clearShareResultBtn").onclick = hideShareResult;
-
 qs("copyCreatedShareBtn").onclick = async () => {
   if (!createdShareUrl) return;
   try {
@@ -2026,14 +1992,12 @@ qs("copyCreatedShareBtn").onclick = async () => {
     alert("Копирование ссылки: ошибка\n\n" + errText(e));
   }
 };
-
 qs("openCreatedShareBtn").onclick = () => {
   if (!createdShareUrl) return;
   window.open(createdShareUrl, "_blank", "noopener,noreferrer");
 };
 
 qs("refreshJournalBtn").onclick = renderJournal;
-
 qs("saveSettingsBtn").onclick = async () => {
   readSettingsFromUI();
   applyMapStyle(settings.mapStyle);
@@ -2044,7 +2008,6 @@ qs("saveSettingsBtn").onclick = async () => {
   await logAction("settings_save", "Сохранены локальные настройки админки");
   alert("Настройки сохранены локально.");
 };
-
 qs("resetSettingsBtn").onclick = () => {
   settings = { ...DEFAULT_SETTINGS };
   saveSettingsToStorage(settings);
@@ -2055,7 +2018,6 @@ qs("resetSettingsBtn").onclick = () => {
   updateHealthPanel();
   alert("Настройки сброшены.");
 };
-
 qs("mapStyleSelect").onchange = () => {
   readSettingsFromUI();
   applyMapStyle(qs("mapStyleSelect").value);
