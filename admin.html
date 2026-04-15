@@ -1,90 +1,705 @@
 <!doctype html>
 <html lang="ru">
 <head>
-<meta charset="utf-8"/>
-<title>Admin</title>
-<style>
-body{background:#0f172a;color:#fff;font-family:system-ui;padding:20px}
-button{padding:10px;margin:5px}
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>MyGps Live</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <style>
+    :root{
+      --bg:#08111f;
+      --bg2:#0b1730;
+      --card:rgba(17,24,39,.88);
+      --card-strong:#111827;
+      --text:#e5e7eb;
+      --muted:#94a3b8;
+      --border:rgba(148,163,184,.16);
+      --green:#22c55e;
+      --yellow:#eab308;
+      --red:#ef4444;
+      --blue:#2563eb;
+      --shadow:0 20px 60px rgba(0,0,0,.35);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      color:var(--text);
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+      background:
+        radial-gradient(circle at top left, #0f2a54 0%, transparent 32%),
+        radial-gradient(circle at top right, #10203f 0%, transparent 28%),
+        linear-gradient(180deg, var(--bg2), var(--bg));
+    }
+    .shell{
+      max-width:1240px;
+      margin:0 auto;
+      padding:16px;
+    }
+    .hero{
+      display:grid;
+      grid-template-columns:1.15fr .85fr;
+      gap:16px;
+      align-items:stretch;
+    }
+    .panel{
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius:24px;
+      box-shadow:var(--shadow);
+      backdrop-filter:blur(10px);
+      overflow:hidden;
+    }
+    .panel-inner{padding:18px}
+    .brand{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+    }
+    .brand h1{
+      margin:0;
+      font-size:30px;
+      line-height:1.05;
+      letter-spacing:-.02em;
+    }
+    .subtitle{
+      margin-top:8px;
+      color:var(--muted);
+      line-height:1.6;
+      font-size:15px;
+    }
+    .badge-row{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      margin-top:14px;
+    }
+    .badge{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:10px 14px;
+      border-radius:999px;
+      background:rgba(255,255,255,.04);
+      border:1px solid var(--border);
+      font-size:14px;
+      color:var(--text);
+    }
+    .dot{
+      width:10px;
+      height:10px;
+      border-radius:50%;
+      display:inline-block;
+      flex:0 0 auto;
+    }
+    .dot.green{background:var(--green)}
+    .dot.yellow{background:var(--yellow)}
+    .dot.red{background:var(--red)}
+    .hero-side{
+      display:grid;
+      grid-template-rows:auto auto 1fr;
+      gap:16px;
+    }
+    .mini-card{
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius:24px;
+      box-shadow:var(--shadow);
+      backdrop-filter:blur(10px);
+      padding:18px;
+    }
+    .mini-title{
+      color:var(--muted);
+      font-size:13px;
+      margin-bottom:8px;
+    }
+    .mini-value{
+      font-size:26px;
+      font-weight:800;
+      line-height:1.15;
+      letter-spacing:-.02em;
+    }
+    .mini-sub{
+      margin-top:8px;
+      color:var(--muted);
+      font-size:14px;
+      line-height:1.5;
+    }
+    .stats{
+      display:grid;
+      grid-template-columns:repeat(4,minmax(0,1fr));
+      gap:12px;
+      margin-top:16px;
+    }
+    .stat{
+      background:rgba(255,255,255,.04);
+      border:1px solid var(--border);
+      border-radius:18px;
+      padding:14px;
+    }
+    .label{
+      color:var(--muted);
+      font-size:13px;
+      margin-bottom:8px;
+    }
+    .value{
+      font-size:18px;
+      font-weight:700;
+      line-height:1.2;
+      word-break:break-word;
+    }
+    .controls{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      margin-top:16px;
+    }
+    button{
+      border:0;
+      border-radius:14px;
+      padding:11px 15px;
+      font-weight:700;
+      cursor:pointer;
+      color:white;
+      background:var(--blue);
+    }
+    button.secondary{background:#374151}
+    button:disabled{opacity:.6;cursor:not-allowed}
+    .map-card{
+      margin-top:16px;
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius:28px;
+      box-shadow:var(--shadow);
+      overflow:hidden;
+    }
+    .map-head{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:12px;
+      padding:16px 18px;
+      border-bottom:1px solid var(--border);
+      background:rgba(255,255,255,.03);
+    }
+    .map-title{
+      font-size:18px;
+      font-weight:800;
+      letter-spacing:-.02em;
+    }
+    .map-sub{
+      color:var(--muted);
+      font-size:14px;
+    }
+    #map{
+      width:100%;
+      height:62vh;
+      min-height:420px;
+    }
+    .bottom-grid{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:16px;
+      margin-top:16px;
+    }
+    .info-card{
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius:24px;
+      box-shadow:var(--shadow);
+      padding:18px;
+    }
+    .info-card h3{
+      margin:0 0 12px;
+      font-size:18px;
+    }
+    .info-list{
+      display:grid;
+      gap:10px;
+    }
+    .info-row{
+      display:flex;
+      justify-content:space-between;
+      gap:14px;
+      padding:10px 0;
+      border-bottom:1px solid rgba(148,163,184,.12);
+    }
+    .info-row:last-child{border-bottom:0}
+    .info-row .k{
+      color:var(--muted);
+      min-width:120px;
+    }
+    .info-row .v{
+      text-align:right;
+      font-weight:600;
+      word-break:break-word;
+    }
+    .state-screen{
+      display:none;
+      margin-top:16px;
+      background:rgba(127,29,29,.16);
+      border:1px solid rgba(239,68,68,.35);
+      border-radius:24px;
+      padding:24px;
+      box-shadow:var(--shadow);
+    }
+    .state-screen.show{display:block}
+    .state-title{
+      font-size:28px;
+      font-weight:800;
+      line-height:1.1;
+      letter-spacing:-.02em;
+    }
+    .state-text{
+      margin-top:10px;
+      color:var(--muted);
+      line-height:1.7;
+      max-width:760px;
+    }
+    .footer-note{
+      margin-top:16px;
+      color:var(--muted);
+      font-size:13px;
+      text-align:center;
+      padding-bottom:8px;
+    }
+    @media (max-width: 1100px){
+      .hero{grid-template-columns:1fr}
+      .hero-side{grid-template-columns:1fr 1fr;grid-template-rows:none}
+      .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+    }
+    @media (max-width: 760px){
+      .shell{padding:12px}
+      .stats{grid-template-columns:1fr 1fr}
+      .bottom-grid{grid-template-columns:1fr}
+      .hero-side{grid-template-columns:1fr}
+      #map{height:54vh;min-height:320px}
+      .brand h1{font-size:26px}
+      .mini-value{font-size:22px}
+    }
+  </style>
 </head>
-
 <body>
+  <div class="shell">
+    <div id="stateScreen" class="state-screen">
+      <div class="state-title" id="stateTitle">Ссылка недоступна</div>
+      <div class="state-text" id="stateText">Эта live-ссылка недоступна.</div>
+    </div>
 
-<h1>Admin</h1>
+    <div id="liveContent">
+      <div class="hero">
+        <div class="panel">
+          <div class="panel-inner">
+            <div class="brand">
+              <div>
+                <h1>MyGps Live</h1>
+                <div class="subtitle">
+                  Временный доступ к текущему местоположению и live-маршруту.
+                  Страница активна только пока сессия не истекла.
+                </div>
+              </div>
+            </div>
 
-<button id="create">Создать ссылку</button>
-<button id="stopAll">Остановить все</button>
-<button id="cleanup">Очистить истёкшие</button>
+            <div class="badge-row">
+              <div class="badge">
+                <span class="dot yellow" id="statusDot"></span>
+                <span id="statusText">Проверка статуса…</span>
+              </div>
+              <div class="badge">
+                <span>⏳</span>
+                <span id="remainText">—</span>
+              </div>
+              <div class="badge">
+                <span>🕒</span>
+                <span id="expiresAtText">—</span>
+              </div>
+            </div>
 
-<div id="link"></div>
+            <div class="stats">
+              <div class="stat">
+                <div class="label">Последняя точка</div>
+                <div class="value" id="lastPointValue">—</div>
+              </div>
+              <div class="stat">
+                <div class="label">Последнее обновление</div>
+                <div class="value" id="lastUpdateValue">—</div>
+              </div>
+              <div class="stat">
+                <div class="label">Точек в live-маршруте</div>
+                <div class="value" id="pointsCountValue">0</div>
+              </div>
+              <div class="stat">
+                <div class="label">Открытий ссылки</div>
+                <div class="value" id="openCountValue">0</div>
+              </div>
+            </div>
 
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
-import { getDatabase, ref, set, get, update } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
+            <div class="controls">
+              <button id="fitBtn">Показать весь маршрут</button>
+              <button id="lastBtn" class="secondary">К последней точке</button>
+            </div>
+          </div>
+        </div>
 
-const firebaseConfig = {
-  apiKey:"AIzaSy...",
-  databaseURL:"https://mygpslive-57196-default-rtdb.europe-west1.firebasedatabase.app"
-};
+        <div class="hero-side">
+          <div class="mini-card">
+            <div class="mini-title">Статус доступа</div>
+            <div class="mini-value" id="sideStatusValue">Проверка…</div>
+            <div class="mini-sub" id="sideStatusSub">Ожидаем данные сессии.</div>
+          </div>
 
-const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
+          <div class="mini-card">
+            <div class="mini-title">До завершения</div>
+            <div class="mini-value" id="countdownBig">—</div>
+            <div class="mini-sub">После истечения ссылка перестанет показывать маршрут.</div>
+          </div>
 
-document.getElementById("create").onclick = async () => {
-  const token = Math.random().toString(36).slice(2);
-  const now = Date.now();
+          <div class="mini-card">
+            <div class="mini-title">Что это</div>
+            <div class="mini-sub">
+              Эта страница открывается только по временной ссылке из админки.
+              Если срок доступа закончился или сессия остановлена, карта и маршрут скрываются.
+            </div>
+          </div>
+        </div>
+      </div>
 
-  await set(ref(db,"liveSessions/"+token),{
-    meta:{
-      active:true,
-      createdAt:now,
-      expiresAt:now + 3600000
-    },
-    public:{
-      lastPoint:null,
-      recentPoints:{}
-    },
-    viewStats:{
-      openCount:0
+      <div class="map-card">
+        <div class="map-head">
+          <div>
+            <div class="map-title">Live-маршрут</div>
+            <div class="map-sub">Только активная временная сессия</div>
+          </div>
+        </div>
+        <div id="map"></div>
+      </div>
+
+      <div class="bottom-grid">
+        <div class="info-card">
+          <h3>Текущие данные</h3>
+          <div class="info-list">
+            <div class="info-row"><div class="k">Координаты</div><div class="v" id="coordsInfo">—</div></div>
+            <div class="info-row"><div class="k">Скорость</div><div class="v" id="speedInfo">—</div></div>
+            <div class="info-row"><div class="k">Точность</div><div class="v" id="accuracyInfo">—</div></div>
+            <div class="info-row"><div class="k">Направление</div><div class="v" id="bearingInfo">—</div></div>
+          </div>
+        </div>
+
+        <div class="info-card">
+          <h3>Статистика ссылки</h3>
+          <div class="info-list">
+            <div class="info-row"><div class="k">Первое открытие</div><div class="v" id="firstOpenInfo">—</div></div>
+            <div class="info-row"><div class="k">Последнее открытие</div><div class="v" id="lastOpenInfo">—</div></div>
+            <div class="info-row"><div class="k">Истекает</div><div class="v" id="expiresInfo">—</div></div>
+            <div class="info-row"><div class="k">Состояние</div><div class="v" id="stateInfo">—</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="footer-note">
+        Если ссылка истекла или была остановлена, эта страница перестанет показывать live-маршрут.
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+    import { getDatabase, ref, onValue, get, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCXNCY-IpkhAXb8jNPhN8gf2UdOfPBc5gM",
+      authDomain: "mygpslive-57196.firebaseapp.com",
+      databaseURL: "https://mygpslive-57196-default-rtdb.europe-west1.firebasedatabase.app",
+      projectId: "mygpslive-57196",
+      storageBucket: "mygpslive-57196.firebasestorage.app",
+      messagingSenderId: "20781107701",
+      appId: "1:20781107701:web:bd47061b9aca13abbeb8bc",
+      measurementId: "G-BSCVNY9LH0"
+    };
+
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get("session") || "";
+
+    const stateScreen = document.getElementById("stateScreen");
+    const stateTitle = document.getElementById("stateTitle");
+    const stateText = document.getElementById("stateText");
+    const liveContent = document.getElementById("liveContent");
+
+    const statusDot = document.getElementById("statusDot");
+    const statusText = document.getElementById("statusText");
+    const remainText = document.getElementById("remainText");
+    const expiresAtText = document.getElementById("expiresAtText");
+    const sideStatusValue = document.getElementById("sideStatusValue");
+    const sideStatusSub = document.getElementById("sideStatusSub");
+    const countdownBig = document.getElementById("countdownBig");
+
+    const lastPointValue = document.getElementById("lastPointValue");
+    const lastUpdateValue = document.getElementById("lastUpdateValue");
+    const pointsCountValue = document.getElementById("pointsCountValue");
+    const openCountValue = document.getElementById("openCountValue");
+
+    const coordsInfo = document.getElementById("coordsInfo");
+    const speedInfo = document.getElementById("speedInfo");
+    const accuracyInfo = document.getElementById("accuracyInfo");
+    const bearingInfo = document.getElementById("bearingInfo");
+
+    const firstOpenInfo = document.getElementById("firstOpenInfo");
+    const lastOpenInfo = document.getElementById("lastOpenInfo");
+    const expiresInfo = document.getElementById("expiresInfo");
+    const stateInfo = document.getElementById("stateInfo");
+
+    const fitBtn = document.getElementById("fitBtn");
+    const lastBtn = document.getElementById("lastBtn");
+
+    let sessionMeta = null;
+    let lastPoint = null;
+    let recentPoints = [];
+    let timer = null;
+    let mapReady = false;
+
+    const map = L.map("map", { zoomControl: true }).setView([56.95, 24.10], 12);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "&copy; OpenStreetMap"
+    }).addTo(map);
+
+    const polyline = L.polyline([], { weight: 5 }).addTo(map);
+    const marker = L.circleMarker([56.95, 24.10], {
+      radius: 8,
+      color: "#22c55e",
+      fillColor: "#22c55e",
+      fillOpacity: 1
+    }).addTo(map);
+
+    function fmtTime(value){
+      if(!value) return "—";
+      return new Date(value).toLocaleString("ru-RU");
     }
-  });
 
-  document.getElementById("link").innerText =
-    location.origin+"/live.html?session="+token;
-};
-
-document.getElementById("stopAll").onclick = async () => {
-  const snap = await get(ref(db,"liveSessions"));
-  const data = snap.val() || {};
-  const updates = {};
-
-  Object.keys(data).forEach(token=>{
-    if(data[token]?.meta?.active){
-      updates[`liveSessions/${token}/meta/active`] = false;
+    function fmtRemain(ms){
+      if(ms == null) return "—";
+      const sec = Math.max(0, Math.floor(ms / 1000));
+      const h = Math.floor(sec / 3600);
+      const m = Math.floor((sec % 3600) / 60);
+      const s = sec % 60;
+      if (h > 0) return `${h}ч ${String(m).padStart(2,"0")}м ${String(s).padStart(2,"0")}с`;
+      return `${String(m).padStart(2,"0")}м ${String(s).padStart(2,"0")}с`;
     }
-  });
 
-  await update(ref(db), updates);
-  alert("Все остановлены");
-};
-
-document.getElementById("cleanup").onclick = async () => {
-  const snap = await get(ref(db,"liveSessions"));
-  const data = snap.val() || {};
-  const now = Date.now();
-  const updates = {};
-
-  Object.keys(data).forEach(token=>{
-    if(data[token]?.meta?.expiresAt < now){
-      updates[`liveSessions/${token}`] = null;
+    function showState(title, text){
+      stateTitle.textContent = title;
+      stateText.textContent = text;
+      stateScreen.classList.add("show");
+      liveContent.style.display = "none";
     }
-  });
 
-  await update(ref(db), updates);
-  alert("Очищено");
-};
-</script>
+    function showLive(){
+      stateScreen.classList.remove("show");
+      liveContent.style.display = "";
+      if (!mapReady) {
+        setTimeout(() => {
+          map.invalidateSize();
+          mapReady = true;
+        }, 80);
+      } else {
+        setTimeout(() => map.invalidateSize(), 30);
+      }
+    }
 
+    function setBadgeStatus(kind, text){
+      statusDot.className = "dot " + kind;
+      statusText.textContent = text;
+      sideStatusValue.textContent = text;
+      stateInfo.textContent = text;
+    }
+
+    function clearMapData(){
+      polyline.setLatLngs([]);
+      marker.setLatLng([56.95, 24.10]);
+      pointsCountValue.textContent = "0";
+      lastPointValue.textContent = "—";
+      lastUpdateValue.textContent = "—";
+      coordsInfo.textContent = "—";
+      speedInfo.textContent = "—";
+      accuracyInfo.textContent = "—";
+      bearingInfo.textContent = "—";
+    }
+
+    function updatePointUI(point){
+      if (!point || point.latitude == null || point.longitude == null) {
+        clearMapData();
+        return;
+      }
+
+      const lat = Number(point.latitude);
+      const lon = Number(point.longitude);
+
+      marker.setLatLng([lat, lon]);
+      lastPointValue.textContent = `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+      lastUpdateValue.textContent = fmtTime(point.timestamp);
+
+      coordsInfo.textContent = `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+      speedInfo.textContent = point.speed != null ? `${Number(point.speed).toFixed(1)} км/ч` : "—";
+      accuracyInfo.textContent = point.accuracy != null ? `${point.accuracy} м` : "—";
+      bearingInfo.textContent = point.bearing != null ? `${Number(point.bearing).toFixed(0)}°` : "—";
+    }
+
+    function updateRouteUI(points){
+      recentPoints = points;
+      pointsCountValue.textContent = String(points.length);
+
+      const latlngs = points
+        .filter(p => p && p.latitude != null && p.longitude != null)
+        .map(p => [Number(p.latitude), Number(p.longitude)]);
+
+      polyline.setLatLngs(latlngs);
+
+      if (latlngs.length) {
+        marker.setLatLng(latlngs[latlngs.length - 1]);
+      }
+    }
+
+    function refreshStatus(){
+      const meta = sessionMeta;
+      if (!meta) return;
+
+      const now = Date.now();
+      const active = !!meta.active;
+      const expiresAt = Number(meta.expiresAt || 0);
+      const remainMs = Math.max(0, expiresAt - now);
+
+      remainText.textContent = `Ссылка истекает через ${fmtRemain(remainMs)}`;
+      countdownBig.textContent = fmtRemain(remainMs);
+      expiresAtText.textContent = fmtTime(expiresAt);
+      expiresInfo.textContent = fmtTime(expiresAt);
+
+      if (active && expiresAt > now) {
+        setBadgeStatus("green", "Доступ активен");
+        sideStatusSub.textContent = "Маршрут и текущая точка доступны по временной ссылке.";
+        showLive();
+      } else if (!active) {
+        setBadgeStatus("red", "Сессия завершена");
+        showState(
+          "Доступ завершён",
+          "Эта live-ссылка была остановлена вручную. Маршрут и текущая точка больше недоступны."
+        );
+        clearMapData();
+      } else {
+        setBadgeStatus("red", "Ссылка истекла");
+        showState(
+          "Срок действия ссылки истёк",
+          "Временный доступ к live-маршруту закончился. Открой новую ссылку, если доступ был продлён."
+        );
+        clearMapData();
+      }
+    }
+
+    fitBtn.onclick = () => {
+      const latlngs = polyline.getLatLngs();
+      if (latlngs.length === 1) {
+        map.setView(latlngs[0], 16);
+      } else if (latlngs.length > 1) {
+        map.fitBounds(polyline.getBounds(), { padding: [30, 30] });
+      }
+    };
+
+    lastBtn.onclick = () => {
+      const ll = marker.getLatLng();
+      map.setView(ll, 16);
+    };
+
+    if (!sessionId) {
+      showState(
+        "Нет доступа",
+        "Эта страница работает только по временной ссылке. Открой её по ссылке из админки."
+      );
+    } else {
+      const app = initializeApp(firebaseConfig);
+      const db = getDatabase(app);
+
+      const baseRef = ref(db, `liveSessions/${sessionId}`);
+      const metaRef = ref(db, `liveSessions/${sessionId}/meta`);
+      const publicLastPointRef = ref(db, `liveSessions/${sessionId}/public/lastPoint`);
+      const publicRecentPointsRef = ref(db, `liveSessions/${sessionId}/public/recentPoints`);
+      const statsRef = ref(db, `liveSessions/${sessionId}/viewStats`);
+
+      get(baseRef).then((snap) => {
+        if (!snap.exists()) {
+          showState(
+            "Ссылка не найдена",
+            "Такой live-сессии не существует или она уже была удалена."
+          );
+        }
+      }).catch(() => {
+        showState(
+          "Ошибка доступа",
+          "Не удалось проверить live-ссылку."
+        );
+      });
+
+      runTransaction(statsRef, (current) => {
+        const now = Date.now();
+        const value = current || {};
+        return {
+          openCount: (value.openCount || 0) + 1,
+          firstOpenAt: value.firstOpenAt || now,
+          lastOpenAt: now
+        };
+      }).catch(() => {});
+
+      onValue(metaRef, (snap) => {
+        const data = snap.val();
+        if (!data) {
+          showState(
+            "Сессия недоступна",
+            "Метаданные сессии не найдены."
+          );
+          return;
+        }
+
+        sessionMeta = data;
+        refreshStatus();
+
+        if (timer) clearInterval(timer);
+        timer = setInterval(refreshStatus, 1000);
+      });
+
+      onValue(publicLastPointRef, (snap) => {
+        const p = snap.val();
+        lastPoint = p || null;
+        updatePointUI(lastPoint);
+      });
+
+      onValue(publicRecentPointsRef, (snap) => {
+        const raw = snap.val() || {};
+        const pts = Object.values(raw)
+          .filter(Boolean)
+          .sort((a, b) => Number(a.timestamp || 0) - Number(b.timestamp || 0));
+
+        updateRouteUI(pts);
+
+        const latlngs = pts
+          .filter(p => p && p.latitude != null && p.longitude != null)
+          .map(p => [Number(p.latitude), Number(p.longitude)]);
+
+        if (latlngs.length === 1) {
+          map.setView(latlngs[0], 16);
+        } else if (latlngs.length > 1) {
+          map.fitBounds(L.latLngBounds(latlngs), { padding: [30, 30] });
+        } else if (lastPoint?.latitude != null && lastPoint?.longitude != null) {
+          map.setView([Number(lastPoint.latitude), Number(lastPoint.longitude)], 16);
+        }
+      });
+
+      onValue(statsRef, (snap) => {
+        const stats = snap.val() || {};
+        openCountValue.textContent = String(stats.openCount || 0);
+        firstOpenInfo.textContent = fmtTime(stats.firstOpenAt);
+        lastOpenInfo.textContent = fmtTime(stats.lastOpenAt);
+      });
+    }
+  </script>
 </body>
 </html>
