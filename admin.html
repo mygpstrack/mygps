@@ -646,6 +646,13 @@ async function runSafe(title, fn, { silentSuccess = false, reloadSessions = fals
     setBusy(false);
   }
 }
+function formatSize(bytes) {
+  if (!Number.isFinite(bytes) || bytes < 0) return "0 B";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
 
 function applyMapStyle(styleKey) {
   const style = mapStyleDefs[styleKey] || mapStyleDefs.osm;
@@ -1462,7 +1469,6 @@ async function extendSession(token) {
   }, { reloadSessions: true, silentSuccess: false });
 }
 
-/* ОБНОВЛЁННАЯ ЛОГИКА LIVE-СЕССИЙ */
 function getRecentSourcePoints(mode, pointsLimit) {
   const limit = Math.max(2, Math.min(500, Number(pointsLimit || settings.liveShareDefaultPoints)));
 
