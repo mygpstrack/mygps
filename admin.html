@@ -318,14 +318,14 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPasswor
 import { getDatabase, ref, get, onValue, remove, update, push, set } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
 
 const firebaseConfig = {
-  apiKey:"AIzaSyCXNCY-IpkhAXb8jNPhN8gf2UdOfPBc5gM",
-  authDomain:"mygpslive-57196.firebaseapp.com",
-  databaseURL:"https://mygpslive-57196-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId:"mygpslive-57196",
-  storageBucket:"mygpslive-57196.firebasestorage.app",
-  messagingSenderId:"20781107701",
-  appId:"1:20781107701:web:bd47061b9aca13abbeb8bc",
-  measurementId:"G-BSCVNY9LH0"
+  apiKey: "AIzaSyCXNCY-IpkhAXb8jNPhN8gf2UdOfPBc5gM",
+  authDomain: "mygpslive-57196.firebaseapp.com",
+  databaseURL: "https://mygpslive-57196-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "mygpslive-57196",
+  storageBucket: "mygpslive-57196.firebasestorage.app",
+  messagingSenderId: "20781107701",
+  appId: "1:20781107701:web:bd47061b9aca13abbeb8bc",
+  measurementId: "G-BSCVNY9LH0"
 };
 
 const app = initializeApp(firebaseConfig);
@@ -334,601 +334,834 @@ const db = getDatabase(app);
 const provider = new GoogleAuthProvider();
 const qs = (id) => document.getElementById(id);
 
-let historyByUid = {}, liveByUid = {}, allSessions = {}, selectedUid = "", allUsers = [];
-let currentFiltered = [], deletionsLog = [], actionLogs = [];
-let liveAutoCenter = true, createdShareUrl = "", speedChart = null, distanceChart = null, currentNowSourceLabel = "—";
-const geocodeCache = {};
+let historyByUid = {};
+let liveByUid = {};
+let allSessions = {};
+let allUsers = [];
+let selectedUid = "";
+let currentFiltered = [];
+let liveAutoCenter = true;
+let createdShareUrl = "";
+let deletionsLog = [];
+let actionLogs = [];
+let geocodeCache = {};
 
-const fmtTime = v => v ? new Date(v).toLocaleString("ru-RU") : "—";
-const errText = e => e?.message || e?.code || String(e);
-const isLegacyUid = (uid) => uid === "default";
+const fmtTime = (v) => v ? new Date(v).toLocaleString("ru-RU") : "—";
+const errText = (e) => e?.message || e?.code || String(e);
 
-function formatAccuracy(v){ return v != null ? `${Number(v).toFixed(2)} м` : "—"; }
-function formatDuration(ms){ if(!ms||ms<0) return "—"; const s=Math.floor(ms/1000), h=Math.floor(s/3600), m=Math.floor((s%3600)/60); return h>0?`${h}ч ${m}м`:`${m}м`; }
-function formatIdle(ms){ if(!ms||ms<1000) return "—"; const s=Math.floor(ms/1000), h=Math.floor(s/3600), m=Math.floor((s%3600)/60), sec=s%60; return h>0?`${h}ч ${m}м ${sec}с`:`${m}м ${sec}с`; }
-function formatSize(bytes){ if(bytes<1024) return `${bytes} B`; if(bytes<1024*1024) return `${(bytes/1024).toFixed(1)} KB`; return `${(bytes/(1024*1024)).toFixed(2)} MB`; }
-function parseDateTime(dateVal,hVal,mVal){ if(!dateVal) return null; return new Date(`${dateVal}T${hVal||"00"}:${mVal||"00"}:00`).getTime(); }
-function userLabel(uid){ return isLegacyUid(uid) ? "legacy/default" : "Admin"; }
-
-function renderHeaderTime(){
-  const d = new Date(), days = ["воскресенье","понедельник","вторник","среда","четверг","пятница","суббота"];
-  qs("pageDateTime").textContent = `${days[d.getDay()]}, ${d.toLocaleString("ru-RU")}`;
+function ensureToastHost() {
+  let host = document.getElementById("toastHost");
+  if (!host) {
+    host = document.createElement("div");
+    host.id = "toastHost";
+    host.style.cssText = "position:fixed;right:18px;top:18px;z-index:99999;display:flex;flex-direction:column;gap:8px";
+    document.body.appendChild(host);
+  }
+  return host;
 }
-setInterval(renderHeaderTime, 1000); renderHeaderTime();
-console.log("ADMIN UI READY");
 
-function populateTimeSelects(){
-  const hourOpts = Array.from({length:24}, (_,i)=>`<option value="${String(i).padStart(2,"0")}">${String(i).padStart(2,"0")}</option>`).join("");
-  const minuteOpts = Array.from({length:60}, (_,i)=>`<option value="${String(i).padStart(2,"0")}">${String(i).padStart(2,"0")}</option>`).join("");
-  qs("fromHour").innerHTML = hourOpts; qs("toHour").innerHTML = hourOpts;
-  qs("fromMinute").innerHTML = minuteOpts; qs("toMinute").innerHTML = minuteOpts;
+function showToast(message, isError = false) {
+  const host = ensureToastHost();
+  const el = document.createElement("div");
+  el.textContent = message;
+  el.style.cssText =
+    "padding:10px 14px;border-radius:12px;color:#fff;box-shadow:0 8px 24px rgba(0,0,0,.25);max-width:340px;font-weight:600;transition:all .25s ease;background:" +
+    (isError ? "#b91c1c" : "#15803d");
+  host.appendChild(el);
+  setTimeout(() => {
+    el.style.opacity = "0";
+    el.style.transform = "translateY(-4px)";
+  }, 2200);
+  setTimeout(() => {
+    if (el.parentNode) el.remove();
+  }, 2600);
+}
+
+function formatSize(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+}
+
+function formatAccuracy(v) {
+  return v != null ? `${Number(v).toFixed(2)} м` : "—";
+}
+
+function formatDuration(ms) {
+  if (!ms || ms < 0) return "—";
+  const sec = Math.floor(ms / 1000);
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  return h > 0 ? `${h}ч ${m}м` : `${m}м`;
+}
+
+function formatIdle(ms) {
+  if (!ms || ms < 1000) return "—";
+  const sec = Math.floor(ms / 1000);
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  return h > 0 ? `${h}ч ${m}м ${s}с` : `${m}м ${s}с`;
+}
+
+function parseDateTime(dateVal, hVal, mVal) {
+  if (!dateVal) return null;
+  return new Date(`${dateVal}T${hVal || "00"}:${mVal || "00"}:00`).getTime();
+}
+
+function populateTimeSelects() {
+  const hourOpts = Array.from({ length: 24 }, (_, i) =>
+    `<option value="${String(i).padStart(2, "0")}">${String(i).padStart(2, "0")}</option>`).join("");
+  const minuteOpts = Array.from({ length: 60 }, (_, i) =>
+    `<option value="${String(i).padStart(2, "0")}">${String(i).padStart(2, "0")}</option>`).join("");
+
+  if (qs("fromHour")) qs("fromHour").innerHTML = hourOpts;
+  if (qs("toHour")) qs("toHour").innerHTML = hourOpts;
+  if (qs("fromMinute")) qs("fromMinute").innerHTML = minuteOpts;
+  if (qs("toMinute")) qs("toMinute").innerHTML = minuteOpts;
 }
 populateTimeSelects();
 
-function setDateTimeRange(start,end){
-  qs("fromDate").value = start.toISOString().slice(0,10);
-  qs("fromHour").value = String(start.getHours()).padStart(2,"0");
-  qs("fromMinute").value = String(start.getMinutes()).padStart(2,"0");
-  qs("toDate").value = end.toISOString().slice(0,10);
-  qs("toHour").value = String(end.getHours()).padStart(2,"0");
-  qs("toMinute").value = String(end.getMinutes()).padStart(2,"0");
+function renderHeaderTime() {
+  const d = new Date();
+  const days = ["воскресенье","понедельник","вторник","среда","четверг","пятница","суббота"];
+  if (qs("pageDateTime")) qs("pageDateTime").textContent = `${days[d.getDay()]}, ${d.toLocaleString("ru-RU")}`;
 }
-function setDefaultPeriodToday(){ const now=new Date(), start=new Date(); start.setHours(0,0,0,0); setDateTimeRange(start,now); }
+setInterval(renderHeaderTime, 1000);
+renderHeaderTime();
 
-document.querySelectorAll(".tab-btn").forEach(btn=>{
-  btn.onclick=()=>{
-    document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
-    document.querySelectorAll("#nowPanel,#historyPanel,#reportsPanel,#usagePanel,#sessionsPanel,#journalPanel").forEach(p=>p.classList.add("hidden"));
-    btn.classList.add("active");
-    qs(btn.dataset.tab).classList.remove("hidden");
-    setTimeout(()=>{ historyMap.invalidateSize(); liveMap.invalidateSize(); sessionMap.invalidateSize(); speedChart?.resize(); distanceChart?.resize(); },50);
-  };
-});
+function setDateTimeRange(start, end) {
+  if (qs("fromDate")) qs("fromDate").value = start.toISOString().slice(0, 10);
+  if (qs("fromHour")) qs("fromHour").value = String(start.getHours()).padStart(2, "0");
+  if (qs("fromMinute")) qs("fromMinute").value = String(start.getMinutes()).padStart(2, "0");
+  if (qs("toDate")) qs("toDate").value = end.toISOString().slice(0, 10);
+  if (qs("toHour")) qs("toHour").value = String(end.getHours()).padStart(2, "0");
+  if (qs("toMinute")) qs("toMinute").value = String(end.getMinutes()).padStart(2, "0");
+}
 
-async function reverseGeocode(lat, lon){
-  const key = `${Number(lat).toFixed(5)},${Number(lon).toFixed(5)}`;
+function setDefaultPeriodToday() {
+  const now = new Date();
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  setDateTimeRange(start, now);
+}
+
+function isLegacyUid(uid) {
+  return uid === "default";
+}
+
+function userLabel(uid) {
+  return isLegacyUid(uid) ? "legacy/default" : "Admin";
+}
+
+async function reverseGeocode(lat, lon) {
+  const key = `${lat.toFixed(5)},${lon.toFixed(5)}`;
   if (geocodeCache[key]) return geocodeCache[key];
   try {
-    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&accept-language=ru`;
-    const res = await fetch(url, { headers: { "Accept":"application/json" } });
+    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&accept-language=ru`);
     const json = await res.json();
-    const addr = json.display_name || `${lat}, ${lon}`;
+    const addr = json.display_name || `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
     geocodeCache[key] = addr;
     return addr;
   } catch {
-    return `${Number(lat).toFixed(5)}, ${Number(lon).toFixed(5)}`;
+    return `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
   }
 }
 
-function distanceMeters(a,b){
-  const toRad=v=>v*Math.PI/180, R=6371000;
-  const dLat=toRad(b.latitude-a.latitude), dLon=toRad(b.longitude-a.longitude);
-  const lat1=toRad(a.latitude), lat2=toRad(b.latitude);
-  const x=Math.sin(dLat/2)**2+Math.sin(dLon/2)**2*Math.cos(lat1)*Math.cos(lat2);
-  return R*(2*Math.atan2(Math.sqrt(x), Math.sqrt(1-x)));
-}
-function looksJunk(prev,cur){
-  const acc=Number(cur.accuracy||0), sp=Number(cur.speed||0);
-  if(acc>100) return true;
-  if(prev){
-    const dist=distanceMeters(prev,cur), dt=Math.max(1,(Number(cur.timestamp||0)-Number(prev.timestamp||0))/1000), calcSpeed=dist/dt*3.6;
-    if(sp<=.5 && calcSpeed>30) return true;
-    if(calcSpeed>250) return true;
-  }
-  return false;
-}
-function computeSummary(points){
-  if(!points.length) return {count:0,km:0,avgSpeed:0,maxSpeed:0};
-  let meters=0; for(let i=1;i<points.length;i++) meters += distanceMeters(points[i-1],points[i]);
-  const speeds=points.map(p=>Number(p.speed||0)).filter(v=>Number.isFinite(v)&&v>0);
-  return { count:points.length, km:meters/1000, avgSpeed:speeds.length ? speeds.reduce((a,b)=>a+b,0)/speeds.length : 0, maxSpeed:speeds.length ? Math.max(...speeds) : 0 };
-}
-function detectStops(points){
-  const stops=[]; let startIdx=null;
-  for(let i=0;i<points.length;i++){
-    const sp=Number(points[i].speed||0);
-    if(sp<=2){ if(startIdx===null) startIdx=i; }
-    else if(startIdx!==null){
-      const duration=Number(points[i-1].timestamp||0)-Number(points[startIdx].timestamp||0);
-      if(duration>=5*60*1000) stops.push({start:points[startIdx], end:points[i-1], duration});
-      startIdx=null;
-    }
-  }
-  if(startIdx!==null && points.length){
-    const duration=Number(points[points.length-1].timestamp||0)-Number(points[startIdx].timestamp||0);
-    if(duration>=5*60*1000) stops.push({start:points[startIdx], end:points[points.length-1], duration});
-  }
-  return stops;
+function getSelectedHistoryPoints() {
+  return selectedUid ? (historyByUid[selectedUid] || []) : [];
 }
 
-const historyMap = L.map("historyMap").setView([56.95,24.10],12);
-const liveMap = L.map("liveMap").setView([56.95,24.10],12);
-const sessionMap = L.map("sessionMap").setView([56.95,24.10],12);
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"&copy; OpenStreetMap"}).addTo(historyMap);
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"&copy; OpenStreetMap"}).addTo(liveMap);
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"&copy; OpenStreetMap"}).addTo(sessionMap);
-
-const liveTrail = L.polyline([], {weight:5}).addTo(liveMap);
-const liveMarker = L.circleMarker([56.95,24.10], {radius:8,color:"#22c55e",fillColor:"#22c55e",fillOpacity:1}).addTo(liveMap);
-const sessionTrail = L.polyline([], {weight:5}).addTo(sessionMap);
-const sessionMarker = L.circleMarker([56.95,24.10], {radius:8,color:"#22c55e",fillColor:"#22c55e",fillOpacity:1}).addTo(sessionMap);
-let routeSegments = [];
-const startMarker = L.circleMarker([56.95,24.10], {radius:8,color:"#16a34a",fillColor:"#16a34a",fillOpacity:1}).addTo(historyMap);
-const endMarker = L.circleMarker([56.95,24.10], {radius:8,color:"#dc2626",fillColor:"#dc2626",fillOpacity:1}).addTo(historyMap);
-let selectedPointMarker = null;
-
-function clearRouteSegments(){ routeSegments.forEach(s=>historyMap.removeLayer(s)); routeSegments=[]; }
-
-function updateUsage(){
-  const visibleHistory = getVisibleHistoryPoints();
-  const historyBytes = new Blob([JSON.stringify(visibleHistory)]).size;
-  const visibleLive = qs("viewModeSelect").value === "all" ? liveByUid : (selectedUid ? {[selectedUid]: liveByUid[selectedUid] || null} : {});
-  const sessionsBytes = new Blob([JSON.stringify(allSessions||{})]).size + new Blob([JSON.stringify(visibleLive||{})]).size;
-  const total = historyBytes + sessionsBytes;
-  qs("historySize").textContent = formatSize(historyBytes);
-  qs("sessionsSize").textContent = formatSize(sessionsBytes);
-  qs("totalSize").textContent = formatSize(total);
-  qs("historyCount").textContent = String(visibleHistory.length);
-  qs("trafficUsed").textContent = formatSize(total);
+function getSelectedLiveData() {
+  return selectedUid ? (liveByUid[selectedUid] || null) : null;
 }
 
-async function loadUsers(){
-  const [historySnap, liveSnap] = await Promise.all([get(ref(db,"history")), get(ref(db,"live"))]);
+function getVisibleHistoryPoints() {
+  return (qs("viewModeSelect")?.value === "all")
+    ? Object.values(historyByUid).flat().sort((a, b) => Number(a.timestamp || 0) - Number(b.timestamp || 0))
+    : getSelectedHistoryPoints();
+}
+
+async function loadUsers() {
+  const [historySnap, liveSnap] = await Promise.all([
+    get(ref(db, "history")),
+    get(ref(db, "live"))
+  ]);
+
   const userSet = new Set();
-  Object.keys(historySnap.val()||{}).forEach(uid=>userSet.add(uid));
-  Object.keys(liveSnap.val()||{}).forEach(uid=>userSet.add(uid));
-  allUsers = Array.from(userSet).sort((a,b)=>{
-    if(a==="default" && b!=="default") return 1;
-    if(a!=="default" && b==="default") return -1;
+  Object.keys(historySnap.val() || {}).forEach(uid => userSet.add(uid));
+  Object.keys(liveSnap.val() || {}).forEach(uid => userSet.add(uid));
+
+  allUsers = Array.from(userSet).sort((a, b) => {
+    if (isLegacyUid(a) && !isLegacyUid(b)) return 1;
+    if (!isLegacyUid(a) && isLegacyUid(b)) return -1;
     return a.localeCompare(b);
   });
-  const select = qs("userSelect"), prev = selectedUid;
-  select.innerHTML = allUsers.length ? allUsers.map(uid=>`<option value="${uid}">${userLabel(uid)}</option>`).join("") : `<option value="">Нет пользователей</option>`;
-  selectedUid = (prev && allUsers.includes(prev)) ? prev : (allUsers.find(uid=>uid!=="default") || allUsers[0] || "");
-  if(selectedUid) select.value = selectedUid;
+
+  if (qs("userSelect")) {
+    qs("userSelect").innerHTML = allUsers.length
+      ? allUsers.map(uid => `<option value="${uid}">${userLabel(uid)}</option>`).join("")
+      : `<option value="">Нет пользователей</option>`;
+  }
+
+  selectedUid = allUsers.find(uid => !isLegacyUid(uid)) || allUsers[0] || "";
+  if (qs("userSelect") && selectedUid) qs("userSelect").value = selectedUid;
 }
 
-function getSelectedHistoryPoints(){ return selectedUid ? (historyByUid[selectedUid] || []) : []; }
-function getSelectedLiveData(){ return selectedUid ? (liveByUid[selectedUid] || null) : null; }
-function getVisibleHistoryPoints(){ return qs("viewModeSelect").value==="all" ? Object.values(historyByUid).flat().sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0)) : getSelectedHistoryPoints(); }
-function getAllLastPoints(){ return Object.entries(liveByUid).map(([uid,live])=>({uid,point:live?.lastPoint})).filter(item=>item.point && item.point.latitude!=null && item.point.longitude!=null); }
+async function loadAllData() {
+  const [historySnap, liveSnap] = await Promise.all([
+    get(ref(db, "history")),
+    get(ref(db, "live"))
+  ]);
 
-async function loadAllData(){
-  const [historySnap, liveSnap] = await Promise.all([get(ref(db,"history")), get(ref(db,"live"))]);
   historyByUid = {};
   liveByUid = liveSnap.val() || {};
-  const histRaw = historySnap.val() || {};
-  Object.entries(histRaw).forEach(([uid, pointsObj])=>{
-    historyByUid[uid] = Object.values(pointsObj||{}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+
+  const raw = historySnap.val() || {};
+  Object.entries(raw).forEach(([uid, pointsObj]) => {
+    historyByUid[uid] = Object.values(pointsObj || {})
+      .filter(Boolean)
+      .sort((a, b) => Number(a.timestamp || 0) - Number(b.timestamp || 0));
   });
+
   updateUsage();
-  renderHistory();
+  await renderHistory();
   await updateNowFromAvailableSources();
 }
 
-function filteredHistory(){
-  const base = getVisibleHistoryPoints();
-  const from=parseDateTime(qs("fromDate").value, qs("fromHour").value, qs("fromMinute").value);
-  const to=parseDateTime(qs("toDate").value, qs("toHour").value, qs("toMinute").value);
-  const maxAcc=Number(qs("maxAccuracyFilter").value||0), minSp=Number(qs("minSpeedFilter").value||0), maxSp=Number(qs("maxSpeedFilter").value||0), hideJunk=qs("hideJunkToggle").checked;
-  return base.filter((p,idx,arr)=>{
-    const t=Number(p.timestamp||0), sp=Number(p.speed||0), acc=Number(p.accuracy||0);
-    if(from&&t<from) return false;
-    if(to&&t>to) return false;
-    if(maxAcc>0&&acc>maxAcc) return false;
-    if(minSp>0&&sp<minSp) return false;
-    if(maxSp>0&&sp>maxSp) return false;
-    if(hideJunk&&looksJunk(arr[idx-1],p)) return false;
-    return true;
-  });
-}
-
-async function updateHistoryMap(points){
-  clearRouteSegments();
-  if(selectedPointMarker){ historyMap.removeLayer(selectedPointMarker); selectedPointMarker=null; }
-  const latlngs=points.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]);
-  if(!latlngs.length) return;
-  for(let i=1;i<points.length;i++){
-    const a=[Number(points[i-1].latitude), Number(points[i-1].longitude)];
-    const b=[Number(points[i].latitude), Number(points[i].longitude)];
-    const seg=L.polyline([a,b], {weight:5,color:"#60a5fa"}).addTo(historyMap);
-    routeSegments.push(seg);
-  }
-  const first=points[0], last=points[points.length-1];
-  startMarker.setLatLng([Number(first.latitude), Number(first.longitude)]).bindPopup("Старт");
-  endMarker.setLatLng([Number(last.latitude), Number(last.longitude)]).bindPopup("Финиш");
-  if(latlngs.length===1) historyMap.setView(latlngs[0],16); else historyMap.fitBounds(L.latLngBounds(latlngs), {padding:[30,30]});
-  qs("startAddress").textContent = await reverseGeocode(Number(first.latitude), Number(first.longitude));
-  qs("endAddress").textContent = await reverseGeocode(Number(last.latitude), Number(last.longitude));
-}
-
-async function selectHistoryPoint(p){
-  const lat=Number(p.latitude), lon=Number(p.longitude);
-  if(selectedPointMarker) historyMap.removeLayer(selectedPointMarker);
-  selectedPointMarker = L.circleMarker([lat,lon], {radius:7,color:"#f59e0b",fillColor:"#f59e0b",fillOpacity:1}).addTo(historyMap);
-  historyMap.setView([lat,lon],16);
-  qs("selectedAddress").textContent = await reverseGeocode(lat,lon);
-}
-
-function updateCharts(points){
-  const speedLabels=points.slice(-100).map(p=>new Date(Number(p.timestamp||0)).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"}));
-  const speedData=points.slice(-100).map(p=>Number(p.speed||0));
-  if(speedChart) speedChart.destroy();
-  speedChart = new Chart(qs("speedChart"), { type:"line", data:{ labels:speedLabels, datasets:[{ data:speedData, tension:.25 }] }, options:{ responsive:true, plugins:{ legend:{display:false}}, scales:{ y:{beginAtZero:true}} }});
-  const byDay={};
-  for(let i=0;i<points.length;i++){
-    const day=new Date(Number(points[i].timestamp||0)).toLocaleDateString("ru-RU");
-    byDay[day]=byDay[day]||{dist:0,count:0,max:0,sum:0};
-    if(i>0) byDay[day].dist += distanceMeters(points[i-1],points[i])/1000;
-    const sp=Number(points[i].speed||0);
-    byDay[day].count += 1; byDay[day].sum += sp; byDay[day].max = Math.max(byDay[day].max, sp);
-  }
-  const labels=Object.keys(byDay), vals=labels.map(d=>Number(byDay[d].dist.toFixed(2)));
-  if(distanceChart) distanceChart.destroy();
-  distanceChart = new Chart(qs("distanceChart"), { type:"bar", data:{ labels, datasets:[{ data:vals }] }, options:{ responsive:true, plugins:{ legend:{display:false}}, scales:{ y:{beginAtZero:true}} }});
-  const tbody=qs("dailyStatsTbody"); tbody.innerHTML="";
-  labels.forEach(d=>{
-    const item=byDay[d], tr=document.createElement("tr");
-    tr.innerHTML=`<td>${d}</td><td>${item.dist.toFixed(2)}</td><td>${(item.sum/Math.max(1,item.count)).toFixed(1)} км/ч</td><td>${item.max.toFixed(1)} км/ч</td><td>${item.count}</td>`;
-    tbody.appendChild(tr);
-  });
-}
-
-function renderHistory(){
-  const pts=filteredHistory(); currentFiltered=pts;
-  const s=computeSummary(pts), stops=detectStops(pts);
-  qs("pointsCount").textContent = String(s.count);
-  qs("distanceValue").textContent = `${s.km.toFixed(2)} км`;
-  qs("avgSpeedValue").textContent = `${s.avgSpeed.toFixed(1)} км/ч`;
-  qs("maxSpeedValue").textContent = `${s.maxSpeed.toFixed(1)} км/ч`;
-  qs("routeStartCoords").textContent = pts.length ? `${Number(pts[0].latitude).toFixed(5)}, ${Number(pts[0].longitude).toFixed(5)}` : "—";
-  qs("routeEndCoords").textContent = pts.length ? `${Number(pts[pts.length-1].latitude).toFixed(5)}, ${Number(pts[pts.length-1].longitude).toFixed(5)}` : "—";
-  qs("routeDuration").textContent = pts.length ? formatDuration(Number(pts[pts.length-1].timestamp||0)-Number(pts[0].timestamp||0)) : "—";
-  qs("routeStops").textContent = String(stops.length);
-  qs("stopsNotice").textContent = stops.length ? `Стоянки: ${stops.map(s=>formatDuration(s.duration)).join(", ")}` : "Стоянок не найдено.";
-  const tbody=qs("historyTbody"); tbody.innerHTML="";
-  pts.slice().reverse().slice(0,500).forEach(p=>{
-    const tr=document.createElement("tr");
-    tr.innerHTML = `<td>${fmtTime(p.timestamp)}</td><td class="mono">${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}</td><td>${formatAccuracy(p.accuracy)}</td><td>${p.speed != null ? Number(p.speed).toFixed(1)+" км/ч" : "—"}</td><td>${looksJunk(null,p)?'<span class="tag">мусор</span>':"—"}</td><td><div class="row"><button class="secondary small">Точка</button><button class="danger small">Удалить</button></div></td>`;
-    const buttons=tr.querySelectorAll("button");
-    buttons[0].onclick=()=>selectHistoryPoint(p);
-    buttons[1].onclick=async()=>{
-      if(!selectedUid) return alert("Нет выбранного пользователя");
-      if(!confirm(`Удалить точку ${fmtTime(p.timestamp)}?`)) return;
-      try{
-        const entryRef=push(ref(db,"adminLogs/deletions"));
-        await set(entryRef,{ts:Date.now(),kind:"point",description:`${fmtTime(p.timestamp)}`,uid:auth.currentUser?.uid||null,email:auth.currentUser?.email||null});
-        await remove(ref(db,`history/${selectedUid}/${String(p.timestamp)}`));
-      }catch(e){ alert("Удаление точки:\n"+errText(e)); }
-    };
-    tbody.appendChild(tr);
-  });
-  if(pts.length) updateHistoryMap(pts); else clearRouteSegments();
-  updateCharts(pts);
-}
-
-async function updateNowUI(point, sourceLabel){
-  currentNowSourceLabel = sourceLabel || "—";
-  if(point && point.latitude != null && point.longitude != null){
-    const lat=Number(point.latitude), lon=Number(point.longitude);
-    liveMarker.setLatLng([lat,lon]);
-    if(liveAutoCenter) liveMap.setView([lat,lon],16);
-    qs("nowAddress").textContent = await reverseGeocode(lat,lon);
-  } else {
-    qs("nowAddress").textContent = "—";
-  }
-  const freshness = point?.timestamp ? Date.now() - Number(point.timestamp) : null;
-  const isOnline = freshness != null && freshness <= 3*60*1000;
-  qs("nowStatus").textContent = isOnline ? "Онлайн" : "Оффлайн";
-  qs("nowSource").textContent = sourceLabel || "—";
-  qs("nowSpeed").textContent = point?.speed != null ? `${Number(point.speed).toFixed(1)} км/ч` : "—";
-  qs("nowAccuracy").textContent = formatAccuracy(point?.accuracy);
-  qs("nowUpdated").textContent = fmtTime(point?.timestamp);
-  qs("nowBearing").textContent = point?.bearing != null ? `${Number(point.bearing).toFixed(0)}°` : "—";
-  qs("nowIdle").textContent = point?.timestamp ? formatIdle(Date.now()-Number(point.timestamp)) : "—";
-}
-
-function getSessionRoot(session){
-  if(!session) return {};
-  if(session.meta || session.public || session.viewStats) return session;
-  return {};
-}
-
-async function updateNowFromAvailableSources(){
-  if(qs("viewModeSelect").value === "all"){
-    const points = getAllLastPoints();
-    if(points.length){
-      const latlngs = points.map(item => [Number(item.point.latitude), Number(item.point.longitude)]);
-      liveTrail.setLatLngs(latlngs);
-      liveMarker.setLatLng(latlngs[latlngs.length-1]);
-      await updateNowUI(points[points.length-1].point, `Все пользователи (${points.length})`);
-      return;
-    }
-  }
-  const selectedLive = getSelectedLiveData();
-  if(selectedLive && selectedLive.lastPoint){
-    const pts = Object.values(selectedLive.recentPoints || {}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
-    liveTrail.setLatLngs(pts.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]));
-    await updateNowUI(selectedLive.lastPoint, selectedUid ? `live/${selectedUid}` : "live");
-    return;
-  }
-  const now = Date.now();
-  const active = Object.entries(allSessions).filter(([k,v])=>k!=="_init" && !!getSessionRoot(v).meta?.active && Number(getSessionRoot(v).meta?.expiresAt||0)>now).filter(([,v])=> !selectedUid || !getSessionRoot(v).meta?.ownerUid || getSessionRoot(v).meta.ownerUid===selectedUid);
-  if(active.length){
-    const [token, session] = active.sort((a,b)=>Number((getSessionRoot(b[1]).meta?.createdAt||0))-Number((getSessionRoot(a[1]).meta?.createdAt||0)))[0];
-    const root = getSessionRoot(session);
-    const pts = Object.values(root.public?.recentPoints || {}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
-    liveTrail.setLatLngs(pts.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]));
-    await updateNowUI(root.public?.lastPoint || null, `liveSessions/${token}`);
-    return;
-  }
-  const points = getVisibleHistoryPoints(), point = points.length ? points[points.length-1] : null;
-  liveTrail.setLatLngs([]);
-  await updateNowUI(point, selectedUid ? `history/${selectedUid}` : "history");
-}
-
-async function logAction(kind, description){
-  const entryRef = push(ref(db, "adminLogs/actions"));
-  await set(entryRef, { ts:Date.now(), kind, description, uid:auth.currentUser?.uid||null, email:auth.currentUser?.email||null });
-}
-
-function buildShareUrl(token){ return `https://mygpstrack.github.io/mygps/live.html?session=${encodeURIComponent(token)}`; }
-function getRecentSourcePoints(mode, pointsLimit){
-  const limit=Math.max(2,Math.min(500,Number(pointsLimit||100)));
-  const livePoints = Object.values(getSelectedLiveData()?.recentPoints || {}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
-  const historyPoints = getSelectedHistoryPoints().filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
-  if(mode==="live") return livePoints.slice(-limit);
-  if(mode==="history") return historyPoints.slice(-limit);
-  if(livePoints.length) return livePoints.slice(-limit);
-  return historyPoints.slice(-limit);
-}
-function generateSessionToken(){ const arr=new Uint8Array(24); crypto.getRandomValues(arr); return Array.from(arr,b=>b.toString(16).padStart(2,"0")).join(""); }
-
-async function createLiveSession(){
-  if(!selectedUid && allUsers.length===1){ selectedUid = allUsers[0]; qs("userSelect").value = selectedUid; }
-  if(!selectedUid) return alert("Нет пользователя. Сначала дождись появления данных GPS в Firebase или выбери пользователя.");
-  const durationMinutes=Number(qs("shareDurationPreset").value||60), sourceMode=qs("shareSource").value, pointsLimit=Number(qs("sharePointsLimit").value||100), sourcePoints=getRecentSourcePoints(sourceMode,pointsLimit);
-  if(!sourcePoints.length) return alert("Нет данных выбранного пользователя для создания live-ссылки.");
-  const token=generateSessionToken(), now=Date.now(), expiresAt=now+durationMinutes*60*1000, lastPoint=sourcePoints[sourcePoints.length-1], recentPointsObj={};
-  sourcePoints.forEach(p=>recentPointsObj[String(p.timestamp||Date.now()+Math.random())]=p);
-  const payload={meta:{active:true,paused:false,createdAt:now,expiresAt,remainingMs:durationMinutes*60*1000,ownerUid:selectedUid,createdBy:auth.currentUser?.uid||null,createdByEmail:auth.currentUser?.email||null,durationMinutes},public:{lastPoint,recentPoints:recentPointsObj},viewStats:{openCount:0,firstOpenAt:null,lastOpenAt:null}};
-  try{
-    await set(ref(db,`liveSessions/${token}`), payload);
-    await update(ref(db), { [`liveOwners/${selectedUid}/activeSessionId`]:token, [`liveOwners/${selectedUid}/lastCreatedAt`]:now });
-    await logAction("session_create",`Создана live-сессия ${token} для ${selectedUid}`);
-    createdShareUrl = buildShareUrl(token);
-    qs("shareLinkText").textContent = createdShareUrl;
-    qs("shareExpiresText").textContent = fmtTime(expiresAt);
-    qs("shareResultBox").classList.remove("hidden");
-    await loadSessions();
-  }catch(e){
-    alert("Создание live-ссылки:\n"+errText(e));
-  }
-}
-
-function getSessionStatus(session){
-  const root=getSessionRoot(session), meta=root.meta||{}, active=!!meta.active, expiresAt=Number(meta.expiresAt||0), now=Date.now();
-  if(active && expiresAt>now) return "active";
-  if(!active && expiresAt>now) return "ended";
-  return "expired";
-}
-function getSessionStatusLabel(status){ if(status==="active") return "активна"; if(status==="ended") return "завершена"; return "истекла"; }
-
-async function loadSessions(){
+async function loadSessions() {
   const snap = await get(ref(db, "liveSessions"));
   allSessions = snap.val() || {};
   updateUsage();
   renderSessions();
-  await updateNowFromAvailableSources();
 }
 
-async function deleteSession(token){
-  if(!confirm(`Удалить live-сессию ${token}?`)) return;
-  try{
-    await remove(ref(db, `liveSessions/${token}`));
-    await logAction("session_delete", `Удалена live-сессия ${token}`);
-    await loadSessions();
-    showToast("Сессия удалена");
-  }catch(e){ alert("Удаление live-сессии:\n"+errText(e)); }
+function updateUsage() {
+  const visibleHistory = getVisibleHistoryPoints();
+  const historyBytes = new Blob([JSON.stringify(visibleHistory)]).size;
+  const visibleLive = qs("viewModeSelect")?.value === "all"
+    ? liveByUid
+    : (selectedUid ? { [selectedUid]: liveByUid[selectedUid] || null } : {});
+  const sessionsBytes = new Blob([JSON.stringify(allSessions || {})]).size + new Blob([JSON.stringify(visibleLive || {})]).size;
+  const total = historyBytes + sessionsBytes;
+
+  if (qs("historySize")) qs("historySize").textContent = formatSize(historyBytes);
+  if (qs("sessionsSize")) qs("sessionsSize").textContent = formatSize(sessionsBytes);
+  if (qs("totalSize")) qs("totalSize").textContent = formatSize(total);
+  if (qs("historyCount")) qs("historyCount").textContent = String(visibleHistory.length);
+  if (qs("trafficUsed")) qs("trafficUsed").textContent = formatSize(total);
 }
-async function endSession(token){
-  if(!confirm(`Завершить live-сессию ${token}?`)) return;
-  try{
-    await update(ref(db, `liveSessions/${token}/meta`), { active:false, endedAt:Date.now() });
-    await logAction("session_end", `Завершена live-сессия ${token}`);
-    await loadSessions();
-    showToast("Сессия завершена");
-  }catch(e){ alert("Завершение live-сессии:\n"+errText(e)); }
-}
-async function extendSession(token){
-  const minutes=Number(qs("extendSessionMinutesInput").value||0);
-  if(!minutes || minutes<=0) return alert("Укажи минуты для продления.");
-  const session=getSessionRoot(allSessions[token]);
-  if(!session) return alert("Сессия не найдена.");
-  const currentExpiresAt=Number(session?.meta?.expiresAt||Date.now()), nextExpiresAt=Math.max(currentExpiresAt,Date.now())+minutes*60000;
-  try{
-    await update(ref(db,`liveSessions/${token}/meta`),{expiresAt:nextExpiresAt,remainingMs:Math.max(0,nextExpiresAt-Date.now()),active:true,extendedAt:Date.now()});
-    await logAction("session_extend", `Продлена live-сессия ${token}`);
-    await loadSessions();
-  }catch(e){ alert("Продление live-сессии:\n"+errText(e)); }
-}
-async function endAllActiveSessions(){
-  const now=Date.now();
-  const activeTokens=Object.entries(allSessions||{}).filter(([token,session])=>token!=="_init" && !!getSessionRoot(session).meta?.active && Number(getSessionRoot(session).meta?.expiresAt||0)>now).map(([token])=>token);
-  if(!activeTokens.length) return alert("Активных live-сессий нет.");
-  if(!confirm(`Остановить ${activeTokens.length} активных сессий?`)) return;
-  try{
-    for(const token of activeTokens) await update(ref(db,`liveSessions/${token}/meta`),{active:false,endedAt:Date.now()});
-    await logAction("session_end_all", `Остановлено активных сессий: ${activeTokens.length}`);
-    await loadSessions();
-    showToast("Все активные остановлены");
-  }catch(e){ alert("Остановка всех активных:\n"+errText(e)); }
-}
-async function cleanupExpiredSessions(){
-  const now=Date.now();
-  const expiredTokens=Object.entries(allSessions||{}).filter(([token,session])=>token!=="_init" && Number(getSessionRoot(session).meta?.expiresAt||0)>0 && Number(getSessionRoot(session).meta?.expiresAt||0)<now).map(([token])=>token);
-  if(!expiredTokens.length) return alert("Истёкших сессий не найдено.");
-  if(!confirm(`Удалить ${expiredTokens.length} истёкших сессий?`)) return;
-  try{
-    for(const token of expiredTokens) await remove(ref(db,`liveSessions/${token}`));
-    await logAction("expired_sessions_cleanup", `Удалено истёкших сессий: ${expiredTokens.length}`);
-    await loadSessions();
-    showToast("Истёкшие сессии очищены");
-  }catch(e){ alert("Очистка истёкших:\n"+errText(e)); }
-}
-async function syncActiveSessionsFromSelectedUser(){
-  if(!selectedUid && allUsers.length===1){ selectedUid=allUsers[0]; qs("userSelect").value=selectedUid; }
-  const selectedLive=getSelectedLiveData();
-  if(!selectedUid) return alert("Сначала выбери пользователя.");
-  if(!selectedLive?.lastPoint) return alert("Нет live выбранного пользователя для синхронизации.");
-  const now=Date.now();
-  const activeTokens=Object.entries(allSessions||{}).filter(([token,session])=>token!=="_init" && !!getSessionRoot(session).meta?.active && Number(getSessionRoot(session).meta?.expiresAt||0)>now && getSessionRoot(session).meta?.ownerUid===selectedUid).map(([token])=>token);
-  if(!activeTokens.length) return alert("Активных live-сессий для выбранного пользователя нет.");
-  const livePoints=Object.values(selectedLive.recentPoints||{}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0)).slice(-100), recentPointsObj={};
-  livePoints.forEach(p=>recentPointsObj[String(p.timestamp||(Date.now()+Math.random()))]=p);
-  try{
-    for(const token of activeTokens){
-      await update(ref(db,`liveSessions/${token}/public`), { lastPoint:selectedLive.lastPoint, recentPoints:recentPointsObj });
-      await update(ref(db,`liveSessions/${token}/meta`), { lastSyncedAt:Date.now() });
-    }
-    await logAction("session_sync_active", `Синхронизировано active-сессий: ${activeTokens.length} для ${selectedUid}`);
-    await loadSessions();
-  }catch(e){ alert("Синхронизация active:\n"+errText(e)); }
-}
-async function showSessionOnMap(token){
-  const session=getSessionRoot(allSessions[token])||{}, pts=Object.values(session?.public?.recentPoints||{}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0)), latlngs=pts.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]);
-  sessionTrail.setLatLngs(latlngs);
-  if(latlngs.length){
-    sessionMarker.setLatLng(latlngs[latlngs.length-1]);
-    if(latlngs.length===1) sessionMap.setView(latlngs[0],16); else sessionMap.fitBounds(L.latLngBounds(latlngs), {padding:[30,30]});
-  }
-}
-function renderSessions(){
-  const tbody=qs("sessionsTbody"); tbody.innerHTML="";
-  const search=(qs("sessionSearchInput").value||"").trim().toLowerCase(), statusFilter=qs("sessionStatusFilter").value;
-  const entries=Object.entries(allSessions||{}).filter(([token])=>token!=="_init").map(([token,session])=>[token,getSessionRoot(session),getSessionStatus(session)]).filter(([token,session,status])=>{
-    if(statusFilter!=="all" && status!==statusFilter) return false;
-    if(search && !token.toLowerCase().includes(search)) return false;
-    if(selectedUid && session?.meta?.ownerUid && qs("viewModeSelect").value==="selected" && session.meta.ownerUid!==selectedUid) return false;
+
+function filteredHistory() {
+  const base = getVisibleHistoryPoints();
+  const from = parseDateTime(qs("fromDate")?.value, qs("fromHour")?.value, qs("fromMinute")?.value);
+  const to = parseDateTime(qs("toDate")?.value, qs("toHour")?.value, qs("toMinute")?.value);
+  const maxAcc = Number(qs("maxAccuracyFilter")?.value || 0);
+  const minSp = Number(qs("minSpeedFilter")?.value || 0);
+  const maxSp = Number(qs("maxSpeedFilter")?.value || 0);
+
+  return base.filter((p) => {
+    const t = Number(p.timestamp || 0);
+    const sp = Number(p.speed || 0);
+    const acc = Number(p.accuracy || 0);
+    if (from && t < from) return false;
+    if (to && t > to) return false;
+    if (maxAcc > 0 && acc > maxAcc) return false;
+    if (minSp > 0 && sp < minSp) return false;
+    if (maxSp > 0 && sp > maxSp) return false;
     return true;
-  }).sort((a,b)=>Number((b[1]?.meta?.createdAt||0))-Number((a[1]?.meta?.createdAt||0)));
-  if(!entries.length){ tbody.innerHTML=`<tr><td colspan="6">Сессий нет</td></tr>`; return; }
-  for(const [token,session,status] of entries){
-    const meta=session?.meta||{}, stats=session?.viewStats||{}, tr=document.createElement("tr");
-    tr.innerHTML=`<td class="mono">${token}<br><span class="tag">${meta.ownerUid||"—"}</span></td><td>${getSessionStatusLabel(status)}</td><td>${fmtTime(meta.expiresAt)}</td><td>${stats.openCount||0}</td><td>${fmtTime(stats.firstOpenAt)}<br>${fmtTime(stats.lastOpenAt)}</td><td><div class="row"><button class="secondary small" data-copy="${token}">Копировать</button><button class="secondary small" data-view="${token}">Карта</button><button class="warn small" data-end="${token}">Завершить</button><button class="danger small" data-delete="${token}">Удалить</button></div></td>`;
+  });
+}
+
+async function renderHistory() {
+  currentFiltered = filteredHistory();
+  if (qs("pointsCount")) qs("pointsCount").textContent = String(currentFiltered.length);
+
+  const tbody = qs("historyTbody");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+
+  for (const p of currentFiltered.slice().reverse().slice(0, 500)) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${fmtTime(p.timestamp)}</td>
+      <td class="mono">${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}</td>
+      <td>${formatAccuracy(p.accuracy)}</td>
+      <td>${p.speed != null ? Number(p.speed).toFixed(1) + " км/ч" : "—"}</td>
+      <td>—</td>
+      <td>
+        <button class="danger small" data-delete-point="${p.timestamp}">Удалить</button>
+      </td>
+    `;
     tbody.appendChild(tr);
   }
-  tbody.querySelectorAll("[data-copy]").forEach(btn=>btn.onclick=async()=>{ try{ await navigator.clipboard.writeText(buildShareUrl(btn.dataset.copy)); showToast("Ссылка скопирована"); }catch(e){ alert("Ошибка копирования: "+errText(e)); }});
-  tbody.querySelectorAll("[data-view]").forEach(btn=>btn.onclick=async()=>{ await showSessionOnMap(btn.dataset.view); showToast("Сессия показана на карте"); });
-  tbody.querySelectorAll("[data-end]").forEach(btn=>btn.onclick=()=>endSession(btn.dataset.end));
-  tbody.querySelectorAll("[data-delete]").forEach(btn=>btn.onclick=()=>deleteSession(btn.dataset.delete));
+
+  tbody.querySelectorAll("[data-delete-point]").forEach(btn => {
+    btn.onclick = async () => {
+      const ts = btn.dataset.deletePoint;
+      if (!selectedUid) return showToast("Нет выбранного пользователя", true);
+      if (!confirm("Удалить точку?")) return;
+      try {
+        await remove(ref(db, `history/${selectedUid}/${ts}`));
+        showToast("Точка удалена");
+        await loadAllData();
+      } catch (e) {
+        showToast("Ошибка удаления точки: " + errText(e), true);
+      }
+    };
+  });
+
+  if (currentFiltered.length) {
+    const first = currentFiltered[0];
+    const last = currentFiltered[currentFiltered.length - 1];
+    if (qs("startAddress")) qs("startAddress").textContent = await reverseGeocode(Number(first.latitude), Number(first.longitude));
+    if (qs("endAddress")) qs("endAddress").textContent = await reverseGeocode(Number(last.latitude), Number(last.longitude));
+    if (qs("routeStartCoords")) qs("routeStartCoords").textContent = `${Number(first.latitude).toFixed(5)}, ${Number(first.longitude).toFixed(5)}`;
+    if (qs("routeEndCoords")) qs("routeEndCoords").textContent = `${Number(last.latitude).toFixed(5)}, ${Number(last.longitude).toFixed(5)}`;
+  }
 }
 
-function renderJournal(){
-  const tbody=qs("journalTbody"); tbody.innerHTML="";
-  const combined=[...deletionsLog.map(item=>({...item,_type:item.kind||"deletion"})),...actionLogs.map(item=>({...item,_type:item.kind||"action"}))].sort((a,b)=>Number(b.ts||0)-Number(a.ts||0));
-  combined.slice(0,500).forEach(item=>{
-    const tr=document.createElement("tr");
-    tr.innerHTML=`<td>${fmtTime(item.ts)}</td><td>${item._type||"—"}</td><td>${item.description||"—"}</td><td>${item.email||item.uid||"—"}</td>`;
+async function updateNowFromAvailableSources() {
+  const selectedLive = getSelectedLiveData();
+  const point = selectedLive?.lastPoint || getSelectedHistoryPoints().slice(-1)[0] || null;
+
+  if (qs("nowSpeed")) qs("nowSpeed").textContent = point?.speed != null ? `${Number(point.speed).toFixed(1)} км/ч` : "—";
+  if (qs("nowAccuracy")) qs("nowAccuracy").textContent = formatAccuracy(point?.accuracy);
+  if (qs("nowUpdated")) qs("nowUpdated").textContent = fmtTime(point?.timestamp);
+  if (qs("nowBearing")) qs("nowBearing").textContent = point?.bearing != null ? `${Number(point.bearing).toFixed(0)}°` : "—";
+  if (qs("nowIdle")) qs("nowIdle").textContent = point?.timestamp ? formatIdle(Date.now() - Number(point.timestamp)) : "—";
+  if (qs("nowSource")) qs("nowSource").textContent = selectedLive?.lastPoint ? `live/${selectedUid}` : `history/${selectedUid}`;
+  if (qs("nowStatus")) qs("nowStatus").textContent = point ? "Онлайн" : "Нет данных";
+  if (qs("nowAddress")) {
+    qs("nowAddress").textContent = point?.latitude != null
+      ? await reverseGeocode(Number(point.latitude), Number(point.longitude))
+      : "—";
+  }
+}
+
+function buildShareUrl(token) {
+  return `https://mygpstrack.github.io/mygps/live.html?session=${encodeURIComponent(token)}`;
+}
+
+function getRecentSourcePoints() {
+  const livePoints = Object.values(getSelectedLiveData()?.recentPoints || {})
+    .filter(Boolean)
+    .sort((a, b) => Number(a.timestamp || 0) - Number(b.timestamp || 0));
+  const historyPoints = getSelectedHistoryPoints();
+  return livePoints.length ? livePoints.slice(-100) : historyPoints.slice(-100);
+}
+
+function generateSessionToken() {
+  const arr = new Uint8Array(24);
+  crypto.getRandomValues(arr);
+  return Array.from(arr, b => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function createLiveSession() {
+  if (!selectedUid) return showToast("Нет пользователя", true);
+  const sourcePoints = getRecentSourcePoints();
+  if (!sourcePoints.length) return showToast("Нет данных для live-ссылки", true);
+
+  const token = generateSessionToken();
+  const now = Date.now();
+  const durationMinutes = Number(qs("shareDurationPreset")?.value || 60);
+  const expiresAt = now + durationMinutes * 60 * 1000;
+  const lastPoint = sourcePoints[sourcePoints.length - 1];
+  const recentPointsObj = {};
+  sourcePoints.forEach(p => { recentPointsObj[String(p.timestamp || Date.now() + Math.random())] = p; });
+
+  const payload = {
+    meta: {
+      active: true,
+      paused: false,
+      createdAt: now,
+      expiresAt,
+      remainingMs: durationMinutes * 60 * 1000,
+      ownerUid: selectedUid,
+      createdBy: auth.currentUser?.uid || null,
+      createdByEmail: auth.currentUser?.email || null,
+      durationMinutes
+    },
+    public: { lastPoint, recentPoints: recentPointsObj },
+    viewStats: { openCount: 0, firstOpenAt: null, lastOpenAt: null }
+  };
+
+  try {
+    await set(ref(db, `liveSessions/${token}`), payload);
+    await update(ref(db), {
+      [`liveOwners/${selectedUid}/activeSessionId`]: token,
+      [`liveOwners/${selectedUid}/lastCreatedAt`]: now
+    });
+    createdShareUrl = buildShareUrl(token);
+    if (qs("shareLinkText")) qs("shareLinkText").textContent = createdShareUrl;
+    if (qs("shareExpiresText")) qs("shareExpiresText").textContent = fmtTime(expiresAt);
+    if (qs("shareResultBox")) qs("shareResultBox").classList.remove("hidden");
+    await loadSessions();
+    showToast("Live-ссылка создана");
+  } catch (e) {
+    showToast("Ошибка создания ссылки: " + errText(e), true);
+  }
+}
+
+function getSessionStatus(session) {
+  const meta = session?.meta || {};
+  const active = !!meta.active;
+  const expiresAt = Number(meta.expiresAt || 0);
+  const now = Date.now();
+  if (active && expiresAt > now) return "active";
+  if (!active && expiresAt > now) return "ended";
+  return "expired";
+}
+
+function getSessionStatusLabel(status) {
+  if (status === "active") return "активна";
+  if (status === "ended") return "завершена";
+  return "истекла";
+}
+
+async function deleteSession(token) {
+  if (!confirm(`Удалить live-сессию ${token}?`)) return;
+  try {
+    await remove(ref(db, `liveSessions/${token}`));
+    await loadSessions();
+    showToast("Live-сессия удалена");
+  } catch (e) {
+    showToast("Ошибка удаления сессии: " + errText(e), true);
+  }
+}
+
+async function endSession(token) {
+  if (!confirm(`Завершить live-сессию ${token}?`)) return;
+  try {
+    await update(ref(db, `liveSessions/${token}/meta`), { active: false, endedAt: Date.now() });
+    await loadSessions();
+    showToast("Сессия завершена");
+  } catch (e) {
+    showToast("Ошибка завершения: " + errText(e), true);
+  }
+}
+
+async function endAllActiveSessions() {
+  const now = Date.now();
+  const activeTokens = Object.entries(allSessions || {})
+    .filter(([token, session]) => token !== "_init" && !!session?.meta?.active && Number(session?.meta?.expiresAt || 0) > now)
+    .map(([token]) => token);
+
+  if (!activeTokens.length) return showToast("Активных live-сессий нет");
+  if (!confirm(`Остановить ${activeTokens.length} активных сессий?`)) return;
+
+  try {
+    for (const token of activeTokens) {
+      await update(ref(db, `liveSessions/${token}/meta`), { active: false, endedAt: Date.now() });
+    }
+    await loadSessions();
+    showToast("Активные сессии остановлены");
+  } catch (e) {
+    showToast("Ошибка остановки активных: " + errText(e), true);
+  }
+}
+
+async function cleanupExpiredSessions() {
+  const now = Date.now();
+  const expiredTokens = Object.entries(allSessions || {})
+    .filter(([token, session]) => token !== "_init" && Number(session?.meta?.expiresAt || 0) > 0 && Number(session?.meta?.expiresAt || 0) < now)
+    .map(([token]) => token);
+
+  if (!expiredTokens.length) return showToast("Истёкших сессий нет");
+
+  if (!confirm(`Удалить ${expiredTokens.length} истёкших сессий?`)) return;
+
+  try {
+    for (const token of expiredTokens) {
+      await remove(ref(db, `liveSessions/${token}`));
+    }
+    await loadSessions();
+    showToast("Истёкшие сессии удалены");
+  } catch (e) {
+    showToast("Ошибка очистки истёкших: " + errText(e), true);
+  }
+}
+
+async function syncActiveSessionsFromSelectedUser() {
+  const selectedLive = getSelectedLiveData();
+  if (!selectedUid) return showToast("Сначала выбери пользователя", true);
+  if (!selectedLive?.lastPoint) return showToast("Нет live выбранного пользователя", true);
+
+  const now = Date.now();
+  const activeTokens = Object.entries(allSessions || {})
+    .filter(([token, session]) =>
+      token !== "_init" &&
+      !!session?.meta?.active &&
+      Number(session?.meta?.expiresAt || 0) > now &&
+      session?.meta?.ownerUid === selectedUid
+    )
+    .map(([token]) => token);
+
+  if (!activeTokens.length) return showToast("Активных live-сессий нет");
+
+  const livePoints = Object.values(selectedLive.recentPoints || {})
+    .filter(Boolean)
+    .sort((a, b) => Number(a.timestamp || 0) - Number(b.timestamp || 0))
+    .slice(-100);
+
+  const recentPointsObj = {};
+  livePoints.forEach(p => { recentPointsObj[String(p.timestamp || (Date.now() + Math.random()))] = p; });
+
+  try {
+    for (const token of activeTokens) {
+      await update(ref(db, `liveSessions/${token}/public`), {
+        lastPoint: selectedLive.lastPoint,
+        recentPoints: recentPointsObj
+      });
+      await update(ref(db, `liveSessions/${token}/meta`), { lastSyncedAt: Date.now() });
+    }
+    await loadSessions();
+    showToast("Синхронизация выполнена");
+  } catch (e) {
+    showToast("Ошибка синхронизации: " + errText(e), true);
+  }
+}
+
+function renderSessions() {
+  const tbody = qs("sessionsTbody");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+
+  const search = (qs("sessionSearchInput")?.value || "").trim().toLowerCase();
+  const statusFilter = qs("sessionStatusFilter")?.value || "all";
+
+  const entries = Object.entries(allSessions || {})
+    .filter(([token]) => token !== "_init")
+    .map(([token, session]) => [token, session, getSessionStatus(session)])
+    .filter(([token, session, status]) => {
+      if (statusFilter !== "all" && status !== statusFilter) return false;
+      if (search && !token.toLowerCase().includes(search)) return false;
+      if (selectedUid && session?.meta?.ownerUid && qs("viewModeSelect")?.value === "selected" && session.meta.ownerUid !== selectedUid) return false;
+      return true;
+    });
+
+  if (!entries.length) {
+    tbody.innerHTML = `<tr><td colspan="6">Сессий нет</td></tr>`;
+    return;
+  }
+
+  for (const [token, session, status] of entries) {
+    const meta = session?.meta || {};
+    const stats = session?.viewStats || {};
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td class="mono">${token}<br><span class="tag">${meta.ownerUid || "—"}</span></td>
+      <td>${getSessionStatusLabel(status)}</td>
+      <td>${fmtTime(meta.expiresAt)}</td>
+      <td>${stats.openCount || 0}</td>
+      <td>${fmtTime(stats.firstOpenAt)}<br>${fmtTime(stats.lastOpenAt)}</td>
+      <td>
+        <div class="row">
+          <button class="secondary small" data-copy="${token}">Копировать</button>
+          <button class="warn small" data-end="${token}">Завершить</button>
+          <button class="danger small" data-delete="${token}">Удалить</button>
+        </div>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  }
+
+  tbody.querySelectorAll("[data-copy]").forEach(btn => {
+    btn.onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(buildShareUrl(btn.dataset.copy));
+        showToast("Ссылка скопирована");
+      } catch (e) {
+        showToast("Ошибка копирования: " + errText(e), true);
+      }
+    };
+  });
+
+  tbody.querySelectorAll("[data-end]").forEach(btn => {
+    btn.onclick = () => endSession(btn.dataset.end);
+  });
+
+  tbody.querySelectorAll("[data-delete]").forEach(btn => {
+    btn.onclick = () => deleteSession(btn.dataset.delete);
+  });
+}
+
+function renderJournal() {
+  const tbody = qs("journalTbody");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+  const combined = [...deletionsLog, ...actionLogs].sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0));
+  combined.slice(0, 500).forEach(item => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${fmtTime(item.ts)}</td><td>${item.kind || "—"}</td><td>${item.description || "—"}</td><td>${item.email || item.uid || "—"}</td>`;
     tbody.appendChild(tr);
   });
 }
 
-function showDiag(){
-  const selectedLive=getSelectedLiveData(), visibleHistory=getVisibleHistoryPoints(), activeSession=Object.entries(allSessions||{}).find(([token,session])=>getSessionRoot(session)?.meta?.ownerUid===selectedUid && !!getSessionRoot(session)?.meta?.active);
-  const text=[
-    `UID: ${auth.currentUser?.uid||"—"}`,
-    `Email: ${auth.currentUser?.email||"—"}`,
-    `Выбранный пользователь: ${selectedUid||"—"}`,
-    `Режим: ${qs("viewModeSelect").value}`,
+function showDiag() {
+  const text = [
+    `UID: ${auth.currentUser?.uid || "—"}`,
+    `Email: ${auth.currentUser?.email || "—"}`,
+    `Выбранный пользователь: ${selectedUid || "—"}`,
     `Пользователей: ${allUsers.length}`,
-    `Точек history (видимых): ${visibleHistory.length}`,
-    `Есть live выбранного пользователя: ${selectedLive?.lastPoint ? "да" : "нет"}`,
-    `Активная live-сессия: ${activeSession ? activeSession[0] : "нет"}`,
-    `Последний источник now: ${currentNowSourceLabel}`
+    `Точек history: ${getVisibleHistoryPoints().length}`,
+    `Сессий: ${Object.keys(allSessions || {}).length}`
   ].join("\n");
   alert(text);
 }
 
-async function refreshLiveNow(){
-  try{
-    const snap=await get(ref(db,"live"));
-    liveByUid=snap.val()||{};
+async function refreshLiveNow() {
+  try {
+    const snap = await get(ref(db, "live"));
+    liveByUid = snap.val() || {};
     updateUsage();
     await updateNowFromAvailableSources();
-  }catch(e){ alert("Обновление live:\n"+errText(e)); }
+    showToast("Live обновлён");
+  } catch (e) {
+    showToast("Ошибка обновления live: " + errText(e), true);
+  }
 }
 
-function downloadText(name,content,type){ const blob=new Blob([content],{type}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=name; a.click(); URL.revokeObjectURL(url); }
+document.querySelectorAll(".tab-btn").forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll("#nowPanel,#historyPanel,#reportsPanel,#usagePanel,#sessionsPanel,#journalPanel")
+      .forEach(p => p.classList.add("hidden"));
+    btn.classList.add("active");
+    const panel = qs(btn.dataset.tab);
+    if (panel) panel.classList.remove("hidden");
+  };
+});
 
-qs("googleBtn").onclick=async()=>{ try{ await signInWithPopup(auth,provider); }catch(e){ qs("errorBox").textContent="Ошибка Google-входа: "+errText(e); qs("errorBox").classList.remove("hidden"); }};
-qs("emailLoginBtn").onclick=async()=>{ try{ await signInWithEmailAndPassword(auth,qs("emailInput").value.trim(),qs("passwordInput").value); }catch(e){ qs("errorBox").textContent="Ошибка входа: "+errText(e); qs("errorBox").classList.remove("hidden"); }};
-qs("emailRegisterBtn").onclick=async()=>{ try{ await createUserWithEmailAndPassword(auth,qs("emailInput").value.trim(),qs("passwordInput").value); }catch(e){ qs("errorBox").textContent="Ошибка регистрации: "+errText(e); qs("errorBox").classList.remove("hidden"); }};
-qs("logoutBtn").onclick=async()=>{ await signOut(auth); };
-
-qs("todayBtn").onclick=()=>{ const now=new Date(), start=new Date(); start.setHours(0,0,0,0); setDateTimeRange(start,now); renderHistory(); };
-qs("yesterdayBtn").onclick=()=>{ const start=new Date(); start.setDate(start.getDate()-1); start.setHours(0,0,0,0); const end=new Date(start); end.setHours(23,59,0,0); setDateTimeRange(start,end); renderHistory(); };
-qs("weekBtn").onclick=()=>{ const now=new Date(), start=new Date(); start.setDate(start.getDate()-7); setDateTimeRange(start,now); renderHistory(); };
-qs("range1hBtn").onclick=()=>{ const now=new Date(), start=new Date(Date.now()-60*60*1000); setDateTimeRange(start,now); renderHistory(); };
-qs("range24hBtn").onclick=()=>{ const now=new Date(), start=new Date(Date.now()-24*60*60*1000); setDateTimeRange(start,now); renderHistory(); };
-qs("applyFiltersBtn").onclick=renderHistory;
-qs("resetFiltersBtn").onclick=()=>{ qs("maxAccuracyFilter").value=""; qs("minSpeedFilter").value=""; qs("maxSpeedFilter").value=""; qs("hideJunkToggle").checked=false; renderHistory(); };
-qs("refreshHistoryBtn").onclick=async()=>{ await loadAllData(); showToast("История обновлена"); };
-qs("fitRouteBtn").onclick=()=>{ const pts=currentFiltered.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]); if(pts.length) historyMap.fitBounds(L.latLngBounds(pts), {padding:[30,30]}); };
-qs("deleteRangeBtn").onclick=async()=>{ console.log("click deleteRangeBtn");
-  const pts=filteredHistory();
-  if(!pts.length) return alert("Нет точек в выбранном диапазоне.");
-  if(!selectedUid) return alert("Нет выбранного пользователя.");
-  if(!confirm(`Удалить ${pts.length} точек?`)) return;
-  try{
-    const entryRef=push(ref(db,"adminLogs/deletions"));
-    await set(entryRef,{ts:Date.now(),kind:"range",description:`${pts.length} точек`,uid:auth.currentUser?.uid||null,email:auth.currentUser?.email||null});
-    for (const p of pts){ await remove(ref(db,`history/${selectedUid}/${String(p.timestamp)}`)); }
-    await loadAllData();
-    showToast("Период удалён");
-  }catch(e){ alert("Удаление периода:\n"+errText(e)); }
+qs("googleBtn").onclick = async () => {
+  try {
+    await signInWithPopup(auth, provider);
+  } catch (e) {
+    showToast("Ошибка Google-входа: " + errText(e), true);
+  }
 };
 
-qs("exportJsonBtn").onclick=()=>downloadText("history_export.json", JSON.stringify(filteredHistory(),null,2), "application/json");
-qs("exportCsvBtn").onclick=()=>{ const pts=filteredHistory(), lines=["timestamp,latitude,longitude,accuracy,speed"]; pts.forEach(p=>lines.push([p.timestamp??"",p.latitude??"",p.longitude??"",p.accuracy??"",p.speed??""].join(","))); downloadText("history_export.csv", lines.join("\n"), "text/csv"); };
-qs("exportGpxBtn").onclick=()=>{ const pts=filteredHistory(), lines=['<?xml version="1.0" encoding="UTF-8"?>','<gpx version="1.1" creator="MyGps Admin" xmlns="http://www.topografix.com/GPX/1/1">','<trk><name>History Export</name><trkseg>']; pts.forEach(p=>lines.push(`<trkpt lat="${p.latitude}" lon="${p.longitude}"><time>${new Date(Number(p.timestamp||0)).toISOString()}</time></trkpt>`)); lines.push('</trkseg></trk></gpx>'); downloadText("history_export.gpx", lines.join(""), "application/gpx+xml"); };
-qs("exportPdfBtn").onclick=()=>{ const pts=filteredHistory(), s=computeSummary(pts), {jsPDF}=window.jspdf, doc=new jsPDF(); doc.text("MyGps History Report",14,16); doc.text(`Distance: ${s.km.toFixed(2)} km`,14,28); doc.text(`Average speed: ${s.avgSpeed.toFixed(1)} km/h`,14,36); doc.text(`Max speed: ${s.maxSpeed.toFixed(1)} km/h`,14,44); const rows=pts.slice(0,250).map(p=>[fmtTime(p.timestamp), `${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}`, p.speed != null ? Number(p.speed).toFixed(1) : "—"]); doc.autoTable({startY:52, head:[["Time","Coordinates","Speed km/h"]], body:rows, styles:{fontSize:9}}); doc.save("history_report.pdf"); };
+qs("emailLoginBtn").onclick = async () => {
+  try {
+    await signInWithEmailAndPassword(auth, qs("emailInput").value.trim(), qs("passwordInput").value);
+  } catch (e) {
+    showToast("Ошибка входа: " + errText(e), true);
+  }
+};
 
-qs("refreshNowBtn").onclick=async()=>{ await updateNowFromAvailableSources(); showToast("Обновлено"); };
-qs("refreshLiveBtn").onclick=async()=>{ await refreshLiveNow(); showToast("Live обновлён"); };
-qs("liveAutoCenterBtn").onclick=()=>{ liveAutoCenter=!liveAutoCenter; qs("liveAutoCenterBtn").textContent=`Автоцентр: ${liveAutoCenter?"вкл":"выкл"}`; };
-qs("btnDiag").onclick=showDiag;
+qs("emailRegisterBtn").onclick = async () => {
+  try {
+    await createUserWithEmailAndPassword(auth, qs("emailInput").value.trim(), qs("passwordInput").value);
+  } catch (e) {
+    showToast("Ошибка регистрации: " + errText(e), true);
+  }
+};
 
-qs("createShareBtn").onclick=()=>createLiveSession();
-qs("clearShareResultBtn").onclick=()=>{ createdShareUrl=""; qs("shareResultBox").classList.add("hidden"); };
-qs("copyCreatedShareBtn").onclick=async()=>{ if(createdShareUrl){ await navigator.clipboard.writeText(createdShareUrl); showToast("Ссылка скопирована"); } };
-qs("openCreatedShareBtn").onclick=()=>{ if(createdShareUrl) window.open(createdShareUrl,"_blank","noopener,noreferrer"); };
+qs("logoutBtn").onclick = async () => {
+  await signOut(auth);
+};
 
-qs("refreshSessionsBtn").onclick=async()=>{ await loadSessions(); showToast("Live-сессии обновлены"); };
-qs("syncActiveSessionsBtn").onclick=async()=>{ console.log("click syncActiveSessionsBtn"); showToast("Синхронизация..."); await syncActiveSessionsFromSelectedUser(); };
-qs("endAllActiveSessionsBtn").onclick=async()=>{ console.log("click endAllActiveSessionsBtn"); showToast("Останавливаю активные..."); await endAllActiveSessions(); };
-qs("cleanupSessionsBtn").onclick=async()=>{ console.log("click cleanupSessionsBtn"); showToast("Очищаю истёкшие..."); await cleanupExpiredSessions(); };
-qs("sessionSearchInput").oninput=renderSessions;
-qs("sessionStatusFilter").onchange=renderSessions;
+qs("todayBtn").onclick = () => {
+  const now = new Date();
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  setDateTimeRange(start, now);
+  renderHistory();
+};
 
-qs("userSelect").onchange=()=>{ selectedUid=qs("userSelect").value; updateUsage(); renderHistory(); updateNowFromAvailableSources(); renderSessions(); };
-qs("viewModeSelect").onchange=()=>{ updateUsage(); renderHistory(); updateNowFromAvailableSources(); renderSessions(); };
-qs("refreshUsersBtn").onclick=async()=>{ await loadUsers(); await loadAllData(); };
+qs("yesterdayBtn").onclick = () => {
+  const start = new Date();
+  start.setDate(start.getDate() - 1);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setHours(23, 59, 0, 0);
+  setDateTimeRange(start, end);
+  renderHistory();
+};
 
-qs("deleteHistoryBtn").onclick=async()=>{ console.log("click deleteHistoryBtn"); if(!confirm("Очистить всю ветку history?")) return; try{ await remove(ref(db,"history")); await logAction("delete_history","Очищена ветка history"); await loadAllData(); showToast("History очищена"); }catch(e){ alert("Очистка history:\n"+errText(e)); } };
-qs("deleteLiveBtn").onclick=async()=>{ console.log("click deleteLiveBtn"); if(!confirm("Очистить live, liveSessions и liveOwners?")) return; try{ await remove(ref(db,"live")); await remove(ref(db,"liveSessions")); await remove(ref(db,"liveOwners")); await logAction("delete_live","Очищены live/liveSessions/liveOwners"); await loadAllData(); await loadSessions(); showToast("Live очищен"); }catch(e){ alert("Очистка live:\n"+errText(e)); } };
-qs("deleteAllDbBtn").onclick=async()=>{ console.log("click deleteAllDbBtn"); const code=prompt("Для полной очистки введи DELETE"); if(code!=="DELETE") return; try{ await remove(ref(db,"history")); await remove(ref(db,"live")); await remove(ref(db,"liveSessions")); await remove(ref(db,"liveOwners")); await remove(ref(db,"adminLogs")); await loadAllData(); await loadSessions(); showToast("База очищена"); }catch(e){ alert("Полная очистка базы:\n"+errText(e)); } };
+qs("weekBtn").onclick = () => {
+  const now = new Date();
+  const start = new Date();
+  start.setDate(start.getDate() - 7);
+  setDateTimeRange(start, now);
+  renderHistory();
+};
+
+qs("range1hBtn").onclick = () => {
+  const now = new Date();
+  const start = new Date(Date.now() - 60 * 60 * 1000);
+  setDateTimeRange(start, now);
+  renderHistory();
+};
+
+qs("range24hBtn").onclick = () => {
+  const now = new Date();
+  const start = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  setDateTimeRange(start, now);
+  renderHistory();
+};
+
+qs("applyFiltersBtn").onclick = () => renderHistory();
+
+qs("resetFiltersBtn").onclick = () => {
+  if (qs("maxAccuracyFilter")) qs("maxAccuracyFilter").value = "";
+  if (qs("minSpeedFilter")) qs("minSpeedFilter").value = "";
+  if (qs("maxSpeedFilter")) qs("maxSpeedFilter").value = "";
+  renderHistory();
+};
+
+qs("refreshHistoryBtn").onclick = async () => {
+  await loadAllData();
+  showToast("История обновлена");
+};
+
+qs("deleteRangeBtn").onclick = async () => {
+  console.log("click deleteRangeBtn");
+  const pts = filteredHistory();
+  if (!pts.length) return showToast("Нет точек в выбранном диапазоне");
+  if (!selectedUid) return showToast("Нет выбранного пользователя", true);
+  if (!confirm(`Удалить ${pts.length} точек?`)) return;
+
+  try {
+    const updates = {};
+    pts.forEach(p => { updates[`history/${selectedUid}/${String(p.timestamp)}`] = null; });
+    await update(ref(db), updates);
+    await loadAllData();
+    showToast("Период удалён");
+  } catch (e) {
+    showToast("Ошибка удаления периода: " + errText(e), true);
+  }
+};
+
+qs("createShareBtn").onclick = () => createLiveSession();
+
+qs("clearShareResultBtn").onclick = () => {
+  createdShareUrl = "";
+  if (qs("shareResultBox")) qs("shareResultBox").classList.add("hidden");
+};
+
+qs("copyCreatedShareBtn").onclick = async () => {
+  if (!createdShareUrl) return;
+  await navigator.clipboard.writeText(createdShareUrl);
+  showToast("Ссылка скопирована");
+};
+
+qs("openCreatedShareBtn").onclick = () => {
+  if (createdShareUrl) window.open(createdShareUrl, "_blank", "noopener,noreferrer");
+};
+
+qs("refreshSessionsBtn").onclick = async () => {
+  await loadSessions();
+  showToast("Live-сессии обновлены");
+};
+
+qs("syncActiveSessionsBtn").onclick = async () => {
+  console.log("click syncActiveSessionsBtn");
+  await syncActiveSessionsFromSelectedUser();
+};
+
+qs("endAllActiveSessionsBtn").onclick = async () => {
+  console.log("click endAllActiveSessionsBtn");
+  await endAllActiveSessions();
+};
+
+qs("cleanupSessionsBtn").onclick = async () => {
+  console.log("click cleanupSessionsBtn");
+  await cleanupExpiredSessions();
+};
+
+qs("refreshNowBtn").onclick = () => updateNowFromAvailableSources();
+qs("refreshLiveBtn").onclick = () => refreshLiveNow();
+qs("btnDiag").onclick = () => showDiag();
+
+qs("liveAutoCenterBtn").onclick = () => {
+  liveAutoCenter = !liveAutoCenter;
+  qs("liveAutoCenterBtn").textContent = `Автоцентр: ${liveAutoCenter ? "вкл" : "выкл"}`;
+};
+
+qs("refreshUsersBtn").onclick = async () => {
+  await loadUsers();
+  await loadAllData();
+  showToast("Пользователи обновлены");
+};
+
+qs("deleteHistoryBtn").onclick = async () => {
+  console.log("click deleteHistoryBtn");
+  if (!confirm("Очистить всю ветку history?")) return;
+  try {
+    await remove(ref(db, "history"));
+    await loadAllData();
+    showToast("History очищена");
+  } catch (e) {
+    showToast("Очистка history: " + errText(e), true);
+  }
+};
+
+qs("deleteLiveBtn").onclick = async () => {
+  console.log("click deleteLiveBtn");
+  if (!confirm("Очистить live, liveSessions и liveOwners?")) return;
+  try {
+    await remove(ref(db, "live"));
+    await remove(ref(db, "liveSessions"));
+    await remove(ref(db, "liveOwners"));
+    await loadAllData();
+    await loadSessions();
+    showToast("Live очищен");
+  } catch (e) {
+    showToast("Очистка live: " + errText(e), true);
+  }
+};
+
+qs("deleteAllDbBtn").onclick = async () => {
+  console.log("click deleteAllDbBtn");
+  const code = prompt("Для полной очистки введи DELETE");
+  if (code !== "DELETE") return;
+  try {
+    await remove(ref(db, "history"));
+    await remove(ref(db, "live"));
+    await remove(ref(db, "liveSessions"));
+    await remove(ref(db, "liveOwners"));
+    await remove(ref(db, "adminLogs"));
+    await loadAllData();
+    await loadSessions();
+    showToast("База очищена");
+  } catch (e) {
+    showToast("Полная очистка базы: " + errText(e), true);
+  }
+};
+
+if (qs("userSelect")) {
+  qs("userSelect").onchange = async () => {
+    selectedUid = qs("userSelect").value;
+    updateUsage();
+    await renderHistory();
+    await updateNowFromAvailableSources();
+    renderSessions();
+  };
+}
+
+if (qs("viewModeSelect")) {
+  qs("viewModeSelect").onchange = async () => {
+    updateUsage();
+    await renderHistory();
+    await updateNowFromAvailableSources();
+    renderSessions();
+  };
+}
 
 onAuthStateChanged(auth, async user => {
   qs("errorBox").classList.add("hidden");
-  if(!user){
+
+  if (!user) {
     qs("authCard").classList.remove("hidden");
     qs("adminPanel").classList.add("hidden");
     return;
   }
+
   const adminSnap = await get(ref(db, `admins/${user.uid}`));
   const allowed = adminSnap.val() === true;
-  if(!allowed){
+
+  if (!allowed) {
     qs("authCard").classList.remove("hidden");
     qs("adminPanel").classList.add("hidden");
     qs("authMessage").innerHTML = `Ты вошёл, но ещё не добавлен как админ.<br><br><span class="mono">admins/${user.uid} = true</span>`;
@@ -938,24 +1171,51 @@ onAuthStateChanged(auth, async user => {
   qs("authCard").classList.add("hidden");
   qs("adminPanel").classList.remove("hidden");
   qs("userInfo").textContent = user.email || "Admin";
+  if (qs("userRoleTag")) qs("userRoleTag").remove();
+  if (qs("userUidText")) qs("userUidText").remove();
+
   setDefaultPeriodToday();
 
-  onValue(ref(db, "live"), snap => { liveByUid=snap.val()||{}; updateUsage(); updateNowFromAvailableSources(); });
-  onValue(ref(db, "history"), snap => {
-    const raw=snap.val()||{};
-    historyByUid={};
-    Object.entries(raw).forEach(([uid,pointsObj])=>{
-      historyByUid[uid]=Object.values(pointsObj||{}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
-    });
-    updateUsage(); renderHistory(); updateNowFromAvailableSources();
+  onValue(ref(db, "live"), async (snap) => {
+    liveByUid = snap.val() || {};
+    updateUsage();
+    await updateNowFromAvailableSources();
   });
-  onValue(ref(db, "liveSessions"), snap => { allSessions=snap.val()||{}; updateUsage(); renderSessions(); updateNowFromAvailableSources(); });
-  onValue(ref(db, "adminLogs/deletions"), snap => { deletionsLog=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0)); renderJournal(); });
-  onValue(ref(db, "adminLogs/actions"), snap => { actionLogs=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0)); renderJournal(); });
+
+  onValue(ref(db, "history"), async (snap) => {
+    const raw = snap.val() || {};
+    historyByUid = {};
+    Object.entries(raw).forEach(([uid, pointsObj]) => {
+      historyByUid[uid] = Object.values(pointsObj || {})
+        .filter(Boolean)
+        .sort((a, b) => Number(a.timestamp || 0) - Number(b.timestamp || 0));
+    });
+    updateUsage();
+    await renderHistory();
+    await updateNowFromAvailableSources();
+  });
+
+  onValue(ref(db, "liveSessions"), (snap) => {
+    allSessions = snap.val() || {};
+    updateUsage();
+    renderSessions();
+  });
+
+  onValue(ref(db, "adminLogs/deletions"), (snap) => {
+    deletionsLog = Object.values(snap.val() || {}).filter(Boolean);
+    renderJournal();
+  });
+
+  onValue(ref(db, "adminLogs/actions"), (snap) => {
+    actionLogs = Object.values(snap.val() || {}).filter(Boolean);
+    renderJournal();
+  });
 
   await loadUsers();
   await loadAllData();
   await loadSessions();
 });
+
+console.log("ADMIN UI READY");
 </script>
 </body></html>
