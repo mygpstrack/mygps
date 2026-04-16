@@ -6,22 +6,68 @@
   <title>MyGps Admin</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
   <style>
-    :root{--bg:#0f172a;--card:#111827;--muted:#94a3b8;--text:#e5e7eb;--accent:#22c55e;--warn:#eab308;--danger:#ef4444;--border:#1f2937;--blue:#2563eb}
-    *{box-sizing:border-box} body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text)}
-    .wrap{max-width:1440px;margin:0 auto;padding:16px}.card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:16px;margin-bottom:16px}
-    h1,h2,h3,p{margin:0}.sub{color:var(--muted);margin-top:6px;line-height:1.6}.headerTime{margin-top:8px;color:var(--muted)}
-    .grid2,.grid3,.grid4,.grid6{display:grid;gap:12px;margin-top:12px}.grid2{grid-template-columns:repeat(2,minmax(0,1fr))}.grid3{grid-template-columns:repeat(3,minmax(0,1fr))}.grid4{grid-template-columns:repeat(4,minmax(0,1fr))}.grid6{grid-template-columns:repeat(6,minmax(0,1fr))}
-    .stat{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:14px;padding:12px}.label{color:var(--muted);font-size:13px;margin-bottom:6px}.value{font-size:18px;font-weight:700;line-height:1.2;word-break:break-word}
-    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.tab-btn{background:#1f2937}.tab-btn.active{background:var(--blue)}.hidden{display:none!important}
-    input,button,select,textarea{font:inherit} input,select,textarea{padding:12px 14px;border-radius:12px;border:1px solid var(--border);background:#0b1220;color:var(--text);min-width:120px}
-    button{border:0;border-radius:12px;padding:10px 14px;font-weight:600;cursor:pointer;color:white;background:var(--blue)} button.secondary{background:#374151} button.warn{background:#b45309} button.danger{background:#b91c1c} button.success{background:#15803d} button.small{padding:6px 10px;font-size:13px}
-    .pill{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;border:1px solid var(--border);background:rgba(255,255,255,.03);font-size:14px}.dot{width:10px;height:10px;border-radius:50%;display:inline-block}.ok{background:var(--accent)}
-    .notice,.address-box,.error{padding:12px;border-radius:14px;border:1px solid var(--border);background:rgba(255,255,255,.03);margin-top:12px;line-height:1.6}.error{border-color:#7f1d1d;background:rgba(127,29,29,.25);color:#fecaca}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;word-break:break-all}
-    table{width:100%;border-collapse:collapse;margin-top:12px;font-size:14px} th,td{border-bottom:1px solid var(--border);padding:10px 8px;text-align:left;vertical-align:top} th{color:var(--muted)}
-    #historyMap,#liveMap,#sessionMap{width:100%;height:420px;border-radius:16px;overflow:hidden;border:1px solid var(--border);margin-top:12px}.chartWrap{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:16px;padding:12px}.tag{display:inline-block;padding:3px 8px;border-radius:999px;border:1px solid var(--border);font-size:12px;margin-right:6px;margin-bottom:6px}
-    @media (max-width:1200px){.grid6{grid-template-columns:repeat(3,minmax(0,1fr))}}
+    :root{
+      --bg:#0f172a; --card:#111827; --muted:#94a3b8; --text:#e5e7eb; --accent:#22c55e;
+      --warn:#eab308; --danger:#ef4444; --border:#1f2937; --blue:#2563eb;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text)}
+    .wrap{max-width:1440px;margin:0 auto;padding:16px}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:16px;margin-bottom:16px}
+    h1,h2,h3,p{margin:0}
+    .sub{color:var(--muted);margin-top:6px;line-height:1.6}
+    .headerTime{margin-top:8px;color:var(--muted)}
+    .grid2,.grid3,.grid4,.grid5,.grid6{display:grid;gap:12px;margin-top:12px}
+    .grid2{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .grid3{grid-template-columns:repeat(3,minmax(0,1fr))}
+    .grid4{grid-template-columns:repeat(4,minmax(0,1fr))}
+    .grid5{grid-template-columns:repeat(5,minmax(0,1fr))}
+    .grid6{grid-template-columns:repeat(6,minmax(0,1fr))}
+    .stat{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:14px;padding:12px}
+    .label{color:var(--muted);font-size:13px;margin-bottom:6px}
+    .value{font-size:18px;font-weight:700;line-height:1.2;word-break:break-word}
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}
+    .tabs{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+    .tab-btn{background:#1f2937}
+    .tab-btn.active{background:var(--blue)}
+    .hidden{display:none!important}
+    input,button,select,textarea{font:inherit}
+    input,select,textarea{
+      padding:12px 14px;border-radius:12px;border:1px solid var(--border);
+      background:#0b1220;color:var(--text);min-width:120px
+    }
+    button{
+      border:0;border-radius:12px;padding:10px 14px;
+      font-weight:600;cursor:pointer;color:white;background:var(--blue)
+    }
+    button.secondary{background:#374151}
+    button.warn{background:#b45309}
+    button.danger{background:#b91c1c}
+    button.success{background:#15803d}
+    button.small{padding:6px 10px;font-size:13px}
+    button:disabled{opacity:.55;cursor:not-allowed}
+    .pill{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;border:1px solid var(--border);background:rgba(255,255,255,.03);font-size:14px}
+    .dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+    .ok{background:var(--accent)}
+    .notice,.address-box,.error{padding:12px;border-radius:14px;border:1px solid var(--border);background:rgba(255,255,255,.03);margin-top:12px;line-height:1.6}
+    .error{border-color:#7f1d1d;background:rgba(127,29,29,.25);color:#fecaca}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;word-break:break-all}
+    table{width:100%;border-collapse:collapse;margin-top:12px;font-size:14px}
+    th,td{border-bottom:1px solid var(--border);padding:10px 8px;text-align:left;vertical-align:top}
+    th{color:var(--muted)}
+    #historyMap,#liveMap,#sessionMap{width:100%;height:420px;border-radius:16px;overflow:hidden;border:1px solid var(--border);margin-top:12px}
+    .chartWrap{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:16px;padding:12px}
+    .tag{display:inline-block;padding:3px 8px;border-radius:999px;border:1px solid var(--border);font-size:12px;margin-right:6px;margin-bottom:6px}
+    .tag.admin{background:#0b3b1a;border-color:#166534}
+    .tag.legacy{background:#3b2b0b;border-color:#a16207}
+    @media (max-width:1200px){.grid6,.grid5{grid-template-columns:repeat(3,minmax(0,1fr))}}
     @media (max-width:1000px){.grid4{grid-template-columns:repeat(2,minmax(0,1fr))}.grid3,.grid2{grid-template-columns:1fr}}
-    @media (max-width:900px){.grid4,.grid6{grid-template-columns:1fr} input,select,textarea{min-width:unset;width:100%} .row>*{width:100%} #historyMap,#liveMap,#sessionMap{height:320px}}
+    @media (max-width:900px){
+      .grid4,.grid5,.grid6{grid-template-columns:1fr}
+      input,select,textarea{min-width:unset;width:100%}
+      .row>*{width:100%}
+      #historyMap,#liveMap,#sessionMap{height:320px}
+    }
   </style>
 </head>
 <body>
@@ -35,23 +81,44 @@
   <div class="card" id="authCard">
     <h2>Вход</h2>
     <div class="row"><button id="googleBtn">Войти через Google</button></div>
-    <div class="row"><input id="emailInput" type="email" placeholder="Email"/><input id="passwordInput" type="password" placeholder="Пароль"/></div>
-    <div class="row"><button id="emailLoginBtn" class="secondary">Войти по Email</button><button id="emailRegisterBtn" class="success">Создать Email-аккаунт</button></div>
+    <div class="row">
+      <input id="emailInput" type="email" placeholder="Email"/>
+      <input id="passwordInput" type="password" placeholder="Пароль"/>
+    </div>
+    <div class="row">
+      <button id="emailLoginBtn" class="secondary">Войти по Email</button>
+      <button id="emailRegisterBtn" class="success">Создать Email-аккаунт</button>
+    </div>
     <div class="notice" id="authMessage">Если после входа доступа нет, добавь свой UID в Firebase: <span class="mono">admins/ТВОЙ_UID = true</span></div>
     <div id="errorBox" class="error hidden"></div>
   </div>
 
   <div id="adminPanel" class="hidden">
     <div class="card">
-      <div class="row"><div class="pill"><span class="dot ok"></span><span id="userInfo">Вы вошли</span></div><button id="logoutBtn" class="secondary">Выйти</button></div>
       <div class="row">
-        <div><div class="label">Пользователь</div><select id="userSelect"></select></div>
-        <div><div class="label">Режим</div><select id="viewModeSelect"><option value="selected" selected>Выбранный пользователь</option><option value="all">Все пользователи</option></select></div>
+        <div class="pill"><span class="dot ok"></span><span id="userInfo">Вы вошли</span></div>
+        <div class="pill"><span class="tag admin">ADMIN</span><span id="userUidText" class="mono">—</span></div>
+        <button id="logoutBtn" class="secondary">Выйти</button>
+      </div>
+
+      <div class="row">
+        <div>
+          <div class="label">Пользователь</div>
+          <select id="userSelect"></select>
+        </div>
+        <div>
+          <div class="label">Режим</div>
+          <select id="viewModeSelect">
+            <option value="selected" selected>Выбранный пользователь</option>
+            <option value="all">Все пользователи</option>
+          </select>
+        </div>
         <button id="refreshUsersBtn" class="secondary">Обновить пользователей</button>
         <button id="deleteHistoryBtn" class="warn">Очистить history</button>
         <button id="deleteLiveBtn" class="warn">Очистить live</button>
         <button id="deleteAllDbBtn" class="danger">Очистить базу</button>
       </div>
+
       <div class="tabs">
         <button class="tab-btn active" data-tab="nowPanel">Сейчас</button>
         <button class="tab-btn" data-tab="historyPanel">История</button>
@@ -75,7 +142,12 @@
           <div class="stat"><div class="label">Простой</div><div class="value" id="nowIdle">—</div></div>
           <div class="stat"><div class="label">Адрес</div><div class="value" id="nowAddress">—</div></div>
         </div>
-        <div class="row"><button id="liveAutoCenterBtn">Автоцентр: вкл</button><button id="refreshNowBtn" class="secondary">Обновить сейчас</button><button id="btnDiag" class="secondary">Диаг</button></div>
+        <div class="row">
+          <button id="liveAutoCenterBtn">Автоцентр: вкл</button>
+          <button id="refreshNowBtn" class="secondary">Обновить сейчас</button>
+          <button id="refreshLiveBtn" class="secondary">Обновить live</button>
+          <button id="btnDiag" class="secondary">Диаг</button>
+        </div>
         <div id="liveMap"></div>
       </div>
     </div>
@@ -91,10 +163,32 @@
           <div><div class="label">Часы до</div><select id="toHour"></select></div>
           <div><div class="label">Минуты до</div><select id="toMinute"></select></div>
         </div>
-        <div class="row"><button id="todayBtn">Сегодня</button><button id="yesterdayBtn" class="secondary">Вчера</button><button id="weekBtn" class="secondary">Неделя</button><button id="range1hBtn" class="secondary">1 час</button><button id="range24hBtn" class="secondary">24 часа</button><button id="refreshHistoryBtn">Обновить историю</button></div>
-        <div class="row"><input id="maxAccuracyFilter" type="number" min="0" step="1" placeholder="Макс. accuracy, м"/><input id="minSpeedFilter" type="number" min="0" step="0.1" placeholder="Скорость от, км/ч"/><input id="maxSpeedFilter" type="number" min="0" step="0.1" placeholder="Скорость до, км/ч"/><label class="pill"><input id="hideJunkToggle" type="checkbox" style="width:auto;min-width:auto"/> Скрыть мусорные</label><button id="applyFiltersBtn" class="secondary">Применить</button><button id="resetFiltersBtn" class="secondary">Сбросить</button></div>
-        <div class="row"><button id="fitRouteBtn" class="secondary">Центрировать маршрут</button><button id="exportJsonBtn" class="secondary">JSON</button><button id="exportCsvBtn" class="secondary">CSV</button><button id="exportGpxBtn" class="secondary">GPX</button><button id="exportPdfBtn" class="secondary">PDF</button><button id="deleteRangeBtn" class="danger">Удалить период</button></div>
+        <div class="row">
+          <button id="todayBtn">Сегодня</button>
+          <button id="yesterdayBtn" class="secondary">Вчера</button>
+          <button id="weekBtn" class="secondary">Неделя</button>
+          <button id="range1hBtn" class="secondary">1 час</button>
+          <button id="range24hBtn" class="secondary">24 часа</button>
+          <button id="refreshHistoryBtn">Обновить историю</button>
+        </div>
+        <div class="row">
+          <input id="maxAccuracyFilter" type="number" min="0" step="0.01" placeholder="Макс. accuracy, м"/>
+          <input id="minSpeedFilter" type="number" min="0" step="0.1" placeholder="Скорость от, км/ч"/>
+          <input id="maxSpeedFilter" type="number" min="0" step="0.1" placeholder="Скорость до, км/ч"/>
+          <label class="pill"><input id="hideJunkToggle" type="checkbox" style="width:auto;min-width:auto"/> Скрыть мусорные</label>
+          <button id="applyFiltersBtn" class="secondary">Применить</button>
+          <button id="resetFiltersBtn" class="secondary">Сбросить</button>
+        </div>
+        <div class="row">
+          <button id="fitRouteBtn" class="secondary">Центрировать маршрут</button>
+          <button id="exportJsonBtn" class="secondary">JSON</button>
+          <button id="exportCsvBtn" class="secondary">CSV</button>
+          <button id="exportGpxBtn" class="secondary">GPX</button>
+          <button id="exportPdfBtn" class="secondary">PDF</button>
+          <button id="deleteRangeBtn" class="danger">Удалить период</button>
+        </div>
       </div>
+
       <div class="card">
         <h2>Сводка маршрута</h2>
         <div class="grid4">
@@ -109,13 +203,57 @@
         </div>
         <div class="notice" id="stopsNotice">Стоянки будут показаны ниже.</div>
       </div>
-      <div class="card"><h2>Карта истории</h2><div class="address-box"><div><strong>Старт:</strong> <span id="startAddress">—</span></div><div><strong>Финиш:</strong> <span id="endAddress">—</span></div><div><strong>Выбранная точка:</strong> <span id="selectedAddress">—</span></div></div><div id="historyMap"></div></div>
-      <div class="card"><h2>История точек</h2><div style="overflow:auto"><table><thead><tr><th>Время</th><th>Координаты</th><th>Точность</th><th>Скорость</th><th>Метки</th><th>Действие</th></tr></thead><tbody id="historyTbody"></tbody></table></div></div>
+
+      <div class="card">
+        <h2>Карта истории</h2>
+        <div class="address-box">
+          <div><strong>Старт:</strong> <span id="startAddress">—</span></div>
+          <div><strong>Финиш:</strong> <span id="endAddress">—</span></div>
+          <div><strong>Выбранная точка:</strong> <span id="selectedAddress">—</span></div>
+        </div>
+        <div id="historyMap"></div>
+      </div>
+
+      <div class="card">
+        <h2>История точек</h2>
+        <div style="overflow:auto">
+          <table>
+            <thead><tr><th>Время</th><th>Координаты</th><th>Точность</th><th>Скорость</th><th>Метки</th><th>Действие</th></tr></thead>
+            <tbody id="historyTbody"></tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
-    <div id="reportsPanel" class="hidden"><div class="card"><h2>Отчёты</h2><div class="grid2"><div class="chartWrap"><h3>Скорость</h3><canvas id="speedChart" height="220"></canvas></div><div class="chartWrap"><h3>Пробег по дням</h3><canvas id="distanceChart" height="220"></canvas></div></div><div style="overflow:auto;margin-top:12px"><table><thead><tr><th>Дата</th><th>Пробег</th><th>Средняя скорость</th><th>Макс.</th><th>Точек</th></tr></thead><tbody id="dailyStatsTbody"></tbody></table></div></div></div>
+    <div id="reportsPanel" class="hidden">
+      <div class="card">
+        <h2>Отчёты</h2>
+        <div class="grid2">
+          <div class="chartWrap"><h3>Скорость</h3><canvas id="speedChart" height="220"></canvas></div>
+          <div class="chartWrap"><h3>Пробег по дням</h3><canvas id="distanceChart" height="220"></canvas></div>
+        </div>
+        <div style="overflow:auto;margin-top:12px">
+          <table>
+            <thead><tr><th>Дата</th><th>Пробег</th><th>Средняя скорость</th><th>Макс.</th><th>Точек</th></tr></thead>
+            <tbody id="dailyStatsTbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
 
-    <div id="usagePanel" class="hidden"><div class="card"><h2>Объём данных</h2><div class="grid4"><div class="stat"><div class="label">History</div><div class="value" id="historySize">—</div></div><div class="stat"><div class="label">Live + Sessions</div><div class="value" id="sessionsSize">—</div></div><div class="stat"><div class="label">Всего</div><div class="value" id="totalSize">—</div></div><div class="stat"><div class="label">Точек в истории</div><div class="value" id="historyCount">0</div></div></div><div class="notice" id="usageNote">Оценка считается по данным в Firebase и по текущему режиму просмотра.</div></div></div>
+    <div id="usagePanel" class="hidden">
+      <div class="card">
+        <h2>Объём данных</h2>
+        <div class="grid5">
+          <div class="stat"><div class="label">History</div><div class="value" id="historySize">—</div></div>
+          <div class="stat"><div class="label">Live + Sessions</div><div class="value" id="sessionsSize">—</div></div>
+          <div class="stat"><div class="label">Всего</div><div class="value" id="totalSize">—</div></div>
+          <div class="stat"><div class="label">Точек в истории</div><div class="value" id="historyCount">0</div></div>
+          <div class="stat"><div class="label">Исп. трафик</div><div class="value" id="trafficUsed">—</div></div>
+        </div>
+        <div class="notice" id="usageNote">Трафик здесь — оценка объёма данных по Firebase.</div>
+      </div>
+    </div>
 
     <div id="sessionsPanel" class="hidden">
       <div class="card">
@@ -126,12 +264,48 @@
           <div><div class="label">Точек в хвосте</div><input id="sharePointsLimit" type="number" min="2" max="500" step="1" value="100"/></div>
         </div>
         <div class="row"><button id="createShareBtn" class="success">Создать live-ссылку</button><button id="clearShareResultBtn" class="secondary">Очистить</button></div>
-        <div id="shareResultBox" class="notice hidden"><div><strong>Ссылка создана</strong></div><div style="margin-top:8px">Истекает: <span id="shareExpiresText">—</span></div><div style="margin-top:8px" class="mono" id="shareLinkText">—</div><div class="row"><button id="copyCreatedShareBtn" class="secondary">Копировать</button><button id="openCreatedShareBtn">Открыть</button></div></div>
+        <div id="shareResultBox" class="notice hidden">
+          <div><strong>Ссылка создана</strong></div>
+          <div style="margin-top:8px">Истекает: <span id="shareExpiresText">—</span></div>
+          <div style="margin-top:8px" class="mono" id="shareLinkText">—</div>
+          <div class="row"><button id="copyCreatedShareBtn" class="secondary">Копировать</button><button id="openCreatedShareBtn">Открыть</button></div>
+        </div>
       </div>
-      <div class="card"><h2>Управление live-сессиями</h2><div class="grid4"><div><div class="label">Поиск token</div><input id="sessionSearchInput" placeholder="Поиск"/></div><div><div class="label">Статус</div><select id="sessionStatusFilter"><option value="all">Все</option><option value="active">Активные</option><option value="expired">Истёкшие</option><option value="ended">Завершённые</option></select></div><div><div class="label">Продлить, мин</div><input id="extendSessionMinutesInput" type="number" min="1" step="1" value="60"/></div></div><div class="row"><button id="refreshSessionsBtn">Обновить live-сессии</button><button id="syncActiveSessionsBtn" class="secondary">Синхронизировать active</button><button id="endAllActiveSessionsBtn" class="warn">Остановить все активные</button><button id="cleanupSessionsBtn" class="warn">Очистить истёкшие сессии</button></div><div style="overflow:auto"><table><thead><tr><th>Token</th><th>Статус</th><th>Истекает</th><th>Открытия</th><th>Первое / Последнее</th><th>Действия</th></tr></thead><tbody id="sessionsTbody"></tbody></table></div><div id="sessionMap"></div></div>
+
+      <div class="card">
+        <h2>Управление live-сессиями</h2>
+        <div class="grid4">
+          <div><div class="label">Поиск token</div><input id="sessionSearchInput" placeholder="Поиск"/></div>
+          <div><div class="label">Статус</div><select id="sessionStatusFilter"><option value="all">Все</option><option value="active">Активные</option><option value="expired">Истёкшие</option><option value="ended">Завершённые</option></select></div>
+          <div><div class="label">Продлить, мин</div><input id="extendSessionMinutesInput" type="number" min="1" step="1" value="60"/></div>
+        </div>
+        <div class="row">
+          <button id="refreshSessionsBtn">Обновить live-сессии</button>
+          <button id="syncActiveSessionsBtn" class="secondary">Синхронизировать active</button>
+          <button id="endAllActiveSessionsBtn" class="warn">Остановить все активные</button>
+          <button id="cleanupSessionsBtn" class="warn">Очистить истёкшие сессии</button>
+        </div>
+        <div style="overflow:auto">
+          <table>
+            <thead><tr><th>Token</th><th>Статус</th><th>Истекает</th><th>Открытия</th><th>Первое / Последнее</th><th>Действия</th></tr></thead>
+            <tbody id="sessionsTbody"></tbody>
+          </table>
+        </div>
+        <div id="sessionMap"></div>
+      </div>
     </div>
 
-    <div id="journalPanel" class="hidden"><div class="card"><h2>Журнал действий</h2><div style="overflow:auto"><table><thead><tr><th>Время</th><th>Тип</th><th>Описание</th><th>Кто</th></tr></thead><tbody id="journalTbody"></tbody></table></div></div></div>
+    <div id="journalPanel" class="hidden">
+      <div class="card">
+        <h2>Журнал действий</h2>
+        <div style="overflow:auto">
+          <table>
+            <thead><tr><th>Время</th><th>Тип</th><th>Описание</th><th>Кто</th></tr></thead>
+            <tbody id="journalTbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -139,158 +313,648 @@
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { getDatabase, ref, get, onValue, remove, update, push, set } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
 
-/* JS intentionally condensed but complete */
+const firebaseConfig = {
+  apiKey:"AIzaSyCXNCY-IpkhAXb8jNPhN8gf2UdOfPBc5gM",
+  authDomain:"mygpslive-57196.firebaseapp.com",
+  databaseURL:"https://mygpslive-57196-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId:"mygpslive-57196",
+  storageBucket:"mygpslive-57196.firebasestorage.app",
+  messagingSenderId:"20781107701",
+  appId:"1:20781107701:web:bd47061b9aca13abbeb8bc",
+  measurementId:"G-BSCVNY9LH0"
+};
 
-const firebaseConfig={apiKey:"AIzaSyCXNCY-IpkhAXb8jNPhN8gf2UdOfPBc5gM",authDomain:"mygpslive-57196.firebaseapp.com",databaseURL:"https://mygpslive-57196-default-rtdb.europe-west1.firebasedatabase.app",projectId:"mygpslive-57196",storageBucket:"mygpslive-57196.firebasestorage.app",messagingSenderId:"20781107701",appId:"1:20781107701:web:bd47061b9aca13abbeb8bc",measurementId:"G-BSCVNY9LH0"};
-const app=initializeApp(firebaseConfig), auth=getAuth(app), db=getDatabase(app), provider=new GoogleAuthProvider(), qs=(id)=>document.getElementById(id);
-let historyByUid={}, liveByUid={}, allSessions={}, selectedUid="", allUsers=[], currentFiltered=[], deletionsLog=[], actionLogs=[], liveAutoCenter=true, createdShareUrl="", isBusy=false, speedChart=null, distanceChart=null, currentNowSourceLabel="—";
-const fmtTime=v=>v?new Date(v).toLocaleString("ru-RU"):"—";
-const errText=e=>e?.message||e?.code||String(e);
-async function runSafe(label,fn,opts={}){if(isBusy)return;try{isBusy=true;await fn();if(opts.reloadSessions)await loadSessions();if(opts.reloadData)await loadAllData();if(!opts.silentSuccess)console.log(label+" OK")}catch(e){console.error(label,e);alert(label+":\n"+errText(e))}finally{isBusy=false}}
-function formatDuration(ms){if(!ms||ms<0)return"—";const s=Math.floor(ms/1000),h=Math.floor(s/3600),m=Math.floor((s%3600)/60);return h>0?`${h}ч ${m}м`:`${m}м`}
-function formatIdle(ms){if(!ms||ms<1000)return"—";const s=Math.floor(ms/1000),h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60;return h>0?`${h}ч ${m}м ${sec}с`:`${m}м ${sec}с`}
-function formatSize(bytes){if(bytes<1024)return`${bytes} B`;if(bytes<1024*1024)return`${(bytes/1024).toFixed(1)} KB`;return`${(bytes/(1024*1024)).toFixed(2)} MB`}
-function parseDateTime(dateVal,hVal,mVal){if(!dateVal)return null;return new Date(`${dateVal}T${hVal||"00"}:${mVal||"00"}:00`).getTime()}
-function setDateTimeRange(start,end){qs("fromDate").value=start.toISOString().slice(0,10);qs("fromHour").value=String(start.getHours()).padStart(2,"0");qs("fromMinute").value=String(start.getMinutes()).padStart(2,"0");qs("toDate").value=end.toISOString().slice(0,10);qs("toHour").value=String(end.getHours()).padStart(2,"0");qs("toMinute").value=String(end.getMinutes()).padStart(2,"0")}
-function setDefaultPeriodToday(){const now=new Date(),start=new Date();start.setHours(0,0,0,0);setDateTimeRange(start,now)}
-function populateTimeSelects(){const hourOpts=Array.from({length:24},(_,i)=>`<option value="${String(i).padStart(2,"0")}">${String(i).padStart(2,"0")}</option>`).join(""),minuteOpts=Array.from({length:60},(_,i)=>`<option value="${String(i).padStart(2,"0")}">${String(i).padStart(2,"0")}</option>`).join("");qs("fromHour").innerHTML=hourOpts;qs("toHour").innerHTML=hourOpts;qs("fromMinute").innerHTML=minuteOpts;qs("toMinute").innerHTML=minuteOpts}
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getDatabase(app);
+const provider = new GoogleAuthProvider();
+const qs = (id) => document.getElementById(id);
+
+let historyByUid = {}, liveByUid = {}, allSessions = {}, selectedUid = "", allUsers = [];
+let currentFiltered = [], deletionsLog = [], actionLogs = [];
+let liveAutoCenter = true, createdShareUrl = "", speedChart = null, distanceChart = null, currentNowSourceLabel = "—";
+const geocodeCache = {};
+
+const fmtTime = v => v ? new Date(v).toLocaleString("ru-RU") : "—";
+const errText = e => e?.message || e?.code || String(e);
+const isLegacyUid = (uid) => uid === "default";
+
+function formatAccuracy(v){ return v != null ? `${Number(v).toFixed(2)} м` : "—"; }
+function formatDuration(ms){ if(!ms||ms<0) return "—"; const s=Math.floor(ms/1000), h=Math.floor(s/3600), m=Math.floor((s%3600)/60); return h>0?`${h}ч ${m}м`:`${m}м`; }
+function formatIdle(ms){ if(!ms||ms<1000) return "—"; const s=Math.floor(ms/1000), h=Math.floor(s/3600), m=Math.floor((s%3600)/60), sec=s%60; return h>0?`${h}ч ${m}м ${sec}с`:`${m}м ${sec}с`; }
+function formatSize(bytes){ if(bytes<1024) return `${bytes} B`; if(bytes<1024*1024) return `${(bytes/1024).toFixed(1)} KB`; return `${(bytes/(1024*1024)).toFixed(2)} MB`; }
+function parseDateTime(dateVal,hVal,mVal){ if(!dateVal) return null; return new Date(`${dateVal}T${hVal||"00"}:${mVal||"00"}:00`).getTime(); }
+function userLabel(uid){ return isLegacyUid(uid) ? "legacy/default" : uid; }
+
+function renderHeaderTime(){
+  const d = new Date(), days = ["воскресенье","понедельник","вторник","среда","четверг","пятница","суббота"];
+  qs("pageDateTime").textContent = `${days[d.getDay()]}, ${d.toLocaleString("ru-RU")}`;
+}
+setInterval(renderHeaderTime, 1000); renderHeaderTime();
+
+function populateTimeSelects(){
+  const hourOpts = Array.from({length:24}, (_,i)=>`<option value="${String(i).padStart(2,"0")}">${String(i).padStart(2,"0")}</option>`).join("");
+  const minuteOpts = Array.from({length:60}, (_,i)=>`<option value="${String(i).padStart(2,"0")}">${String(i).padStart(2,"0")}</option>`).join("");
+  qs("fromHour").innerHTML = hourOpts; qs("toHour").innerHTML = hourOpts;
+  qs("fromMinute").innerHTML = minuteOpts; qs("toMinute").innerHTML = minuteOpts;
+}
 populateTimeSelects();
-function renderHeaderTime(){const d=new Date(),days=["воскресенье","понедельник","вторник","среда","четверг","пятница","суббота"];qs("pageDateTime").textContent=`${days[d.getDay()]}, ${d.toLocaleString("ru-RU")}`}
-setInterval(renderHeaderTime,1000);renderHeaderTime();
-document.querySelectorAll(".tab-btn").forEach(btn=>btn.onclick=()=>{document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));document.querySelectorAll("#nowPanel,#historyPanel,#reportsPanel,#usagePanel,#sessionsPanel,#journalPanel").forEach(p=>p.classList.add("hidden"));btn.classList.add("active");qs(btn.dataset.tab).classList.remove("hidden");setTimeout(()=>{historyMap.invalidateSize();liveMap.invalidateSize();sessionMap.invalidateSize();speedChart?.resize();distanceChart?.resize()},50)});
-function distanceMeters(a,b){const toRad=v=>v*Math.PI/180,R=6371000,dLat=toRad(b.latitude-a.latitude),dLon=toRad(b.longitude-a.longitude),lat1=toRad(a.latitude),lat2=toRad(b.latitude),x=Math.sin(dLat/2)**2+Math.sin(dLon/2)**2*Math.cos(lat1)*Math.cos(lat2);return R*(2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x)))}
-function looksJunk(prev,cur){const acc=Number(cur.accuracy||0),sp=Number(cur.speed||0);if(acc>100)return true;if(prev){const dist=distanceMeters(prev,cur),dt=Math.max(1,(Number(cur.timestamp||0)-Number(prev.timestamp||0))/1000),calcSpeed=dist/dt*3.6;if(sp<=.5&&calcSpeed>30)return true;if(calcSpeed>250)return true}return false}
-function computeSummary(points){if(!points.length)return{count:0,km:0,avgSpeed:0,maxSpeed:0};let meters=0;for(let i=1;i<points.length;i++)meters+=distanceMeters(points[i-1],points[i]);const speeds=points.map(p=>Number(p.speed||0)).filter(v=>Number.isFinite(v)&&v>0);return{count:points.length,km:meters/1000,avgSpeed:speeds.length?speeds.reduce((a,b)=>a+b,0)/speeds.length:0,maxSpeed:speeds.length?Math.max(...speeds):0}}
-function detectStops(points){const stops=[];let startIdx=null;for(let i=0;i<points.length;i++){const sp=Number(points[i].speed||0);if(sp<=2){if(startIdx===null)startIdx=i}else if(startIdx!==null){const duration=Number(points[i-1].timestamp||0)-Number(points[startIdx].timestamp||0);if(duration>=5*60*1000)stops.push({start:points[startIdx],end:points[i-1],duration});startIdx=null}}if(startIdx!==null&&points.length){const duration=Number(points[points.length-1].timestamp||0)-Number(points[startIdx].timestamp||0);if(duration>=5*60*1000)stops.push({start:points[startIdx],end:points[points.length-1],duration})}return stops}
-const historyMap=L.map("historyMap").setView([56.95,24.10],12), liveMap=L.map("liveMap").setView([56.95,24.10],12), sessionMap=L.map("sessionMap").setView([56.95,24.10],12);
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"&copy; OpenStreetMap"}).addTo(historyMap);L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"&copy; OpenStreetMap"}).addTo(liveMap);L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"&copy; OpenStreetMap"}).addTo(sessionMap);
-const liveTrail=L.polyline([],{weight:5}).addTo(liveMap), liveMarker=L.circleMarker([56.95,24.10],{radius:8,color:"#22c55e",fillColor:"#22c55e",fillOpacity:1}).addTo(liveMap), sessionTrail=L.polyline([],{weight:5}).addTo(sessionMap), sessionMarker=L.circleMarker([56.95,24.10],{radius:8,color:"#22c55e",fillColor:"#22c55e",fillOpacity:1}).addTo(sessionMap);
-let routeSegments=[];const startMarker=L.marker([56.95,24.10]).addTo(historyMap), endMarker=L.marker([56.95,24.10]).addTo(historyMap);
-function clearRouteSegments(){routeSegments.forEach(s=>historyMap.removeLayer(s));routeSegments=[]}
-async function reverseGeocode(lat,lon){return `${lat.toFixed(5)}, ${lon.toFixed(5)}`}
-async function loadUsers(){const [historySnap,liveSnap]=await Promise.all([get(ref(db,"history")),get(ref(db,"live"))]);const userSet=new Set();Object.keys(historySnap.val()||{}).forEach(uid=>userSet.add(uid));Object.keys(liveSnap.val()||{}).forEach(uid=>userSet.add(uid));allUsers=Array.from(userSet).sort();const select=qs("userSelect"),prev=selectedUid;select.innerHTML=allUsers.length?allUsers.map(uid=>`<option value="${uid}">${uid}</option>`).join(""):`<option value="">Нет пользователей</option>`;selectedUid=(prev&&allUsers.includes(prev))?prev:(allUsers[0]||"");if(selectedUid)select.value=selectedUid}
-const getSelectedHistoryPoints=()=>selectedUid?(historyByUid[selectedUid]||[]):[];
-const getSelectedLiveData=()=>selectedUid?(liveByUid[selectedUid]||null):null;
-const getVisibleHistoryPoints=()=>qs("viewModeSelect").value==="all"?Object.values(historyByUid).flat().sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0)):getSelectedHistoryPoints();
-const getAllLastPoints=()=>Object.entries(liveByUid).map(([uid,live])=>({uid,point:live?.lastPoint})).filter(item=>item.point&&item.point.latitude!=null&&item.point.longitude!=null);
-async function loadAllData(){const [historySnap,liveSnap]=await Promise.all([get(ref(db,"history")),get(ref(db,"live"))]);historyByUid={};liveByUid=liveSnap.val()||{};const histRaw=historySnap.val()||{};Object.entries(histRaw).forEach(([uid,pointsObj])=>{historyByUid[uid]=Object.values(pointsObj||{}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0))});updateUsage();renderHistory();updateNowFromAvailableSources()}
-function filteredHistory(){const base=getVisibleHistoryPoints(),from=parseDateTime(qs("fromDate").value,qs("fromHour").value,qs("fromMinute").value),to=parseDateTime(qs("toDate").value,qs("toHour").value,qs("toMinute").value),maxAcc=Number(qs("maxAccuracyFilter").value||0),minSp=Number(qs("minSpeedFilter").value||0),maxSp=Number(qs("maxSpeedFilter").value||0),hideJunk=qs("hideJunkToggle").checked;return base.filter((p,idx,arr)=>{const t=Number(p.timestamp||0),sp=Number(p.speed||0),acc=Number(p.accuracy||0);if(from&&t<from)return false;if(to&&t>to)return false;if(maxAcc>0&&acc>maxAcc)return false;if(minSp>0&&sp<minSp)return false;if(maxSp>0&&sp>maxSp)return false;if(hideJunk&&looksJunk(arr[idx-1],p))return false;return true})}
-async function updateHistoryMap(points){clearRouteSegments();const latlngs=points.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]);if(!latlngs.length)return;for(let i=1;i<points.length;i++){const a=[Number(points[i-1].latitude),Number(points[i-1].longitude)],b=[Number(points[i].latitude),Number(points[i].longitude)],seg=L.polyline([a,b],{weight:5,color:"#60a5fa"}).addTo(historyMap);routeSegments.push(seg)}const first=points[0],last=points[points.length-1];startMarker.setLatLng([Number(first.latitude),Number(first.longitude)]);endMarker.setLatLng([Number(last.latitude),Number(last.longitude)]);if(latlngs.length===1)historyMap.setView(latlngs[0],16);else historyMap.fitBounds(L.latLngBounds(latlngs),{padding:[30,30]});qs("startAddress").textContent=await reverseGeocode(Number(first.latitude),Number(first.longitude));qs("endAddress").textContent=await reverseGeocode(Number(last.latitude),Number(last.longitude))}
-function updateUsage(){const visibleHistory=getVisibleHistoryPoints(),historyBytes=new Blob([JSON.stringify(visibleHistory)]).size,visibleLive=qs("viewModeSelect").value==="all"?liveByUid:(selectedUid?{[selectedUid]:liveByUid[selectedUid]||null}:{}),sessionsBytes=new Blob([JSON.stringify(allSessions||{})]).size+new Blob([JSON.stringify(visibleLive||{})]).size;qs("historySize").textContent=formatSize(historyBytes);qs("sessionsSize").textContent=formatSize(sessionsBytes);qs("totalSize").textContent=formatSize(historyBytes+sessionsBytes);qs("historyCount").textContent=String(visibleHistory.length)}
-function updateCharts(points){const speedLabels=points.slice(-100).map(p=>new Date(Number(p.timestamp||0)).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"})),speedData=points.slice(-100).map(p=>Number(p.speed||0));if(speedChart)speedChart.destroy();speedChart=new Chart(qs("speedChart"),{type:"line",data:{labels:speedLabels,datasets:[{data:speedData,tension:.25}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}});const byDay={};for(let i=0;i<points.length;i++){const day=new Date(Number(points[i].timestamp||0)).toLocaleDateString("ru-RU");byDay[day]=byDay[day]||{dist:0,count:0,max:0,sum:0};if(i>0)byDay[day].dist+=distanceMeters(points[i-1],points[i])/1000;const sp=Number(points[i].speed||0);byDay[day].count+=1;byDay[day].sum+=sp;byDay[day].max=Math.max(byDay[day].max,sp)}const labels=Object.keys(byDay),vals=labels.map(d=>Number(byDay[d].dist.toFixed(2)));if(distanceChart)distanceChart.destroy();distanceChart=new Chart(qs("distanceChart"),{type:"bar",data:{labels,datasets:[{data:vals}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}});const tbody=qs("dailyStatsTbody");tbody.innerHTML="";labels.forEach(d=>{const item=byDay[d],tr=document.createElement("tr");tr.innerHTML=`<td>${d}</td><td>${item.dist.toFixed(2)}</td><td>${(item.sum/Math.max(1,item.count)).toFixed(1)} км/ч</td><td>${item.max.toFixed(1)} км/ч</td><td>${item.count}</td>`;tbody.appendChild(tr)})}
-function renderHistory(){const pts=filteredHistory();currentFiltered=pts;const s=computeSummary(pts),stops=detectStops(pts);qs("pointsCount").textContent=String(s.count);qs("distanceValue").textContent=`${s.km.toFixed(2)} км`;qs("avgSpeedValue").textContent=`${s.avgSpeed.toFixed(1)} км/ч`;qs("maxSpeedValue").textContent=`${s.maxSpeed.toFixed(1)} км/ч`;qs("routeStartCoords").textContent=pts.length?`${Number(pts[0].latitude).toFixed(5)}, ${Number(pts[0].longitude).toFixed(5)}`:"—";qs("routeEndCoords").textContent=pts.length?`${Number(pts[pts.length-1].latitude).toFixed(5)}, ${Number(pts[pts.length-1].longitude).toFixed(5)}`:"—";qs("routeDuration").textContent=pts.length?formatDuration(Number(pts[pts.length-1].timestamp||0)-Number(pts[0].timestamp||0)):"—";qs("routeStops").textContent=String(stops.length);qs("stopsNotice").textContent=stops.length?`Стоянки: ${stops.map(s=>formatDuration(s.duration)).join(", ")}`:"Стоянок не найдено.";const tbody=qs("historyTbody");tbody.innerHTML="";pts.slice().reverse().slice(0,500).forEach(p=>{const tr=document.createElement("tr");tr.innerHTML=`<td>${fmtTime(p.timestamp)}</td><td class="mono">${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}</td><td>${p.accuracy??"—"}</td><td>${p.speed!=null?Number(p.speed).toFixed(1)+" км/ч":"—"}</td><td>${looksJunk(null,p)?'<span class="tag">мусор</span>':"—"}</td><td><button class="danger small">Удалить</button></td>`;tr.querySelector("button").onclick=async()=>{if(!selectedUid)return alert("Нет выбранного пользователя");if(!confirm(`Удалить точку ${fmtTime(p.timestamp)}?`))return;await runSafe("Удаление точки",async()=>{const entryRef=push(ref(db,"adminLogs/deletions"));await set(entryRef,{ts:Date.now(),kind:"point",description:`${fmtTime(p.timestamp)}`,uid:auth.currentUser?.uid||null,email:auth.currentUser?.email||null});await remove(ref(db,`history/${selectedUid}/${String(p.timestamp)}`))},{reloadData:true,silentSuccess:true})};tbody.appendChild(tr)});if(pts.length)updateHistoryMap(pts);else clearRouteSegments();updateCharts(pts)}
-function updateNowUI(point,sourceLabel,recentPoints=[]){currentNowSourceLabel=sourceLabel||"—";if(point&&point.latitude!=null&&point.longitude!=null){const lat=Number(point.latitude),lon=Number(point.longitude);liveMarker.setLatLng([lat,lon]);if(liveAutoCenter)liveMap.setView([lat,lon],16);qs("nowAddress").textContent=`${lat.toFixed(5)}, ${lon.toFixed(5)}`}else qs("nowAddress").textContent="—";const freshness=point?.timestamp?Date.now()-Number(point.timestamp):null,isOnline=freshness!=null&&freshness<=3*60*1000;qs("nowStatus").textContent=isOnline?"Онлайн":"Оффлайн";qs("nowSource").textContent=sourceLabel||"—";qs("nowSpeed").textContent=point?.speed!=null?`${Number(point.speed).toFixed(1)} км/ч`:"—";qs("nowAccuracy").textContent=point?.accuracy!=null?`${point.accuracy} м`:"—";qs("nowUpdated").textContent=fmtTime(point?.timestamp);qs("nowBearing").textContent=point?.bearing!=null?`${Number(point.bearing).toFixed(0)}°`:"—";qs("nowIdle").textContent=point?.timestamp?formatIdle(Date.now()-Number(point.timestamp)):"—"}
-function updateNowFromAvailableSources(){if(qs("viewModeSelect").value==="all"){const points=getAllLastPoints();if(points.length){const latlngs=points.map(item=>[Number(item.point.latitude),Number(item.point.longitude)]);liveTrail.setLatLngs(latlngs);liveMarker.setLatLng(latlngs[latlngs.length-1]);updateNowUI(points[points.length-1].point,`Все пользователи (${points.length})`);return}}const selectedLive=getSelectedLiveData();if(selectedLive&&selectedLive.lastPoint){const pts=Object.values(selectedLive.recentPoints||{}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));liveTrail.setLatLngs(pts.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]));updateNowUI(selectedLive.lastPoint,selectedUid?`live/${selectedUid}`:"live",pts);return}const now=Date.now();const active=Object.entries(allSessions).filter(([k,v])=>k!=="_init"&&v?.meta?.active&&Number(v?.meta?.expiresAt||0)>now).filter(([,v])=>!selectedUid||!v?.meta?.ownerUid||v.meta.ownerUid===selectedUid).sort((a,b)=>Number((b[1]?.meta?.createdAt||0))-Number((a[1]?.meta?.createdAt||0)));if(active.length){const [token,session]=active[0],pts=Object.values(session.public?.recentPoints||{}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));liveTrail.setLatLngs(pts.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]));updateNowUI(session.public?.lastPoint||null,`liveSessions/${token}`,pts);return}const points=getVisibleHistoryPoints(),point=points.length?points[points.length-1]:null;liveTrail.setLatLngs([]);updateNowUI(point,selectedUid?`history/${selectedUid}`:"history")}
-async function logAction(kind,description){const entryRef=push(ref(db,"adminLogs/actions"));await set(entryRef,{ts:Date.now(),kind,description,uid:auth.currentUser?.uid||null,email:auth.currentUser?.email||null})}
-function buildShareUrl(token){return `https://mygpstrack.github.io/mygps/live.html?session=${encodeURIComponent(token)}`}
-function getRecentSourcePoints(mode,pointsLimit){const limit=Math.max(2,Math.min(500,Number(pointsLimit||100))),livePoints=Object.values(getSelectedLiveData()?.recentPoints||{}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0)),historyPoints=getSelectedHistoryPoints().filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));if(mode==="live")return livePoints.slice(-limit);if(mode==="history")return historyPoints.slice(-limit);if(livePoints.length)return livePoints.slice(-limit);return historyPoints.slice(-limit)}
-function generateSessionToken(){const arr=new Uint8Array(24);crypto.getRandomValues(arr);return Array.from(arr,b=>b.toString(16).padStart(2,"0")).join("")}
-async function createLiveSession(){if(!selectedUid&&allUsers.length===1){selectedUid=allUsers[0];qs("userSelect").value=selectedUid}if(!selectedUid)return alert("Нет пользователя. Сначала дождись появления данных GPS в Firebase или выбери пользователя.");const durationMinutes=Number(qs("shareDurationPreset").value||60),sourceMode=qs("shareSource").value,pointsLimit=Number(qs("sharePointsLimit").value||100),sourcePoints=getRecentSourcePoints(sourceMode,pointsLimit);if(!sourcePoints.length)return alert("Нет данных выбранного пользователя для создания live-ссылки.");const token=generateSessionToken(),now=Date.now(),expiresAt=now+durationMinutes*60*1000,lastPoint=sourcePoints[sourcePoints.length-1],recentPointsObj={};sourcePoints.forEach(p=>recentPointsObj[String(p.timestamp||Date.now()+Math.random())]=p);const payload={meta:{active:true,paused:false,createdAt:now,expiresAt,remainingMs:durationMinutes*60*1000,ownerUid:selectedUid,createdBy:auth.currentUser?.uid||null,createdByEmail:auth.currentUser?.email||null,durationMinutes},public:{lastPoint,recentPoints:recentPointsObj},viewStats:{openCount:0,firstOpenAt:null,lastOpenAt:null}};await runSafe("Создание live-ссылки",async()=>{await set(ref(db,`liveSessions/${token}`),payload);await update(ref(db),{[`liveOwners/${selectedUid}/activeSessionId`]:token,[`liveOwners/${selectedUid}/lastCreatedAt`]:now});await logAction("session_create",`Создана live-сессия ${token} для ${selectedUid}`);createdShareUrl=buildShareUrl(token);qs("shareLinkText").textContent=createdShareUrl;qs("shareExpiresText").textContent=fmtTime(expiresAt);qs("shareResultBox").classList.remove("hidden")},{reloadSessions:true,silentSuccess:true})}
-function getSessionStatus(session){const meta=session?.meta||{},active=!!meta.active,expiresAt=Number(meta.expiresAt||0),now=Date.now();if(active&&expiresAt>now)return"active";if(!active&&expiresAt>now)return"ended";return"expired"} function getSessionStatusLabel(status){if(status==="active")return"активна";if(status==="ended")return"завершена";return"истекла"}
-async function loadSessions(){const snap=await get(ref(db,"liveSessions"));allSessions=snap.val()||{};updateUsage();renderSessions();updateNowFromAvailableSources()}
-async function deleteSession(token){if(!confirm(`Удалить live-сессию ${token}?`))return;await runSafe("Удаление live-сессии",async()=>{await remove(ref(db,`liveSessions/${token}`));await logAction("session_delete",`Удалена live-сессия ${token}`)},{reloadSessions:true,silentSuccess:true})}
-async function endSession(token){if(!confirm(`Завершить live-сессию ${token}?`))return;await runSafe("Завершение live-сессии",async()=>{await update(ref(db,`liveSessions/${token}/meta`),{active:false,endedAt:Date.now()});await logAction("session_end",`Завершена live-сессия ${token}`)},{reloadSessions:true,silentSuccess:true})}
-async function extendSession(token){const minutes=Number(qs("extendSessionMinutesInput").value||0);if(!minutes||minutes<=0)return alert("Укажи минуты для продления.");const session=allSessions[token];if(!session)return alert("Сессия не найдена.");const currentExpiresAt=Number(session?.meta?.expiresAt||Date.now()),nextExpiresAt=Math.max(currentExpiresAt,Date.now())+minutes*60000;await runSafe("Продление live-сессии",async()=>{await update(ref(db,`liveSessions/${token}/meta`),{expiresAt:nextExpiresAt,remainingMs:Math.max(0,nextExpiresAt-Date.now()),active:true,extendedAt:Date.now()});await logAction("session_extend",`Продлена live-сессия ${token}`)},{reloadSessions:true,silentSuccess:true})}
-async function endAllActiveSessions(){const now=Date.now(),activeTokens=Object.entries(allSessions||{}).filter(([token,session])=>token!=="_init"&&!!session?.meta?.active&&Number(session?.meta?.expiresAt||0)>now).map(([token])=>token);if(!activeTokens.length)return alert("Активных live-сессий нет.");if(!confirm(`Остановить ${activeTokens.length} активных сессий?`))return;await runSafe("Остановка всех активных",async()=>{for(const token of activeTokens)await update(ref(db,`liveSessions/${token}/meta`),{active:false,endedAt:Date.now()});await logAction("session_end_all",`Остановлено активных сессий: ${activeTokens.length}`)},{reloadSessions:true,silentSuccess:true})}
-async function cleanupExpiredSessions(){const now=Date.now(),expiredTokens=Object.entries(allSessions||{}).filter(([token,session])=>token!=="_init"&&Number(session?.meta?.expiresAt||0)>0&&Number(session?.meta?.expiresAt||0)<now).map(([token])=>token);if(!expiredTokens.length)return alert("Истёкших сессий не найдено.");if(!confirm(`Удалить ${expiredTokens.length} истёкших сессий?`))return;await runSafe("Очистка истёкших сессий",async()=>{for(const token of expiredTokens)await remove(ref(db,`liveSessions/${token}`));await logAction("expired_sessions_cleanup",`Удалено истёкших сессий: ${expiredTokens.length}`)},{reloadSessions:true,silentSuccess:true})}
-async function syncActiveSessionsFromSelectedUser(){if(!selectedUid&&allUsers.length===1){selectedUid=allUsers[0];qs("userSelect").value=selectedUid}const selectedLive=getSelectedLiveData();if(!selectedUid)return alert("Сначала выбери пользователя.");if(!selectedLive?.lastPoint)return alert("Нет live выбранного пользователя для синхронизации.");const now=Date.now(),activeTokens=Object.entries(allSessions||{}).filter(([token,session])=>token!=="_init"&&!!session?.meta?.active&&Number(session?.meta?.expiresAt||0)>now&&session?.meta?.ownerUid===selectedUid).map(([token])=>token);if(!activeTokens.length)return alert("Активных live-сессий для выбранного пользователя нет.");const livePoints=Object.values(selectedLive.recentPoints||{}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0)).slice(-100),recentPointsObj={};livePoints.forEach(p=>recentPointsObj[String(p.timestamp||(Date.now()+Math.random()))]=p);await runSafe("Синхронизация active-сессий",async()=>{for(const token of activeTokens){await update(ref(db,`liveSessions/${token}/public`),{lastPoint:selectedLive.lastPoint,recentPoints:recentPointsObj});await update(ref(db,`liveSessions/${token}/meta`),{lastSyncedAt:Date.now()})}await logAction("session_sync_active",`Синхронизировано active-сессий: ${activeTokens.length} для ${selectedUid}`)},{reloadSessions:true,silentSuccess:true})}
-function renderSessions(){const tbody=qs("sessionsTbody");tbody.innerHTML="";const search=(qs("sessionSearchInput").value||"").trim().toLowerCase(),statusFilter=qs("sessionStatusFilter").value;const entries=Object.entries(allSessions||{}).filter(([token])=>token!=="_init").map(([token,session])=>[token,session,getSessionStatus(session)]).filter(([token,session,status])=>{if (statusFilter !== "all" && status !== statusFilter) return false;if(search&&!token.toLowerCase().includes(search))return false;if(selectedUid&&session?.meta?.ownerUid&&qs("viewModeSelect").value==="selected"&&session.meta.ownerUid!==selectedUid)return false;return true}).sort((a,b)=>Number((b[1]?.meta?.createdAt||0))-Number((a[1]?.meta?.createdAt||0)));if(!entries.length){tbody.innerHTML=`<tr><td colspan="6">Сессий нет</td></tr>`;return}for(const [token,session,status] of entries){const meta=session?.meta||{},stats=session?.viewStats||{},tr=document.createElement("tr");tr.innerHTML=`<td class="mono">${token}<br><span class="tag">${meta.ownerUid||"—"}</span></td><td>${getSessionStatusLabel(status)}</td><td>${fmtTime(meta.expiresAt)}</td><td>${stats.openCount||0}</td><td>${fmtTime(stats.firstOpenAt)}<br>${fmtTime(stats.lastOpenAt)}</td><td><div class="row"><button class="secondary small" data-copy="${token}">Копировать</button><button class="secondary small" data-view="${token}">Карта</button><button class="secondary small" data-extend="${token}">Продлить</button><button class="warn small" data-end="${token}">Завершить</button><button class="danger small" data-delete="${token}">Удалить</button></div></td>`;tbody.appendChild(tr)}tbody.querySelectorAll("[data-copy]").forEach(btn=>btn.onclick=async()=>{try{await navigator.clipboard.writeText(buildShareUrl(btn.dataset.copy));alert("Ссылка скопирована")}catch(e){alert("Ошибка копирования: "+errText(e))}});tbody.querySelectorAll("[data-view]").forEach(btn=>btn.onclick=()=>{const token=btn.dataset.view,session=allSessions[token]||{},pts=Object.values(session?.public?.recentPoints||{}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0)),latlngs=pts.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]);sessionTrail.setLatLngs(latlngs);if(latlngs.length){sessionMarker.setLatLng(latlngs[latlngs.length-1]);if(latlngs.length===1)sessionMap.setView(latlngs[0],16);else sessionMap.fitBounds(L.latLngBounds(latlngs),{padding:[30,30]})}});tbody.querySelectorAll("[data-extend]").forEach(btn=>btn.onclick=()=>extendSession(btn.dataset.extend));tbody.querySelectorAll("[data-end]").forEach(btn=>btn.onclick=()=>endSession(btn.dataset.end));tbody.querySelectorAll("[data-delete]").forEach(btn=>btn.onclick=()=>deleteSession(btn.dataset.delete))}
-function renderJournal(){const tbody=qs("journalTbody");tbody.innerHTML="";const combined=[...deletionsLog.map(item=>({...item,_type:item.kind||"deletion"})),...actionLogs.map(item=>({...item,_type:item.kind||"action"}))].sort((a,b)=>Number(b.ts||0)-Number(a.ts||0));combined.slice(0,500).forEach(item=>{const tr=document.createElement("tr");tr.innerHTML=`<td>${fmtTime(item.ts)}</td><td>${item._type||"—"}</td><td>${item.description||"—"}</td><td>${item.email||item.uid||"—"}</td>`;tbody.appendChild(tr)})}
-function showDiag(){const selectedLive=getSelectedLiveData(),visibleHistory=getVisibleHistoryPoints(),activeSession=Object.entries(allSessions||{}).find(([token,session])=>session?.meta?.ownerUid===selectedUid&&!!session?.meta?.active),text=[`UID: ${auth.currentUser?.uid||"—"}`,`Email: ${auth.currentUser?.email||"—"}`,`Выбранный пользователь: ${selectedUid||"—"}`,`Режим: ${qs("viewModeSelect").value}`,`Пользователей: ${allUsers.length}`,`Точек history (видимых): ${visibleHistory.length}`,`Есть live выбранного пользователя: ${selectedLive?.lastPoint?"да":"нет"}`,`Активная live-сессия: ${activeSession?activeSession[0]:"нет"}`,`Последний источник now: ${currentNowSourceLabel}`].join("\n");alert(text)}
-qs("googleBtn").onclick=async()=>{try{await signInWithPopup(auth,provider)}catch(e){qs("errorBox").textContent="Ошибка Google-входа: "+errText(e);qs("errorBox").classList.remove("hidden")}};
-qs("emailLoginBtn").onclick=async()=>{try{await signInWithEmailAndPassword(auth,qs("emailInput").value.trim(),qs("passwordInput").value)}catch(e){qs("errorBox").textContent="Ошибка входа: "+errText(e);qs("errorBox").classList.remove("hidden")}};
-qs("emailRegisterBtn").onclick=async()=>{try{await createUserWithEmailAndPassword(auth,qs("emailInput").value.trim(),qs("passwordInput").value)}catch(e){qs("errorBox").textContent="Ошибка регистрации: "+errText(e);qs("errorBox").classList.remove("hidden")}};
-qs("logoutBtn").onclick=async()=>{await signOut(auth)};
-qs("todayBtn").onclick=()=>{const now=new Date(),start=new Date();start.setHours(0,0,0,0);setDateTimeRange(start,now);renderHistory()}; qs("yesterdayBtn").onclick=()=>{const start=new Date();start.setDate(start.getDate()-1);start.setHours(0,0,0,0);const end=new Date(start);end.setHours(23,59,0,0);setDateTimeRange(start,end);renderHistory()}; qs("weekBtn").onclick=()=>{const now=new Date(),start=new Date();start.setDate(start.getDate()-7);setDateTimeRange(start,now);renderHistory()}; qs("range1hBtn").onclick=()=>{const now=new Date(),start=new Date(Date.now()-60*60*1000);setDateTimeRange(start,now);renderHistory()}; qs("range24hBtn").onclick=()=>{const now=new Date(),start=new Date(Date.now()-24*60*60*1000);setDateTimeRange(start,now);renderHistory()};
-qs("applyFiltersBtn").onclick=renderHistory; qs("resetFiltersBtn").onclick=()=>{qs("maxAccuracyFilter").value="";qs("minSpeedFilter").value="";qs("maxSpeedFilter").value="";qs("hideJunkToggle").checked=false;renderHistory()};
-qs("refreshHistoryBtn").onclick=()=>runSafe("Обновление истории",loadAllData,{silentSuccess:true}); qs("fitRouteBtn").onclick=()=>{const pts=currentFiltered.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]);if(pts.length)historyMap.fitBounds(L.latLngBounds(pts),{padding:[30,30]})};
-qs("deleteRangeBtn").onclick=async()=>{const pts=filteredHistory();if(!pts.length)return alert("Нет точек в выбранном диапазоне.");if(!selectedUid)return alert("Нет выбранного пользователя.");if(!confirm(`Удалить ${pts.length} точек?`))return;await runSafe("Удаление периода",async()=>{const updatesObj={};pts.forEach(p=>updatesObj[`history/${selectedUid}/${String(p.timestamp)}`]=null);const entryRef=push(ref(db,"adminLogs/deletions"));await set(entryRef,{ts:Date.now(),kind:"range",description:`${pts.length} точек`,uid:auth.currentUser?.uid||null,email:auth.currentUser?.email||null});await update(ref(db),updatesObj)},{reloadData:true,silentSuccess:true})};
-function downloadText(name,content,type){const blob=new Blob([content],{type}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=name;a.click();URL.revokeObjectURL(url)}
-qs("exportJsonBtn").onclick=()=>downloadText("history_export.json",JSON.stringify(filteredHistory(),null,2),"application/json"); qs("exportCsvBtn").onclick=()=>{const pts=filteredHistory(),lines=["timestamp,latitude,longitude,accuracy,speed"];pts.forEach(p=>lines.push([p.timestamp??"",p.latitude??"",p.longitude??"",p.accuracy??"",p.speed??""].join(",")));downloadText("history_export.csv",lines.join("\n"),"text/csv")}; qs("exportGpxBtn").onclick=()=>{const pts=filteredHistory(),lines=['<?xml version="1.0" encoding="UTF-8"?>','<gpx version="1.1" creator="MyGps Admin" xmlns="http://www.topografix.com/GPX/1/1">','<trk><name>History Export</name><trkseg>'];pts.forEach(p=>lines.push(`<trkpt lat="${p.latitude}" lon="${p.longitude}"><time>${new Date(Number(p.timestamp||0)).toISOString()}</time></trkpt>`));lines.push('</trkseg></trk></gpx>');downloadText("history_export.gpx",lines.join(""),"application/gpx+xml")}; qs("exportPdfBtn").onclick=()=>{const pts=filteredHistory(),s=computeSummary(pts),{jsPDF}=window.jspdf,doc=new jsPDF();doc.text("MyGps History Report",14,16);doc.text(`Distance: ${s.km.toFixed(2)} km`,14,28);doc.text(`Average speed: ${s.avgSpeed.toFixed(1)} km/h`,14,36);doc.text(`Max speed: ${s.maxSpeed.toFixed(1)} km/h`,14,44);const rows=pts.slice(0,250).map(p=>[fmtTime(p.timestamp),`${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}`,p.speed!=null?Number(p.speed).toFixed(1):"—"]);doc.autoTable({startY:52,head:[["Time","Coordinates","Speed km/h"]],body:rows,styles:{fontSize:9}});doc.save("history_report.pdf")};
-qs("refreshNowBtn").onclick=updateNowFromAvailableSources; qs("liveAutoCenterBtn").onclick=()=>{liveAutoCenter=!liveAutoCenter;qs("liveAutoCenterBtn").textContent=`Автоцентр: ${liveAutoCenter?"вкл":"выкл"}`}; qs("btnDiag").onclick=showDiag;
-qs("createShareBtn").onclick=createLiveSession; qs("clearShareResultBtn").onclick=()=>{createdShareUrl="";qs("shareResultBox").classList.add("hidden")}; qs("copyCreatedShareBtn").onclick=async()=>{if(createdShareUrl)await navigator.clipboard.writeText(createdShareUrl)}; qs("openCreatedShareBtn").onclick=()=>{if(createdShareUrl)window.open(createdShareUrl,"_blank","noopener,noreferrer")};
-qs("refreshSessionsBtn").onclick=()=>runSafe("Обновление live-сессий",loadSessions,{silentSuccess:true}); qs("syncActiveSessionsBtn").onclick=syncActiveSessionsFromSelectedUser; qs("endAllActiveSessionsBtn").onclick=endAllActiveSessions; qs("cleanupSessionsBtn").onclick=cleanupExpiredSessions; qs("sessionSearchInput").oninput=renderSessions; qs("sessionStatusFilter").onchange=renderSessions;
-qs("userSelect").onchange=()=>{selectedUid=qs("userSelect").value;updateUsage();renderHistory();updateNowFromAvailableSources();renderSessions()}; qs("viewModeSelect").onchange=()=>{updateUsage();renderHistory();updateNowFromAvailableSources();renderSessions()}; qs("refreshUsersBtn").onclick=async()=>{await loadUsers();await loadAllData()};
-qs("deleteHistoryBtn").onclick=async()=>{if(!confirm("Очистить всю ветку history?"))return;await runSafe("Очистка history",async()=>{await remove(ref(db,"history"));await logAction("delete_history","Очищена ветка history")},{reloadData:true,silentSuccess:true})};
-qs("deleteLiveBtn").onclick=async()=>{if(!confirm("Очистить live, liveSessions и liveOwners?"))return;await runSafe("Очистка live",async()=>{await update(ref(db),{live:null,liveSessions:null,liveOwners:null});await logAction("delete_live","Очищены live/liveSessions/liveOwners")},{reloadData:true,reloadSessions:true,silentSuccess:true})};
-qs("deleteAllDbBtn").onclick=async()=>{const code=prompt("Для полной очистки введи DELETE");if(code!=="DELETE")return;await runSafe("Полная очистка базы",async()=>{await update(ref(db),{history:null,live:null,liveSessions:null,liveOwners:null,adminLogs:null})},{reloadData:true,reloadSessions:true,silentSuccess:true})};
+
+function setDateTimeRange(start,end){
+  qs("fromDate").value = start.toISOString().slice(0,10);
+  qs("fromHour").value = String(start.getHours()).padStart(2,"0");
+  qs("fromMinute").value = String(start.getMinutes()).padStart(2,"0");
+  qs("toDate").value = end.toISOString().slice(0,10);
+  qs("toHour").value = String(end.getHours()).padStart(2,"0");
+  qs("toMinute").value = String(end.getMinutes()).padStart(2,"0");
+}
+function setDefaultPeriodToday(){ const now=new Date(), start=new Date(); start.setHours(0,0,0,0); setDateTimeRange(start,now); }
+
+document.querySelectorAll(".tab-btn").forEach(btn=>{
+  btn.onclick=()=>{
+    document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
+    document.querySelectorAll("#nowPanel,#historyPanel,#reportsPanel,#usagePanel,#sessionsPanel,#journalPanel").forEach(p=>p.classList.add("hidden"));
+    btn.classList.add("active");
+    qs(btn.dataset.tab).classList.remove("hidden");
+    setTimeout(()=>{ historyMap.invalidateSize(); liveMap.invalidateSize(); sessionMap.invalidateSize(); speedChart?.resize(); distanceChart?.resize(); },50);
+  };
+});
+
+async function reverseGeocode(lat, lon){
+  const key = `${Number(lat).toFixed(5)},${Number(lon).toFixed(5)}`;
+  if (geocodeCache[key]) return geocodeCache[key];
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&accept-language=ru`;
+    const res = await fetch(url, { headers: { "Accept":"application/json" } });
+    const json = await res.json();
+    const addr = json.display_name || `${lat}, ${lon}`;
+    geocodeCache[key] = addr;
+    return addr;
+  } catch {
+    return `${Number(lat).toFixed(5)}, ${Number(lon).toFixed(5)}`;
+  }
+}
+
+function distanceMeters(a,b){
+  const toRad=v=>v*Math.PI/180, R=6371000;
+  const dLat=toRad(b.latitude-a.latitude), dLon=toRad(b.longitude-a.longitude);
+  const lat1=toRad(a.latitude), lat2=toRad(b.latitude);
+  const x=Math.sin(dLat/2)**2+Math.sin(dLon/2)**2*Math.cos(lat1)*Math.cos(lat2);
+  return R*(2*Math.atan2(Math.sqrt(x), Math.sqrt(1-x)));
+}
+function looksJunk(prev,cur){
+  const acc=Number(cur.accuracy||0), sp=Number(cur.speed||0);
+  if(acc>100) return true;
+  if(prev){
+    const dist=distanceMeters(prev,cur), dt=Math.max(1,(Number(cur.timestamp||0)-Number(prev.timestamp||0))/1000), calcSpeed=dist/dt*3.6;
+    if(sp<=.5 && calcSpeed>30) return true;
+    if(calcSpeed>250) return true;
+  }
+  return false;
+}
+function computeSummary(points){
+  if(!points.length) return {count:0,km:0,avgSpeed:0,maxSpeed:0};
+  let meters=0; for(let i=1;i<points.length;i++) meters += distanceMeters(points[i-1],points[i]);
+  const speeds=points.map(p=>Number(p.speed||0)).filter(v=>Number.isFinite(v)&&v>0);
+  return { count:points.length, km:meters/1000, avgSpeed:speeds.length ? speeds.reduce((a,b)=>a+b,0)/speeds.length : 0, maxSpeed:speeds.length ? Math.max(...speeds) : 0 };
+}
+function detectStops(points){
+  const stops=[]; let startIdx=null;
+  for(let i=0;i<points.length;i++){
+    const sp=Number(points[i].speed||0);
+    if(sp<=2){ if(startIdx===null) startIdx=i; }
+    else if(startIdx!==null){
+      const duration=Number(points[i-1].timestamp||0)-Number(points[startIdx].timestamp||0);
+      if(duration>=5*60*1000) stops.push({start:points[startIdx], end:points[i-1], duration});
+      startIdx=null;
+    }
+  }
+  if(startIdx!==null && points.length){
+    const duration=Number(points[points.length-1].timestamp||0)-Number(points[startIdx].timestamp||0);
+    if(duration>=5*60*1000) stops.push({start:points[startIdx], end:points[points.length-1], duration});
+  }
+  return stops;
+}
+
+const historyMap = L.map("historyMap").setView([56.95,24.10],12);
+const liveMap = L.map("liveMap").setView([56.95,24.10],12);
+const sessionMap = L.map("sessionMap").setView([56.95,24.10],12);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"&copy; OpenStreetMap"}).addTo(historyMap);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"&copy; OpenStreetMap"}).addTo(liveMap);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"&copy; OpenStreetMap"}).addTo(sessionMap);
+
+const liveTrail = L.polyline([], {weight:5}).addTo(liveMap);
+const liveMarker = L.circleMarker([56.95,24.10], {radius:8,color:"#22c55e",fillColor:"#22c55e",fillOpacity:1}).addTo(liveMap);
+const sessionTrail = L.polyline([], {weight:5}).addTo(sessionMap);
+const sessionMarker = L.circleMarker([56.95,24.10], {radius:8,color:"#22c55e",fillColor:"#22c55e",fillOpacity:1}).addTo(sessionMap);
+let routeSegments = [];
+const startMarker = L.circleMarker([56.95,24.10], {radius:8,color:"#16a34a",fillColor:"#16a34a",fillOpacity:1}).addTo(historyMap);
+const endMarker = L.circleMarker([56.95,24.10], {radius:8,color:"#dc2626",fillColor:"#dc2626",fillOpacity:1}).addTo(historyMap);
+let selectedPointMarker = null;
+
+function clearRouteSegments(){ routeSegments.forEach(s=>historyMap.removeLayer(s)); routeSegments=[]; }
+
+function updateUsage(){
+  const visibleHistory = getVisibleHistoryPoints();
+  const historyBytes = new Blob([JSON.stringify(visibleHistory)]).size;
+  const visibleLive = qs("viewModeSelect").value === "all" ? liveByUid : (selectedUid ? {[selectedUid]: liveByUid[selectedUid] || null} : {});
+  const sessionsBytes = new Blob([JSON.stringify(allSessions||{})]).size + new Blob([JSON.stringify(visibleLive||{})]).size;
+  const total = historyBytes + sessionsBytes;
+  qs("historySize").textContent = formatSize(historyBytes);
+  qs("sessionsSize").textContent = formatSize(sessionsBytes);
+  qs("totalSize").textContent = formatSize(total);
+  qs("historyCount").textContent = String(visibleHistory.length);
+  qs("trafficUsed").textContent = formatSize(total);
+}
+
+async function loadUsers(){
+  const [historySnap, liveSnap] = await Promise.all([get(ref(db,"history")), get(ref(db,"live"))]);
+  const userSet = new Set();
+  Object.keys(historySnap.val()||{}).forEach(uid=>userSet.add(uid));
+  Object.keys(liveSnap.val()||{}).forEach(uid=>userSet.add(uid));
+  allUsers = Array.from(userSet).sort((a,b)=>{
+    if(a==="default" && b!=="default") return 1;
+    if(a!=="default" && b==="default") return -1;
+    return a.localeCompare(b);
+  });
+  const select = qs("userSelect"), prev = selectedUid;
+  select.innerHTML = allUsers.length ? allUsers.map(uid=>`<option value="${uid}">${userLabel(uid)}</option>`).join("") : `<option value="">Нет пользователей</option>`;
+  selectedUid = (prev && allUsers.includes(prev)) ? prev : (allUsers.find(uid=>uid!=="default") || allUsers[0] || "");
+  if(selectedUid) select.value = selectedUid;
+}
+
+function getSelectedHistoryPoints(){ return selectedUid ? (historyByUid[selectedUid] || []) : []; }
+function getSelectedLiveData(){ return selectedUid ? (liveByUid[selectedUid] || null) : null; }
+function getVisibleHistoryPoints(){ return qs("viewModeSelect").value==="all" ? Object.values(historyByUid).flat().sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0)) : getSelectedHistoryPoints(); }
+function getAllLastPoints(){ return Object.entries(liveByUid).map(([uid,live])=>({uid,point:live?.lastPoint})).filter(item=>item.point && item.point.latitude!=null && item.point.longitude!=null); }
+
+async function loadAllData(){
+  const [historySnap, liveSnap] = await Promise.all([get(ref(db,"history")), get(ref(db,"live"))]);
+  historyByUid = {};
+  liveByUid = liveSnap.val() || {};
+  const histRaw = historySnap.val() || {};
+  Object.entries(histRaw).forEach(([uid, pointsObj])=>{
+    historyByUid[uid] = Object.values(pointsObj||{}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+  });
+  updateUsage();
+  renderHistory();
+  await updateNowFromAvailableSources();
+}
+
+function filteredHistory(){
+  const base = getVisibleHistoryPoints();
+  const from=parseDateTime(qs("fromDate").value, qs("fromHour").value, qs("fromMinute").value);
+  const to=parseDateTime(qs("toDate").value, qs("toHour").value, qs("toMinute").value);
+  const maxAcc=Number(qs("maxAccuracyFilter").value||0), minSp=Number(qs("minSpeedFilter").value||0), maxSp=Number(qs("maxSpeedFilter").value||0), hideJunk=qs("hideJunkToggle").checked;
+  return base.filter((p,idx,arr)=>{
+    const t=Number(p.timestamp||0), sp=Number(p.speed||0), acc=Number(p.accuracy||0);
+    if(from&&t<from) return false;
+    if(to&&t>to) return false;
+    if(maxAcc>0&&acc>maxAcc) return false;
+    if(minSp>0&&sp<minSp) return false;
+    if(maxSp>0&&sp>maxSp) return false;
+    if(hideJunk&&looksJunk(arr[idx-1],p)) return false;
+    return true;
+  });
+}
+
+async function updateHistoryMap(points){
+  clearRouteSegments();
+  if(selectedPointMarker){ historyMap.removeLayer(selectedPointMarker); selectedPointMarker=null; }
+  const latlngs=points.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]);
+  if(!latlngs.length) return;
+  for(let i=1;i<points.length;i++){
+    const a=[Number(points[i-1].latitude), Number(points[i-1].longitude)];
+    const b=[Number(points[i].latitude), Number(points[i].longitude)];
+    const seg=L.polyline([a,b], {weight:5,color:"#60a5fa"}).addTo(historyMap);
+    routeSegments.push(seg);
+  }
+  const first=points[0], last=points[points.length-1];
+  startMarker.setLatLng([Number(first.latitude), Number(first.longitude)]).bindPopup("Старт");
+  endMarker.setLatLng([Number(last.latitude), Number(last.longitude)]).bindPopup("Финиш");
+  if(latlngs.length===1) historyMap.setView(latlngs[0],16); else historyMap.fitBounds(L.latLngBounds(latlngs), {padding:[30,30]});
+  qs("startAddress").textContent = await reverseGeocode(Number(first.latitude), Number(first.longitude));
+  qs("endAddress").textContent = await reverseGeocode(Number(last.latitude), Number(last.longitude));
+}
+
+async function selectHistoryPoint(p){
+  const lat=Number(p.latitude), lon=Number(p.longitude);
+  if(selectedPointMarker) historyMap.removeLayer(selectedPointMarker);
+  selectedPointMarker = L.circleMarker([lat,lon], {radius:7,color:"#f59e0b",fillColor:"#f59e0b",fillOpacity:1}).addTo(historyMap);
+  historyMap.setView([lat,lon],16);
+  qs("selectedAddress").textContent = await reverseGeocode(lat,lon);
+}
+
+function updateCharts(points){
+  const speedLabels=points.slice(-100).map(p=>new Date(Number(p.timestamp||0)).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"}));
+  const speedData=points.slice(-100).map(p=>Number(p.speed||0));
+  if(speedChart) speedChart.destroy();
+  speedChart = new Chart(qs("speedChart"), { type:"line", data:{ labels:speedLabels, datasets:[{ data:speedData, tension:.25 }] }, options:{ responsive:true, plugins:{ legend:{display:false}}, scales:{ y:{beginAtZero:true}} }});
+  const byDay={};
+  for(let i=0;i<points.length;i++){
+    const day=new Date(Number(points[i].timestamp||0)).toLocaleDateString("ru-RU");
+    byDay[day]=byDay[day]||{dist:0,count:0,max:0,sum:0};
+    if(i>0) byDay[day].dist += distanceMeters(points[i-1],points[i])/1000;
+    const sp=Number(points[i].speed||0);
+    byDay[day].count += 1; byDay[day].sum += sp; byDay[day].max = Math.max(byDay[day].max, sp);
+  }
+  const labels=Object.keys(byDay), vals=labels.map(d=>Number(byDay[d].dist.toFixed(2)));
+  if(distanceChart) distanceChart.destroy();
+  distanceChart = new Chart(qs("distanceChart"), { type:"bar", data:{ labels, datasets:[{ data:vals }] }, options:{ responsive:true, plugins:{ legend:{display:false}}, scales:{ y:{beginAtZero:true}} }});
+  const tbody=qs("dailyStatsTbody"); tbody.innerHTML="";
+  labels.forEach(d=>{
+    const item=byDay[d], tr=document.createElement("tr");
+    tr.innerHTML=`<td>${d}</td><td>${item.dist.toFixed(2)}</td><td>${(item.sum/Math.max(1,item.count)).toFixed(1)} км/ч</td><td>${item.max.toFixed(1)} км/ч</td><td>${item.count}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function renderHistory(){
+  const pts=filteredHistory(); currentFiltered=pts;
+  const s=computeSummary(pts), stops=detectStops(pts);
+  qs("pointsCount").textContent = String(s.count);
+  qs("distanceValue").textContent = `${s.km.toFixed(2)} км`;
+  qs("avgSpeedValue").textContent = `${s.avgSpeed.toFixed(1)} км/ч`;
+  qs("maxSpeedValue").textContent = `${s.maxSpeed.toFixed(1)} км/ч`;
+  qs("routeStartCoords").textContent = pts.length ? `${Number(pts[0].latitude).toFixed(5)}, ${Number(pts[0].longitude).toFixed(5)}` : "—";
+  qs("routeEndCoords").textContent = pts.length ? `${Number(pts[pts.length-1].latitude).toFixed(5)}, ${Number(pts[pts.length-1].longitude).toFixed(5)}` : "—";
+  qs("routeDuration").textContent = pts.length ? formatDuration(Number(pts[pts.length-1].timestamp||0)-Number(pts[0].timestamp||0)) : "—";
+  qs("routeStops").textContent = String(stops.length);
+  qs("stopsNotice").textContent = stops.length ? `Стоянки: ${stops.map(s=>formatDuration(s.duration)).join(", ")}` : "Стоянок не найдено.";
+  const tbody=qs("historyTbody"); tbody.innerHTML="";
+  pts.slice().reverse().slice(0,500).forEach(p=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML = `<td>${fmtTime(p.timestamp)}</td><td class="mono">${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}</td><td>${formatAccuracy(p.accuracy)}</td><td>${p.speed != null ? Number(p.speed).toFixed(1)+" км/ч" : "—"}</td><td>${looksJunk(null,p)?'<span class="tag">мусор</span>':"—"}</td><td><div class="row"><button class="secondary small">Точка</button><button class="danger small">Удалить</button></div></td>`;
+    const buttons=tr.querySelectorAll("button");
+    buttons[0].onclick=()=>selectHistoryPoint(p);
+    buttons[1].onclick=async()=>{
+      if(!selectedUid) return alert("Нет выбранного пользователя");
+      if(!confirm(`Удалить точку ${fmtTime(p.timestamp)}?`)) return;
+      try{
+        const entryRef=push(ref(db,"adminLogs/deletions"));
+        await set(entryRef,{ts:Date.now(),kind:"point",description:`${fmtTime(p.timestamp)}`,uid:auth.currentUser?.uid||null,email:auth.currentUser?.email||null});
+        await remove(ref(db,`history/${selectedUid}/${String(p.timestamp)}`));
+      }catch(e){ alert("Удаление точки:\n"+errText(e)); }
+    };
+    tbody.appendChild(tr);
+  });
+  if(pts.length) updateHistoryMap(pts); else clearRouteSegments();
+  updateCharts(pts);
+}
+
+async function updateNowUI(point, sourceLabel){
+  currentNowSourceLabel = sourceLabel || "—";
+  if(point && point.latitude != null && point.longitude != null){
+    const lat=Number(point.latitude), lon=Number(point.longitude);
+    liveMarker.setLatLng([lat,lon]);
+    if(liveAutoCenter) liveMap.setView([lat,lon],16);
+    qs("nowAddress").textContent = await reverseGeocode(lat,lon);
+  } else {
+    qs("nowAddress").textContent = "—";
+  }
+  const freshness = point?.timestamp ? Date.now() - Number(point.timestamp) : null;
+  const isOnline = freshness != null && freshness <= 3*60*1000;
+  qs("nowStatus").textContent = isOnline ? "Онлайн" : "Оффлайн";
+  qs("nowSource").textContent = sourceLabel || "—";
+  qs("nowSpeed").textContent = point?.speed != null ? `${Number(point.speed).toFixed(1)} км/ч` : "—";
+  qs("nowAccuracy").textContent = formatAccuracy(point?.accuracy);
+  qs("nowUpdated").textContent = fmtTime(point?.timestamp);
+  qs("nowBearing").textContent = point?.bearing != null ? `${Number(point.bearing).toFixed(0)}°` : "—";
+  qs("nowIdle").textContent = point?.timestamp ? formatIdle(Date.now()-Number(point.timestamp)) : "—";
+}
+
+function getSessionRoot(session){
+  if(!session) return {};
+  if(session.meta || session.public || session.viewStats) return session;
+  return {};
+}
+
+async function updateNowFromAvailableSources(){
+  if(qs("viewModeSelect").value === "all"){
+    const points = getAllLastPoints();
+    if(points.length){
+      const latlngs = points.map(item => [Number(item.point.latitude), Number(item.point.longitude)]);
+      liveTrail.setLatLngs(latlngs);
+      liveMarker.setLatLng(latlngs[latlngs.length-1]);
+      await updateNowUI(points[points.length-1].point, `Все пользователи (${points.length})`);
+      return;
+    }
+  }
+  const selectedLive = getSelectedLiveData();
+  if(selectedLive && selectedLive.lastPoint){
+    const pts = Object.values(selectedLive.recentPoints || {}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+    liveTrail.setLatLngs(pts.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]));
+    await updateNowUI(selectedLive.lastPoint, selectedUid ? `live/${selectedUid}` : "live");
+    return;
+  }
+  const now = Date.now();
+  const active = Object.entries(allSessions).filter(([k,v])=>k!=="_init" && !!getSessionRoot(v).meta?.active && Number(getSessionRoot(v).meta?.expiresAt||0)>now).filter(([,v])=> !selectedUid || !getSessionRoot(v).meta?.ownerUid || getSessionRoot(v).meta.ownerUid===selectedUid);
+  if(active.length){
+    const [token, session] = active.sort((a,b)=>Number((getSessionRoot(b[1]).meta?.createdAt||0))-Number((getSessionRoot(a[1]).meta?.createdAt||0)))[0];
+    const root = getSessionRoot(session);
+    const pts = Object.values(root.public?.recentPoints || {}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+    liveTrail.setLatLngs(pts.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]));
+    await updateNowUI(root.public?.lastPoint || null, `liveSessions/${token}`);
+    return;
+  }
+  const points = getVisibleHistoryPoints(), point = points.length ? points[points.length-1] : null;
+  liveTrail.setLatLngs([]);
+  await updateNowUI(point, selectedUid ? `history/${selectedUid}` : "history");
+}
+
+async function logAction(kind, description){
+  const entryRef = push(ref(db, "adminLogs/actions"));
+  await set(entryRef, { ts:Date.now(), kind, description, uid:auth.currentUser?.uid||null, email:auth.currentUser?.email||null });
+}
+
+function buildShareUrl(token){ return `https://mygpstrack.github.io/mygps/live.html?session=${encodeURIComponent(token)}`; }
+function getRecentSourcePoints(mode, pointsLimit){
+  const limit=Math.max(2,Math.min(500,Number(pointsLimit||100)));
+  const livePoints = Object.values(getSelectedLiveData()?.recentPoints || {}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+  const historyPoints = getSelectedHistoryPoints().filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+  if(mode==="live") return livePoints.slice(-limit);
+  if(mode==="history") return historyPoints.slice(-limit);
+  if(livePoints.length) return livePoints.slice(-limit);
+  return historyPoints.slice(-limit);
+}
+function generateSessionToken(){ const arr=new Uint8Array(24); crypto.getRandomValues(arr); return Array.from(arr,b=>b.toString(16).padStart(2,"0")).join(""); }
+
+async function createLiveSession(){
+  if(!selectedUid && allUsers.length===1){ selectedUid = allUsers[0]; qs("userSelect").value = selectedUid; }
+  if(!selectedUid) return alert("Нет пользователя. Сначала дождись появления данных GPS в Firebase или выбери пользователя.");
+  const durationMinutes=Number(qs("shareDurationPreset").value||60), sourceMode=qs("shareSource").value, pointsLimit=Number(qs("sharePointsLimit").value||100), sourcePoints=getRecentSourcePoints(sourceMode,pointsLimit);
+  if(!sourcePoints.length) return alert("Нет данных выбранного пользователя для создания live-ссылки.");
+  const token=generateSessionToken(), now=Date.now(), expiresAt=now+durationMinutes*60*1000, lastPoint=sourcePoints[sourcePoints.length-1], recentPointsObj={};
+  sourcePoints.forEach(p=>recentPointsObj[String(p.timestamp||Date.now()+Math.random())]=p);
+  const payload={meta:{active:true,paused:false,createdAt:now,expiresAt,remainingMs:durationMinutes*60*1000,ownerUid:selectedUid,createdBy:auth.currentUser?.uid||null,createdByEmail:auth.currentUser?.email||null,durationMinutes},public:{lastPoint,recentPoints:recentPointsObj},viewStats:{openCount:0,firstOpenAt:null,lastOpenAt:null}};
+  try{
+    await set(ref(db,`liveSessions/${token}`), payload);
+    await update(ref(db), { [`liveOwners/${selectedUid}/activeSessionId`]:token, [`liveOwners/${selectedUid}/lastCreatedAt`]:now });
+    await logAction("session_create",`Создана live-сессия ${token} для ${selectedUid}`);
+    createdShareUrl = buildShareUrl(token);
+    qs("shareLinkText").textContent = createdShareUrl;
+    qs("shareExpiresText").textContent = fmtTime(expiresAt);
+    qs("shareResultBox").classList.remove("hidden");
+    await loadSessions();
+  }catch(e){
+    alert("Создание live-ссылки:\n"+errText(e));
+  }
+}
+
+function getSessionStatus(session){
+  const root=getSessionRoot(session), meta=root.meta||{}, active=!!meta.active, expiresAt=Number(meta.expiresAt||0), now=Date.now();
+  if(active && expiresAt>now) return "active";
+  if(!active && expiresAt>now) return "ended";
+  return "expired";
+}
+function getSessionStatusLabel(status){ if(status==="active") return "активна"; if(status==="ended") return "завершена"; return "истекла"; }
+
+async function loadSessions(){
+  const snap = await get(ref(db, "liveSessions"));
+  allSessions = snap.val() || {};
+  updateUsage();
+  renderSessions();
+  await updateNowFromAvailableSources();
+}
+
+async function deleteSession(token){
+  if(!confirm(`Удалить live-сессию ${token}?`)) return;
+  try{
+    await remove(ref(db, `liveSessions/${token}`));
+    await logAction("session_delete", `Удалена live-сессия ${token}`);
+    await loadSessions();
+  }catch(e){ alert("Удаление live-сессии:\n"+errText(e)); }
+}
+async function endSession(token){
+  if(!confirm(`Завершить live-сессию ${token}?`)) return;
+  try{
+    await update(ref(db, `liveSessions/${token}/meta`), { active:false, endedAt:Date.now() });
+    await logAction("session_end", `Завершена live-сессия ${token}`);
+    await loadSessions();
+  }catch(e){ alert("Завершение live-сессии:\n"+errText(e)); }
+}
+async function extendSession(token){
+  const minutes=Number(qs("extendSessionMinutesInput").value||0);
+  if(!minutes || minutes<=0) return alert("Укажи минуты для продления.");
+  const session=getSessionRoot(allSessions[token]);
+  if(!session) return alert("Сессия не найдена.");
+  const currentExpiresAt=Number(session?.meta?.expiresAt||Date.now()), nextExpiresAt=Math.max(currentExpiresAt,Date.now())+minutes*60000;
+  try{
+    await update(ref(db,`liveSessions/${token}/meta`),{expiresAt:nextExpiresAt,remainingMs:Math.max(0,nextExpiresAt-Date.now()),active:true,extendedAt:Date.now()});
+    await logAction("session_extend", `Продлена live-сессия ${token}`);
+    await loadSessions();
+  }catch(e){ alert("Продление live-сессии:\n"+errText(e)); }
+}
+async function endAllActiveSessions(){
+  const now=Date.now();
+  const activeTokens=Object.entries(allSessions||{}).filter(([token,session])=>token!=="_init" && !!getSessionRoot(session).meta?.active && Number(getSessionRoot(session).meta?.expiresAt||0)>now).map(([token])=>token);
+  if(!activeTokens.length) return alert("Активных live-сессий нет.");
+  if(!confirm(`Остановить ${activeTokens.length} активных сессий?`)) return;
+  try{
+    for(const token of activeTokens) await update(ref(db,`liveSessions/${token}/meta`),{active:false,endedAt:Date.now()});
+    await logAction("session_end_all", `Остановлено активных сессий: ${activeTokens.length}`);
+    await loadSessions();
+  }catch(e){ alert("Остановка всех активных:\n"+errText(e)); }
+}
+async function cleanupExpiredSessions(){
+  const now=Date.now();
+  const expiredTokens=Object.entries(allSessions||{}).filter(([token,session])=>token!=="_init" && Number(getSessionRoot(session).meta?.expiresAt||0)>0 && Number(getSessionRoot(session).meta?.expiresAt||0)<now).map(([token])=>token);
+  if(!expiredTokens.length) return alert("Истёкших сессий не найдено.");
+  if(!confirm(`Удалить ${expiredTokens.length} истёкших сессий?`)) return;
+  try{
+    for(const token of expiredTokens) await remove(ref(db,`liveSessions/${token}`));
+    await logAction("expired_sessions_cleanup", `Удалено истёкших сессий: ${expiredTokens.length}`);
+    await loadSessions();
+  }catch(e){ alert("Очистка истёкших:\n"+errText(e)); }
+}
+async function syncActiveSessionsFromSelectedUser(){
+  if(!selectedUid && allUsers.length===1){ selectedUid=allUsers[0]; qs("userSelect").value=selectedUid; }
+  const selectedLive=getSelectedLiveData();
+  if(!selectedUid) return alert("Сначала выбери пользователя.");
+  if(!selectedLive?.lastPoint) return alert("Нет live выбранного пользователя для синхронизации.");
+  const now=Date.now();
+  const activeTokens=Object.entries(allSessions||{}).filter(([token,session])=>token!=="_init" && !!getSessionRoot(session).meta?.active && Number(getSessionRoot(session).meta?.expiresAt||0)>now && getSessionRoot(session).meta?.ownerUid===selectedUid).map(([token])=>token);
+  if(!activeTokens.length) return alert("Активных live-сессий для выбранного пользователя нет.");
+  const livePoints=Object.values(selectedLive.recentPoints||{}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0)).slice(-100), recentPointsObj={};
+  livePoints.forEach(p=>recentPointsObj[String(p.timestamp||(Date.now()+Math.random()))]=p);
+  try{
+    for(const token of activeTokens){
+      await update(ref(db,`liveSessions/${token}/public`), { lastPoint:selectedLive.lastPoint, recentPoints:recentPointsObj });
+      await update(ref(db,`liveSessions/${token}/meta`), { lastSyncedAt:Date.now() });
+    }
+    await logAction("session_sync_active", `Синхронизировано active-сессий: ${activeTokens.length} для ${selectedUid}`);
+    await loadSessions();
+  }catch(e){ alert("Синхронизация active:\n"+errText(e)); }
+}
+async function showSessionOnMap(token){
+  const session=getSessionRoot(allSessions[token])||{}, pts=Object.values(session?.public?.recentPoints||{}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0)), latlngs=pts.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]);
+  sessionTrail.setLatLngs(latlngs);
+  if(latlngs.length){
+    sessionMarker.setLatLng(latlngs[latlngs.length-1]);
+    if(latlngs.length===1) sessionMap.setView(latlngs[0],16); else sessionMap.fitBounds(L.latLngBounds(latlngs), {padding:[30,30]});
+  }
+}
+function renderSessions(){
+  const tbody=qs("sessionsTbody"); tbody.innerHTML="";
+  const search=(qs("sessionSearchInput").value||"").trim().toLowerCase(), statusFilter=qs("sessionStatusFilter").value;
+  const entries=Object.entries(allSessions||{}).filter(([token])=>token!=="_init").map(([token,session])=>[token,getSessionRoot(session),getSessionStatus(session)]).filter(([token,session,status])=>{
+    if(statusFilter!=="all" && status!==statusFilter) return false;
+    if(search && !token.toLowerCase().includes(search)) return false;
+    if(selectedUid && session?.meta?.ownerUid && qs("viewModeSelect").value==="selected" && session.meta.ownerUid!==selectedUid) return false;
+    return true;
+  }).sort((a,b)=>Number((b[1]?.meta?.createdAt||0))-Number((a[1]?.meta?.createdAt||0)));
+  if(!entries.length){ tbody.innerHTML=`<tr><td colspan="6">Сессий нет</td></tr>`; return; }
+  for(const [token,session,status] of entries){
+    const meta=session?.meta||{}, stats=session?.viewStats||{}, tr=document.createElement("tr");
+    tr.innerHTML=`<td class="mono">${token}<br><span class="tag">${meta.ownerUid||"—"}</span></td><td>${getSessionStatusLabel(status)}</td><td>${fmtTime(meta.expiresAt)}</td><td>${stats.openCount||0}</td><td>${fmtTime(stats.firstOpenAt)}<br>${fmtTime(stats.lastOpenAt)}</td><td><div class="row"><button class="secondary small" data-copy="${token}">Копировать</button><button class="secondary small" data-view="${token}">Карта</button><button class="secondary small" data-extend="${token}">Продлить</button><button class="warn small" data-end="${token}">Завершить</button><button class="danger small" data-delete="${token}">Удалить</button></div></td>`;
+    tbody.appendChild(tr);
+  }
+  tbody.querySelectorAll("[data-copy]").forEach(btn=>btn.onclick=async()=>{ try{ await navigator.clipboard.writeText(buildShareUrl(btn.dataset.copy)); alert("Ссылка скопирована"); }catch(e){ alert("Ошибка копирования: "+errText(e)); }});
+  tbody.querySelectorAll("[data-view]").forEach(btn=>btn.onclick=()=>showSessionOnMap(btn.dataset.view));
+  tbody.querySelectorAll("[data-extend]").forEach(btn=>btn.onclick=()=>extendSession(btn.dataset.extend));
+  tbody.querySelectorAll("[data-end]").forEach(btn=>btn.onclick=()=>endSession(btn.dataset.end));
+  tbody.querySelectorAll("[data-delete]").forEach(btn=>btn.onclick=()=>deleteSession(btn.dataset.delete));
+}
+
+function renderJournal(){
+  const tbody=qs("journalTbody"); tbody.innerHTML="";
+  const combined=[...deletionsLog.map(item=>({...item,_type:item.kind||"deletion"})),...actionLogs.map(item=>({...item,_type:item.kind||"action"}))].sort((a,b)=>Number(b.ts||0)-Number(a.ts||0));
+  combined.slice(0,500).forEach(item=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML=`<td>${fmtTime(item.ts)}</td><td>${item._type||"—"}</td><td>${item.description||"—"}</td><td>${item.email||item.uid||"—"}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function showDiag(){
+  const selectedLive=getSelectedLiveData(), visibleHistory=getVisibleHistoryPoints(), activeSession=Object.entries(allSessions||{}).find(([token,session])=>getSessionRoot(session)?.meta?.ownerUid===selectedUid && !!getSessionRoot(session)?.meta?.active);
+  const text=[
+    `UID: ${auth.currentUser?.uid||"—"}`,
+    `Email: ${auth.currentUser?.email||"—"}`,
+    `Выбранный пользователь: ${selectedUid||"—"}`,
+    `Режим: ${qs("viewModeSelect").value}`,
+    `Пользователей: ${allUsers.length}`,
+    `Точек history (видимых): ${visibleHistory.length}`,
+    `Есть live выбранного пользователя: ${selectedLive?.lastPoint ? "да" : "нет"}`,
+    `Активная live-сессия: ${activeSession ? activeSession[0] : "нет"}`,
+    `Последний источник now: ${currentNowSourceLabel}`
+  ].join("\n");
+  alert(text);
+}
+
+async function refreshLiveNow(){
+  try{
+    const snap=await get(ref(db,"live"));
+    liveByUid=snap.val()||{};
+    updateUsage();
+    await updateNowFromAvailableSources();
+  }catch(e){ alert("Обновление live:\n"+errText(e)); }
+}
+
+function downloadText(name,content,type){ const blob=new Blob([content],{type}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=name; a.click(); URL.revokeObjectURL(url); }
+
+qs("googleBtn").onclick=async()=>{ try{ await signInWithPopup(auth,provider); }catch(e){ qs("errorBox").textContent="Ошибка Google-входа: "+errText(e); qs("errorBox").classList.remove("hidden"); }};
+qs("emailLoginBtn").onclick=async()=>{ try{ await signInWithEmailAndPassword(auth,qs("emailInput").value.trim(),qs("passwordInput").value); }catch(e){ qs("errorBox").textContent="Ошибка входа: "+errText(e); qs("errorBox").classList.remove("hidden"); }};
+qs("emailRegisterBtn").onclick=async()=>{ try{ await createUserWithEmailAndPassword(auth,qs("emailInput").value.trim(),qs("passwordInput").value); }catch(e){ qs("errorBox").textContent="Ошибка регистрации: "+errText(e); qs("errorBox").classList.remove("hidden"); }};
+qs("logoutBtn").onclick=async()=>{ await signOut(auth); };
+
+qs("todayBtn").onclick=()=>{ const now=new Date(), start=new Date(); start.setHours(0,0,0,0); setDateTimeRange(start,now); renderHistory(); };
+qs("yesterdayBtn").onclick=()=>{ const start=new Date(); start.setDate(start.getDate()-1); start.setHours(0,0,0,0); const end=new Date(start); end.setHours(23,59,0,0); setDateTimeRange(start,end); renderHistory(); };
+qs("weekBtn").onclick=()=>{ const now=new Date(), start=new Date(); start.setDate(start.getDate()-7); setDateTimeRange(start,now); renderHistory(); };
+qs("range1hBtn").onclick=()=>{ const now=new Date(), start=new Date(Date.now()-60*60*1000); setDateTimeRange(start,now); renderHistory(); };
+qs("range24hBtn").onclick=()=>{ const now=new Date(), start=new Date(Date.now()-24*60*60*1000); setDateTimeRange(start,now); renderHistory(); };
+qs("applyFiltersBtn").onclick=renderHistory;
+qs("resetFiltersBtn").onclick=()=>{ qs("maxAccuracyFilter").value=""; qs("minSpeedFilter").value=""; qs("maxSpeedFilter").value=""; qs("hideJunkToggle").checked=false; renderHistory(); };
+qs("refreshHistoryBtn").onclick=()=>loadAllData();
+qs("fitRouteBtn").onclick=()=>{ const pts=currentFiltered.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]); if(pts.length) historyMap.fitBounds(L.latLngBounds(pts), {padding:[30,30]}); };
+qs("deleteRangeBtn").onclick=async()=>{
+  const pts=filteredHistory();
+  if(!pts.length) return alert("Нет точек в выбранном диапазоне.");
+  if(!selectedUid) return alert("Нет выбранного пользователя.");
+  if(!confirm(`Удалить ${pts.length} точек?`)) return;
+  try{
+    const updatesObj={};
+    pts.forEach(p=>updatesObj[`history/${selectedUid}/${String(p.timestamp)}`]=null);
+    const entryRef=push(ref(db,"adminLogs/deletions"));
+    await set(entryRef,{ts:Date.now(),kind:"range",description:`${pts.length} точек`,uid:auth.currentUser?.uid||null,email:auth.currentUser?.email||null});
+    await update(ref(db), updatesObj);
+  }catch(e){ alert("Удаление периода:\n"+errText(e)); }
+};
+
+qs("exportJsonBtn").onclick=()=>downloadText("history_export.json", JSON.stringify(filteredHistory(),null,2), "application/json");
+qs("exportCsvBtn").onclick=()=>{ const pts=filteredHistory(), lines=["timestamp,latitude,longitude,accuracy,speed"]; pts.forEach(p=>lines.push([p.timestamp??"",p.latitude??"",p.longitude??"",p.accuracy??"",p.speed??""].join(","))); downloadText("history_export.csv", lines.join("\n"), "text/csv"); };
+qs("exportGpxBtn").onclick=()=>{ const pts=filteredHistory(), lines=['<?xml version="1.0" encoding="UTF-8"?>','<gpx version="1.1" creator="MyGps Admin" xmlns="http://www.topografix.com/GPX/1/1">','<trk><name>History Export</name><trkseg>']; pts.forEach(p=>lines.push(`<trkpt lat="${p.latitude}" lon="${p.longitude}"><time>${new Date(Number(p.timestamp||0)).toISOString()}</time></trkpt>`)); lines.push('</trkseg></trk></gpx>'); downloadText("history_export.gpx", lines.join(""), "application/gpx+xml"); };
+qs("exportPdfBtn").onclick=()=>{ const pts=filteredHistory(), s=computeSummary(pts), {jsPDF}=window.jspdf, doc=new jsPDF(); doc.text("MyGps History Report",14,16); doc.text(`Distance: ${s.km.toFixed(2)} km`,14,28); doc.text(`Average speed: ${s.avgSpeed.toFixed(1)} km/h`,14,36); doc.text(`Max speed: ${s.maxSpeed.toFixed(1)} km/h`,14,44); const rows=pts.slice(0,250).map(p=>[fmtTime(p.timestamp), `${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}`, p.speed != null ? Number(p.speed).toFixed(1) : "—"]); doc.autoTable({startY:52, head:[["Time","Coordinates","Speed km/h"]], body:rows, styles:{fontSize:9}}); doc.save("history_report.pdf"); };
+
+qs("refreshNowBtn").onclick=()=>updateNowFromAvailableSources();
+qs("refreshLiveBtn").onclick=()=>refreshLiveNow();
+qs("liveAutoCenterBtn").onclick=()=>{ liveAutoCenter=!liveAutoCenter; qs("liveAutoCenterBtn").textContent=`Автоцентр: ${liveAutoCenter?"вкл":"выкл"}`; };
+qs("btnDiag").onclick=showDiag;
+
+qs("createShareBtn").onclick=()=>createLiveSession();
+qs("clearShareResultBtn").onclick=()=>{ createdShareUrl=""; qs("shareResultBox").classList.add("hidden"); };
+qs("copyCreatedShareBtn").onclick=async()=>{ if(createdShareUrl) await navigator.clipboard.writeText(createdShareUrl); };
+qs("openCreatedShareBtn").onclick=()=>{ if(createdShareUrl) window.open(createdShareUrl,"_blank","noopener,noreferrer"); };
+
+qs("refreshSessionsBtn").onclick=()=>loadSessions();
+qs("syncActiveSessionsBtn").onclick=()=>syncActiveSessionsFromSelectedUser();
+qs("endAllActiveSessionsBtn").onclick=()=>endAllActiveSessions();
+qs("cleanupSessionsBtn").onclick=()=>cleanupExpiredSessions();
+qs("sessionSearchInput").oninput=renderSessions;
+qs("sessionStatusFilter").onchange=renderSessions;
+
+qs("userSelect").onchange=()=>{ selectedUid=qs("userSelect").value; updateUsage(); renderHistory(); updateNowFromAvailableSources(); renderSessions(); };
+qs("viewModeSelect").onchange=()=>{ updateUsage(); renderHistory(); updateNowFromAvailableSources(); renderSessions(); };
+qs("refreshUsersBtn").onclick=async()=>{ await loadUsers(); await loadAllData(); };
+
+qs("deleteHistoryBtn").onclick=async()=>{ if(!confirm("Очистить всю ветку history?")) return; try{ await remove(ref(db,"history")); await logAction("delete_history","Очищена ветка history"); }catch(e){ alert("Очистка history:\n"+errText(e)); } };
+qs("deleteLiveBtn").onclick=async()=>{ if(!confirm("Очистить live, liveSessions и liveOwners?")) return; try{ await update(ref(db),{live:null,liveSessions:null,liveOwners:null}); await logAction("delete_live","Очищены live/liveSessions/liveOwners"); }catch(e){ alert("Очистка live:\n"+errText(e)); } };
+qs("deleteAllDbBtn").onclick=async()=>{ const code=prompt("Для полной очистки введи DELETE"); if(code!=="DELETE") return; try{ await update(ref(db),{history:null,live:null,liveSessions:null,liveOwners:null,adminLogs:null}); }catch(e){ alert("Полная очистка базы:\n"+errText(e)); } };
+
 onAuthStateChanged(auth, async user => {
   qs("errorBox").classList.add("hidden");
-
-  if (!user) {
+  if(!user){
     qs("authCard").classList.remove("hidden");
     qs("adminPanel").classList.add("hidden");
     return;
   }
-
-  console.log("UID:", user.uid);
-  console.log("EMAIL:", user.email);
-
   const adminSnap = await get(ref(db, `admins/${user.uid}`));
   const allowed = adminSnap.val() === true;
-
-  if (!allowed) {
+  if(!allowed){
     qs("authCard").classList.remove("hidden");
     qs("adminPanel").classList.add("hidden");
-    qs("authMessage").innerHTML =
-      `Ты вошёл, но ещё не добавлен как админ.<br><br><span class="mono">admins/${user.uid} = true</span>`;
+    qs("authMessage").innerHTML = `Ты вошёл, но ещё не добавлен как админ.<br><br><span class="mono">admins/${user.uid} = true</span>`;
     return;
   }
 
   qs("authCard").classList.add("hidden");
   qs("adminPanel").classList.remove("hidden");
-  qs("userInfo").textContent = user.email || "Google user";
+  qs("userInfo").innerHTML = `${user.email || "Google user"} <span class="tag admin">ADMIN</span>`;
+  qs("userUidText").textContent = user.uid;
   setDefaultPeriodToday();
 
-  onValue(ref(db, "live"), snap => {
-    liveByUid = snap.val() || {};
-    updateUsage();
-    updateNowFromAvailableSources();
-  });
-
+  onValue(ref(db, "live"), snap => { liveByUid=snap.val()||{}; updateUsage(); updateNowFromAvailableSources(); });
   onValue(ref(db, "history"), snap => {
-    const raw = snap.val() || {};
-    historyByUid = {};
-    Object.entries(raw).forEach(([uid, pointsObj]) => {
-      historyByUid[uid] = Object.values(pointsObj || {})
-        .filter(Boolean)
-        .sort((a, b) => Number(a.timestamp || 0) - Number(b.timestamp || 0));
+    const raw=snap.val()||{};
+    historyByUid={};
+    Object.entries(raw).forEach(([uid,pointsObj])=>{
+      historyByUid[uid]=Object.values(pointsObj||{}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
     });
-    updateUsage();
-    renderHistory();
-    updateNowFromAvailableSources();
+    updateUsage(); renderHistory(); updateNowFromAvailableSources();
   });
-
-  onValue(ref(db, "liveSessions"), snap => {
-    allSessions = snap.val() || {};
-    updateUsage();
-    renderSessions();
-    updateNowFromAvailableSources();
-  });
-
-  onValue(ref(db, "adminLogs/deletions"), snap => {
-    deletionsLog = Object.values(snap.val() || {})
-      .filter(Boolean)
-      .sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0));
-    renderJournal();
-  });
-
-  onValue(ref(db, "adminLogs/actions"), snap => {
-    actionLogs = Object.values(snap.val() || {})
-      .filter(Boolean)
-      .sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0));
-    renderJournal();
-  });
+  onValue(ref(db, "liveSessions"), snap => { allSessions=snap.val()||{}; updateUsage(); renderSessions(); updateNowFromAvailableSources(); });
+  onValue(ref(db, "adminLogs/deletions"), snap => { deletionsLog=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0)); renderJournal(); });
+  onValue(ref(db, "adminLogs/actions"), snap => { actionLogs=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0)); renderJournal(); });
 
   await loadUsers();
   await loadAllData();
   await loadSessions();
 });
 </script>
-  
 </body></html>
