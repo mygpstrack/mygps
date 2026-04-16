@@ -1440,6 +1440,10 @@ onAuthStateChanged(auth, async user => {
     qs("adminPanel").classList.add("hidden");
     return;
   }
+
+  console.log("UID:", user.uid);
+  console.log("EMAIL:", user.email);
+  
   const adminSnap = await get(ref(db, `admins/${user.uid}`));
   const allowed = adminSnap.val() === true;
   if(!allowed){
