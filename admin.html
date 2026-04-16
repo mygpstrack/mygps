@@ -650,14 +650,23 @@ function populateTimeSelects(){
 }
 populateTimeSelects();
 
-function setDateTimeRange(start,end){
-  qs("fromDate").value = start.toISOString().slice(0,10);
-  qs("fromHour").value = String(start.getHours()).padStart(2,"0");
-  qs("fromMinute").value = String(start.getMinutes()).padStart(2,"0");
-  qs("toDate").value = end.toISOString().slice(0,10);
-  qs("toHour").value = String(end.getHours()).padStart(2,"0");
-  qs("toMinute").value = String(end.getMinutes()).padStart(2,"0");
+function toLocalDateInputValue(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
+
+function setDateTimeRange(start, end) {
+  qs("fromDate").value = toLocalDateInputValue(start);
+  qs("fromHour").value = String(start.getHours()).padStart(2, "0");
+  qs("fromMinute").value = String(start.getMinutes()).padStart(2, "0");
+
+  qs("toDate").value = toLocalDateInputValue(end);
+  qs("toHour").value = String(end.getHours()).padStart(2, "0");
+  qs("toMinute").value = String(end.getMinutes()).padStart(2, "0");
+}
+  
 function setDefaultPeriodToday(){ const now=new Date(), start=new Date(); start.setHours(0,0,0,0); setDateTimeRange(start,now); }
 
 document.querySelectorAll(".tab-btn").forEach(btn=>{
@@ -863,48 +872,129 @@ function updateCharts(points){
 }
 
 function renderHistory(){
-  const pts=filteredHistory(); currentFiltered=pts;
-  const s=computeSummary(pts), stops=detectStops(pts);
-  qs("pointsCount").textContent = String(s.count);
-  qs("distanceValue").textContent = `${s.km.toFixed(2)} км`;
-  qs("avgSpeedValue").textContent = `${s.avgSpeed.toFixed(1)} км/ч`;
-  qs("maxSpeedValue").textContent = `${s.maxSpeed.toFixed(1)} км/ч`;
-  qs("routeStartCoords").textContent = pts.length ? `${Number(pts[0].latitude).toFixed(5)}, ${Number(pts[0].longitude).toFixed(5)}` : "—";
-  qs("routeEndCoords").textContent = pts.length ? `${Number(pts[pts.length-1].latitude).toFixed(5)}, ${Number(pts[pts.length-1].longitude).toFixed(5)}` : "—";
-  qs("routeDuration").textContent = pts.length ? formatDuration(Number(pts[pts.length-1].timestamp||0)-Number(pts[0].timestamp||0)) : "—";
-  qs("routeStops").textContent = String(stops.length);
-  qs("stopsNotice").textContent = stops.length ? `Стоянки: ${stops.map(s=>formatDuration(s.duration)).join(", ")}` : "Стоянок не найдено.";
-  const tbody=qs("historyTbody"); tbody.innerHTML="";
-  pts.slice().reverse().slice(0,500).forEach(p=>{
-    const tr=document.createElement("tr");
-    const quality = isCleanPoint(null,p) ? (Number(p.accuracy||0)<=10?'<span class="tag online">хороший</span>':Number(p.accuracy||0)<=30?'<span class="tag idle">средний</span>':'<span class="tag offline">плохой</span>') : '<span class="tag">мусор</span>';
-    tr.innerHTML = `<td>${fmtTime(p.timestamp)}</td><td class="mono">${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}</td><td>${formatAccuracy(p.accuracy)}</td><td>${p.speed != null ? Number(p.speed).toFixed(1)+" км/ч" : "—"}</td><td>${quality}</td><td><div class="row"><button class="secondary small">Точка</button><button class="secondary small">Копир.</button><button class="secondary small">Maps</button><button class="danger small">Удалить</button></div></td>`;
-    const buttons=tr.querySelectorAll("button");
-    buttons[0].onclick=()=>selectHistoryPoint(p);
-    buttons[1].onclick=async()=>{ await navigator.clipboard.writeText(`${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}`); showToast("Координаты скопированы","success"); };
-    buttons[2].onclick=()=>window.open(`https://maps.google.com/?q=${encodeURIComponent(Number(p.latitude).toFixed(5)+","+Number(p.longitude).toFixed(5))}`,"_blank");
-    buttons[3].onclick=async()=>{
-      if(!selectedUid) return showToast("Нет выбранного пользователя","warn");
-      if(!confirm(`Удалить точку ${fmtTime(p.timestamp)}?`)) return;
-      try{
-        const entryRef=push(ref(db,"adminLogs/deletions"));
-        await set(entryRef,{ts:Date.now(),kind:"point",description:`${fmtTime(p.timestamp)}`,uid:auth.currentUser?.uid||null,email:auth.currentUser?.email||null});
-        await remove(ref(db,`history/${selectedUid}/${String(p.timestamp)}`));
-      }catch(e){ alert("Удаление точки:\n"+errText(e)); }
-    };
+  async function renderHistory() {
+  const pts = filteredHistory();
+  currentFiltered = pts;
+
+  console.log("renderHistory points:", pts.length);
+
+  const tbody = qs("historyTbody");
+  if (!tbody) {
+    console.error("historyTbody not found");
+    return;
+  }
+
+  tbody.innerHTML = "";
+
+  if (!pts.length) {
+    tbody.innerHTML = `<tr><td colspan="6">Нет данных за выбранный период</td></tr>`;
+
+    if (qs("pointsCount")) qs("pointsCount").textContent = "0";
+    if (qs("distanceValue")) qs("distanceValue").textContent = "0 км";
+    if (qs("avgSpeedValue")) qs("avgSpeedValue").textContent = "0 км/ч";
+    if (qs("maxSpeedValue")) qs("maxSpeedValue").textContent = "0 км/ч";
+    if (qs("routeStartCoords")) qs("routeStartCoords").textContent = "—";
+    if (qs("routeEndCoords")) qs("routeEndCoords").textContent = "—";
+    if (qs("routeDuration")) qs("routeDuration").textContent = "—";
+    if (qs("routeStops")) qs("routeStops").textContent = "0";
+    if (qs("startAddress")) qs("startAddress").textContent = "—";
+    if (qs("endAddress")) qs("endAddress").textContent = "—";
+    if (qs("selectedAddress")) qs("selectedAddress").textContent = "—";
+
+    if (typeof clearRouteSegments === "function") clearRouteSegments();
+    return;
+  }
+
+  const s = computeSummary(pts);
+
+  if (qs("pointsCount")) qs("pointsCount").textContent = String(s.count);
+  if (qs("distanceValue")) qs("distanceValue").textContent = `${s.km.toFixed(2)} км`;
+  if (qs("avgSpeedValue")) qs("avgSpeedValue").textContent = `${s.avgSpeed.toFixed(1)} км/ч`;
+  if (qs("maxSpeedValue")) qs("maxSpeedValue").textContent = `${s.maxSpeed.toFixed(1)} км/ч`;
+
+  const first = pts[0];
+  const last = pts[pts.length - 1];
+
+  if (qs("routeStartCoords")) qs("routeStartCoords").textContent =
+    `${Number(first.latitude).toFixed(5)}, ${Number(first.longitude).toFixed(5)}`;
+
+  if (qs("routeEndCoords")) qs("routeEndCoords").textContent =
+    `${Number(last.latitude).toFixed(5)}, ${Number(last.longitude).toFixed(5)}`;
+
+  if (qs("routeDuration")) qs("routeDuration").textContent =
+    formatDuration(Number(last.timestamp || 0) - Number(first.timestamp || 0));
+
+  const stops = detectStops(pts);
+  if (qs("routeStops")) qs("routeStops").textContent = String(stops.length);
+  if (qs("stopsNotice")) {
+    qs("stopsNotice").textContent = stops.length
+      ? `Стоянки: ${stops.map(s => formatDuration(s.duration)).join(", ")}`
+      : "Стоянок не найдено.";
+  }
+
+  for (const p of pts.slice().reverse()) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${fmtTime(p.timestamp)}</td>
+      <td class="mono">${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}</td>
+      <td>${p.accuracy != null ? Number(p.accuracy).toFixed(2) + " м" : "—"}</td>
+      <td>${p.speed != null ? Number(p.speed).toFixed(1) + " км/ч" : "—"}</td>
+      <td>${p._gpsQuality || "—"}</td>
+      <td><button class="danger small" data-delete-point="${p.timestamp}">Удалить</button></td>
+    `;
     tbody.appendChild(tr);
+
+    tr.onclick = async (e) => {
+      if (e.target.closest("button")) return;
+      if (typeof historyMap !== "undefined") {
+        historyMap.setView([Number(p.latitude), Number(p.longitude)], 17);
+      }
+      if (qs("selectedAddress")) {
+        qs("selectedAddress").textContent = await reverseGeocode(
+          Number(p.latitude),
+          Number(p.longitude)
+        );
+      }
+    };
+  }
+
+  tbody.querySelectorAll("[data-delete-point]").forEach(btn => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      const ts = btn.dataset.deletePoint;
+      if (!selectedUid) {
+        showToast("Нет выбранного пользователя", "warn");
+        return;
+      }
+      if (!confirm("Удалить точку?")) return;
+
+      try {
+        await remove(ref(db, `history/${selectedUid}/${ts}`));
+        showToast("Точка удалена", "success");
+        await loadAllData();
+      } catch (err) {
+        showToast("Ошибка удаления точки: " + errText(err), "error", 3500);
+      }
+    };
   });
-  if(pts.length) updateHistoryMap(pts); else clearRouteSegments();
-  updateCharts(pts);
-  const now = new Date(); const startDay = new Date(); startDay.setHours(0,0,0,0);
-  const todayPts = getVisibleHistoryPoints().filter(p=>Number(p.timestamp||0)>=startDay.getTime());
-  const sToday = computeSummary(todayPts); const stopsToday = detectStops(todayPts); const stopMs = stopsToday.reduce((a,s)=>a+Number(s.duration||0),0);
-  const totalMs = todayPts.length ? Number(todayPts[todayPts.length-1].timestamp||0) - Number(todayPts[0].timestamp||0) : 0;
-  qs("todayKm").textContent = `${sToday.km.toFixed(2)} км`;
-  qs("todayMove").textContent = formatDuration(Math.max(0,totalMs-stopMs));
-  qs("todayStop").textContent = formatDuration(stopMs);
-  qs("todayLast").textContent = todayPts.length ? fmtTime(todayPts[todayPts.length-1].timestamp) : "—";
-  qs("todayPoints").textContent = String(todayPts.length);
+
+  if (typeof updateHistoryMap === "function") {
+    await updateHistoryMap(pts);
+  }
+
+  if (qs("startAddress")) {
+    qs("startAddress").textContent = await reverseGeocode(
+      Number(first.latitude),
+      Number(first.longitude)
+    );
+  }
+
+  if (qs("endAddress")) {
+    qs("endAddress").textContent = await reverseGeocode(
+      Number(last.latitude),
+      Number(last.longitude)
+    );
+  }
 }
 
 async function updateNowUI(point, sourceLabel){
@@ -1321,11 +1411,47 @@ qs("emailLoginBtn").onclick=async()=>{ try{ await signInWithEmailAndPassword(aut
 qs("emailRegisterBtn").onclick=async()=>{ try{ await createUserWithEmailAndPassword(auth,qs("emailInput").value.trim(),qs("passwordInput").value); }catch(e){ qs("errorBox").textContent="Ошибка регистрации: "+errText(e); qs("errorBox").classList.remove("hidden"); }};
 qs("logoutBtn").onclick=async()=>{ await signOut(auth); };
 
-qs("todayBtn").onclick=()=>{ const now=new Date(), start=new Date(); start.setHours(0,0,0,0); setDateTimeRange(start,now); renderHistory(); };
-qs("yesterdayBtn").onclick=()=>{ const start=new Date(); start.setDate(start.getDate()-1); start.setHours(0,0,0,0); const end=new Date(start); end.setHours(23,59,0,0); setDateTimeRange(start,end); renderHistory(); };
-qs("weekBtn").onclick=()=>{ const now=new Date(), start=new Date(); start.setDate(start.getDate()-7); setDateTimeRange(start,now); renderHistory(); };
-qs("range1hBtn").onclick=()=>{ const now=new Date(), start=new Date(Date.now()-60*60*1000); setDateTimeRange(start,now); renderHistory(); };
-qs("range24hBtn").onclick=()=>{ const now=new Date(), start=new Date(Date.now()-24*60*60*1000); setDateTimeRange(start,now); renderHistory(); };
+qs("todayBtn").onclick = () => {
+  const now = new Date();
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  setDateTimeRange(start, now);
+  renderHistory();
+};
+
+qs("yesterdayBtn").onclick = () => {
+  const start = new Date();
+  start.setDate(start.getDate() - 1);
+  start.setHours(0, 0, 0, 0);
+
+  const end = new Date(start);
+  end.setHours(23, 59, 59, 999);
+
+  setDateTimeRange(start, end);
+  renderHistory();
+};
+
+qs("weekBtn").onclick = () => {
+  const now = new Date();
+  const start = new Date();
+  start.setDate(start.getDate() - 7);
+  setDateTimeRange(start, now);
+  renderHistory();
+};
+
+qs("range1hBtn").onclick = () => {
+  const now = new Date();
+  const start = new Date(Date.now() - 60 * 60 * 1000);
+  setDateTimeRange(start, now);
+  renderHistory();
+};
+
+qs("range24hBtn").onclick = () => {
+  const now = new Date();
+  const start = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  setDateTimeRange(start, now);
+  renderHistory();
+};
 qs("applyFiltersBtn").onclick=renderHistory;
 qs("resetFiltersBtn").onclick=()=>{ qs("maxAccuracyFilter").value=""; qs("minSpeedFilter").value=""; qs("maxSpeedFilter").value=""; qs("hideJunkToggle").checked=false; renderHistory(); };
 qs("refreshHistoryBtn").onclick=async()=>{ await loadAllData(); showToast("История обновлена","success"); };
