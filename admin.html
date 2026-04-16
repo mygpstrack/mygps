@@ -650,23 +650,20 @@ function populateTimeSelects(){
 }
 populateTimeSelects();
 
-function toLocalDateInputValue(date) {
+function toLocalDateInputValue(date){
   const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
+  const m = String(date.getMonth() + 1).padStart(2,"0");
+  const d = String(date.getDate()).padStart(2,"0");
   return `${y}-${m}-${d}`;
 }
-
-function setDateTimeRange(start, end) {
+function setDateTimeRange(start,end){
   qs("fromDate").value = toLocalDateInputValue(start);
-  qs("fromHour").value = String(start.getHours()).padStart(2, "0");
-  qs("fromMinute").value = String(start.getMinutes()).padStart(2, "0");
-
+  qs("fromHour").value = String(start.getHours()).padStart(2,"0");
+  qs("fromMinute").value = String(start.getMinutes()).padStart(2,"0");
   qs("toDate").value = toLocalDateInputValue(end);
-  qs("toHour").value = String(end.getHours()).padStart(2, "0");
-  qs("toMinute").value = String(end.getMinutes()).padStart(2, "0");
+  qs("toHour").value = String(end.getHours()).padStart(2,"0");
+  qs("toMinute").value = String(end.getMinutes()).padStart(2,"0");
 }
-  
 function setDefaultPeriodToday(){ const now=new Date(), start=new Date(); start.setHours(0,0,0,0); setDateTimeRange(start,now); }
 
 document.querySelectorAll(".tab-btn").forEach(btn=>{
@@ -871,8 +868,7 @@ function updateCharts(points){
   });
 }
 
-function renderHistory(){
-  async function renderHistory() {
+async function renderHistory() {
   const pts = filteredHistory();
   currentFiltered = pts;
 
@@ -888,7 +884,6 @@ function renderHistory(){
 
   if (!pts.length) {
     tbody.innerHTML = `<tr><td colspan="6">Нет данных за выбранный период</td></tr>`;
-
     if (qs("pointsCount")) qs("pointsCount").textContent = "0";
     if (qs("distanceValue")) qs("distanceValue").textContent = "0 км";
     if (qs("avgSpeedValue")) qs("avgSpeedValue").textContent = "0 км/ч";
@@ -900,101 +895,79 @@ function renderHistory(){
     if (qs("startAddress")) qs("startAddress").textContent = "—";
     if (qs("endAddress")) qs("endAddress").textContent = "—";
     if (qs("selectedAddress")) qs("selectedAddress").textContent = "—";
-
     if (typeof clearRouteSegments === "function") clearRouteSegments();
     return;
   }
 
   const s = computeSummary(pts);
+  const stops = detectStops(pts);
 
-  if (qs("pointsCount")) qs("pointsCount").textContent = String(s.count);
-  if (qs("distanceValue")) qs("distanceValue").textContent = `${s.km.toFixed(2)} км`;
-  if (qs("avgSpeedValue")) qs("avgSpeedValue").textContent = `${s.avgSpeed.toFixed(1)} км/ч`;
-  if (qs("maxSpeedValue")) qs("maxSpeedValue").textContent = `${s.maxSpeed.toFixed(1)} км/ч`;
+  qs("pointsCount").textContent = String(s.count);
+  qs("distanceValue").textContent = `${s.km.toFixed(2)} км`;
+  qs("avgSpeedValue").textContent = `${s.avgSpeed.toFixed(1)} км/ч`;
+  qs("maxSpeedValue").textContent = `${s.maxSpeed.toFixed(1)} км/ч`;
 
   const first = pts[0];
   const last = pts[pts.length - 1];
 
-  if (qs("routeStartCoords")) qs("routeStartCoords").textContent =
-    `${Number(first.latitude).toFixed(5)}, ${Number(first.longitude).toFixed(5)}`;
-
-  if (qs("routeEndCoords")) qs("routeEndCoords").textContent =
-    `${Number(last.latitude).toFixed(5)}, ${Number(last.longitude).toFixed(5)}`;
-
-  if (qs("routeDuration")) qs("routeDuration").textContent =
-    formatDuration(Number(last.timestamp || 0) - Number(first.timestamp || 0));
-
-  const stops = detectStops(pts);
-  if (qs("routeStops")) qs("routeStops").textContent = String(stops.length);
-  if (qs("stopsNotice")) {
-    qs("stopsNotice").textContent = stops.length
-      ? `Стоянки: ${stops.map(s => formatDuration(s.duration)).join(", ")}`
-      : "Стоянок не найдено.";
-  }
+  qs("routeStartCoords").textContent = `${Number(first.latitude).toFixed(5)}, ${Number(first.longitude).toFixed(5)}`;
+  qs("routeEndCoords").textContent = `${Number(last.latitude).toFixed(5)}, ${Number(last.longitude).toFixed(5)}`;
+  qs("routeDuration").textContent = formatDuration(Number(last.timestamp || 0) - Number(first.timestamp || 0));
+  qs("routeStops").textContent = String(stops.length);
+  qs("stopsNotice").textContent = stops.length ? `Стоянки: ${stops.map(s=>formatDuration(s.duration)).join(", ")}` : "Стоянок не найдено.";
 
   for (const p of pts.slice().reverse()) {
     const tr = document.createElement("tr");
+    const quality = isCleanPoint(null,p)
+      ? (Number(p.accuracy||0)<=10 ? '<span class="tag online">хороший</span>'
+      : Number(p.accuracy||0)<=30 ? '<span class="tag idle">средний</span>'
+      : '<span class="tag offline">плохой</span>')
+      : '<span class="tag">мусор</span>';
+
     tr.innerHTML = `
       <td>${fmtTime(p.timestamp)}</td>
       <td class="mono">${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}</td>
-      <td>${p.accuracy != null ? Number(p.accuracy).toFixed(2) + " м" : "—"}</td>
+      <td>${formatAccuracy(p.accuracy)}</td>
       <td>${p.speed != null ? Number(p.speed).toFixed(1) + " км/ч" : "—"}</td>
-      <td>${p._gpsQuality || "—"}</td>
-      <td><button class="danger small" data-delete-point="${p.timestamp}">Удалить</button></td>
+      <td>${quality}</td>
+      <td><div class="row"><button class="secondary small">Точка</button><button class="secondary small maps">Maps</button><button class="danger small">Удалить</button></div></td>
     `;
-    tbody.appendChild(tr);
 
-    tr.onclick = async (e) => {
-      if (e.target.closest("button")) return;
-      if (typeof historyMap !== "undefined") {
-        historyMap.setView([Number(p.latitude), Number(p.longitude)], 17);
-      }
-      if (qs("selectedAddress")) {
-        qs("selectedAddress").textContent = await reverseGeocode(
-          Number(p.latitude),
-          Number(p.longitude)
-        );
-      }
-    };
-  }
-
-  tbody.querySelectorAll("[data-delete-point]").forEach(btn => {
-    btn.onclick = async (e) => {
+    const buttons = tr.querySelectorAll("button");
+    buttons[0].onclick = async (e) => {
       e.stopPropagation();
-      const ts = btn.dataset.deletePoint;
-      if (!selectedUid) {
-        showToast("Нет выбранного пользователя", "warn");
-        return;
-      }
+      if (typeof historyMap !== "undefined") historyMap.setView([Number(p.latitude), Number(p.longitude)], 17);
+      qs("selectedAddress").textContent = await reverseGeocode(Number(p.latitude), Number(p.longitude));
+    };
+    buttons[1].onclick = (e) => {
+      e.stopPropagation();
+      window.open(`https://maps.google.com/?q=${encodeURIComponent(Number(p.latitude))},${encodeURIComponent(Number(p.longitude))}`, "_blank", "noopener,noreferrer");
+    };
+    buttons[2].onclick = async (e) => {
+      e.stopPropagation();
+      if (!selectedUid) return showToast("Нет выбранного пользователя", "warn");
       if (!confirm("Удалить точку?")) return;
-
-      try {
-        await remove(ref(db, `history/${selectedUid}/${ts}`));
+      try{
+        await remove(ref(db, `history/${selectedUid}/${String(p.timestamp)}`));
+        await logAction("delete_point", `Удалена точка ${fmtTime(p.timestamp)}`);
         showToast("Точка удалена", "success");
         await loadAllData();
-      } catch (err) {
-        showToast("Ошибка удаления точки: " + errText(err), "error", 3500);
+      }catch(err){
+        recordError("deletePoint", err);
+        showToast("Ошибка удаления точки: " + errText(err), "error", 3600);
       }
     };
-  });
 
-  if (typeof updateHistoryMap === "function") {
-    await updateHistoryMap(pts);
+    tr.onmouseenter = async () => {
+      qs("selectedAddress").textContent = await reverseGeocode(Number(p.latitude), Number(p.longitude));
+    };
+
+    tbody.appendChild(tr);
   }
 
-  if (qs("startAddress")) {
-    qs("startAddress").textContent = await reverseGeocode(
-      Number(first.latitude),
-      Number(first.longitude)
-    );
-  }
-
-  if (qs("endAddress")) {
-    qs("endAddress").textContent = await reverseGeocode(
-      Number(last.latitude),
-      Number(last.longitude)
-    );
-  }
+  await updateHistoryMap(pts);
+  qs("startAddress").textContent = await reverseGeocode(Number(first.latitude), Number(first.longitude));
+  qs("endAddress").textContent = await reverseGeocode(Number(last.latitude), Number(last.longitude));
 }
 
 async function updateNowUI(point, sourceLabel){
@@ -1404,6 +1377,72 @@ async function refreshLiveNow(){
   }catch(e){ alert("Обновление live:\n"+errText(e)); }
 }
 
+
+function downloadBlob(blob, filename){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+}
+function buildCsv(points){
+  const lines = ["timestamp,latitude,longitude,accuracy,speed"];
+  points.forEach(p=>lines.push([p.timestamp??"", p.latitude??"", p.longitude??"", p.accuracy??"", p.speed??""].join(",")));
+  return lines.join("\n");
+}
+function buildGpx(points){
+  const lines = ['<?xml version="1.0" encoding="UTF-8"?>','<gpx version="1.1" creator="MyGps Admin" xmlns="http://www.topografix.com/GPX/1/1">','<trk><name>History Export</name><trkseg>'];
+  points.forEach(p=>lines.push(`<trkpt lat="${p.latitude}" lon="${p.longitude}"><time>${new Date(Number(p.timestamp||0)).toISOString()}</time></trkpt>`));
+  lines.push("</trkseg></trk></gpx>");
+  return lines.join("");
+}
+async function buildPdfBlob(){
+  const pts=filteredHistory(), s=computeSummary(pts), {jsPDF}=window.jspdf, doc=new jsPDF();
+  doc.text("MyGps History Report",14,16);
+  doc.text(`Distance: ${s.km.toFixed(2)} km`,14,28);
+  doc.text(`Average speed: ${s.avgSpeed.toFixed(1)} km/h`,14,36);
+  doc.text(`Max speed: ${s.maxSpeed.toFixed(1)} km/h`,14,44);
+  const rows=pts.slice(0,250).map(p=>[fmtTime(p.timestamp), `${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}`, p.speed != null ? Number(p.speed).toFixed(1) : "—"]);
+  doc.autoTable({startY:52, head:[["Time","Coordinates","Speed km/h"]], body:rows, styles:{fontSize:9}});
+  return doc.output("blob");
+}
+async function exportMapPngBlob(){
+  const mapEl = qs("historyMap");
+  if(!mapEl) throw new Error("historyMap not found");
+  if(typeof historyMap !== "undefined") historyMap.invalidateSize();
+  await new Promise(resolve => setTimeout(resolve, 1200));
+  const canvas = await html2canvas(mapEl, {useCORS:true, backgroundColor:"#ffffff", scale:2});
+  return await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
+}
+async function exportMapPng(){
+  try{
+    const blob = await exportMapPngBlob();
+    downloadBlob(blob, `history_map_${toLocalDateInputValue(new Date())}.png`);
+    showToast("PNG экспортирован", "success");
+  }catch(err){
+    recordError("exportMapPng", err);
+    showToast("Ошибка PNG: " + errText(err), "error", 3600);
+  }
+}
+async function exportZip(){
+  try{
+    const pts=filteredHistory();
+    if(!pts.length) return showToast("Нет данных для экспорта", "warn");
+    const zip = new JSZip();
+    zip.file("history.json", JSON.stringify(pts, null, 2));
+    zip.file("history.csv", buildCsv(pts));
+    zip.file("route.gpx", buildGpx(pts));
+    zip.file("report.pdf", await buildPdfBlob());
+    zip.file("map.png", await exportMapPngBlob());
+    const blob = await zip.generateAsync({type:"blob"});
+    downloadBlob(blob, `history_export_${toLocalDateInputValue(new Date())}.zip`);
+    showToast("ZIP экспортирован", "success");
+  }catch(err){
+    recordError("exportZip", err);
+    showToast("Ошибка ZIP: " + errText(err), "error", 3600);
+  }
+}
 function downloadText(name,content,type){ const blob=new Blob([content],{type}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=name; a.click(); URL.revokeObjectURL(url); }
 
 qs("googleBtn").onclick=async()=>{ try{ await signInWithPopup(auth,provider); }catch(e){ qs("errorBox").textContent="Ошибка Google-входа: "+errText(e); qs("errorBox").classList.remove("hidden"); }};
@@ -1411,47 +1450,11 @@ qs("emailLoginBtn").onclick=async()=>{ try{ await signInWithEmailAndPassword(aut
 qs("emailRegisterBtn").onclick=async()=>{ try{ await createUserWithEmailAndPassword(auth,qs("emailInput").value.trim(),qs("passwordInput").value); }catch(e){ qs("errorBox").textContent="Ошибка регистрации: "+errText(e); qs("errorBox").classList.remove("hidden"); }};
 qs("logoutBtn").onclick=async()=>{ await signOut(auth); };
 
-qs("todayBtn").onclick = () => {
-  const now = new Date();
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  setDateTimeRange(start, now);
-  renderHistory();
-};
-
-qs("yesterdayBtn").onclick = () => {
-  const start = new Date();
-  start.setDate(start.getDate() - 1);
-  start.setHours(0, 0, 0, 0);
-
-  const end = new Date(start);
-  end.setHours(23, 59, 59, 999);
-
-  setDateTimeRange(start, end);
-  renderHistory();
-};
-
-qs("weekBtn").onclick = () => {
-  const now = new Date();
-  const start = new Date();
-  start.setDate(start.getDate() - 7);
-  setDateTimeRange(start, now);
-  renderHistory();
-};
-
-qs("range1hBtn").onclick = () => {
-  const now = new Date();
-  const start = new Date(Date.now() - 60 * 60 * 1000);
-  setDateTimeRange(start, now);
-  renderHistory();
-};
-
-qs("range24hBtn").onclick = () => {
-  const now = new Date();
-  const start = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  setDateTimeRange(start, now);
-  renderHistory();
-};
+qs("todayBtn").onclick=()=>{ const now=new Date(), start=new Date(); start.setHours(0,0,0,0); setDateTimeRange(start,now); renderHistory(); };
+qs("yesterdayBtn").onclick=()=>{ const start=new Date(); start.setDate(start.getDate()-1); start.setHours(0,0,0,0); const end=new Date(start); end.setHours(23,59,0,0); setDateTimeRange(start,end); renderHistory(); };
+qs("weekBtn").onclick=()=>{ const now=new Date(), start=new Date(); start.setDate(start.getDate()-7); setDateTimeRange(start,now); renderHistory(); };
+qs("range1hBtn").onclick=()=>{ const now=new Date(), start=new Date(Date.now()-60*60*1000); setDateTimeRange(start,now); renderHistory(); };
+qs("range24hBtn").onclick=()=>{ const now=new Date(), start=new Date(Date.now()-24*60*60*1000); setDateTimeRange(start,now); renderHistory(); };
 qs("applyFiltersBtn").onclick=renderHistory;
 qs("resetFiltersBtn").onclick=()=>{ qs("maxAccuracyFilter").value=""; qs("minSpeedFilter").value=""; qs("maxSpeedFilter").value=""; qs("hideJunkToggle").checked=false; renderHistory(); };
 qs("refreshHistoryBtn").onclick=async()=>{ await loadAllData(); showToast("История обновлена","success"); };
@@ -1473,10 +1476,41 @@ qs("deleteRangeBtn").onclick=async()=>{
   }catch(e){ recordError("deleteRange", e); showToast("Удаление периода: "+errText(e),"error",3600); }
 };
 
-qs("exportJsonBtn").onclick=()=>downloadText("history_export.json", JSON.stringify(filteredHistory(),null,2), "application/json");
-qs("exportCsvBtn").onclick=()=>{ const pts=filteredHistory(), lines=["timestamp,latitude,longitude,accuracy,speed"]; pts.forEach(p=>lines.push([p.timestamp??"",p.latitude??"",p.longitude??"",p.accuracy??"",p.speed??""].join(","))); downloadText("history_export.csv", lines.join("\n"), "text/csv"); };
-qs("exportGpxBtn").onclick=()=>{ const pts=filteredHistory(), lines=['<?xml version="1.0" encoding="UTF-8"?>','<gpx version="1.1" creator="MyGps Admin" xmlns="http://www.topografix.com/GPX/1/1">','<trk><name>History Export</name><trkseg>']; pts.forEach(p=>lines.push(`<trkpt lat="${p.latitude}" lon="${p.longitude}"><time>${new Date(Number(p.timestamp||0)).toISOString()}</time></trkpt>`)); lines.push('</trkseg></trk></gpx>'); downloadText("history_export.gpx", lines.join(""), "application/gpx+xml"); };
-qs("exportPdfBtn").onclick=()=>{ const pts=filteredHistory(), s=computeSummary(pts), {jsPDF}=window.jspdf, doc=new jsPDF(); doc.text("MyGps History Report",14,16); doc.text(`Distance: ${s.km.toFixed(2)} km`,14,28); doc.text(`Average speed: ${s.avgSpeed.toFixed(1)} km/h`,14,36); doc.text(`Max speed: ${s.maxSpeed.toFixed(1)} km/h`,14,44); const rows=pts.slice(0,250).map(p=>[fmtTime(p.timestamp), `${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}`, p.speed != null ? Number(p.speed).toFixed(1) : "—"]); doc.autoTable({startY:52, head:[["Time","Coordinates","Speed km/h"]], body:rows, styles:{fontSize:9}}); doc.save("history_report.pdf"); };
+qs("exportJsonBtn").onclick=()=>{
+  const pts=filteredHistory();
+  if(!pts.length) return showToast("Нет данных для JSON","warn");
+  const blob=new Blob([JSON.stringify(pts,null,2)],{type:"application/json"});
+  downloadBlob(blob, `history_${toLocalDateInputValue(new Date())}.json`);
+  showToast("JSON экспортирован","success");
+};
+qs("exportCsvBtn").onclick=()=>{
+  const pts=filteredHistory();
+  if(!pts.length) return showToast("Нет данных для CSV","warn");
+  const blob=new Blob([buildCsv(pts)],{type:"text/csv;charset=utf-8"});
+  downloadBlob(blob, `history_${toLocalDateInputValue(new Date())}.csv`);
+  showToast("CSV экспортирован","success");
+};
+qs("exportGpxBtn").onclick=()=>{
+  const pts=filteredHistory();
+  if(!pts.length) return showToast("Нет данных для GPX","warn");
+  const blob=new Blob([buildGpx(pts)],{type:"application/gpx+xml"});
+  downloadBlob(blob, `route_${toLocalDateInputValue(new Date())}.gpx`);
+  showToast("GPX экспортирован","success");
+};
+qs("exportPdfBtn").onclick=async()=>{
+  try{
+    const pts=filteredHistory();
+    if(!pts.length) return showToast("Нет данных для PDF","warn");
+    const blob = await buildPdfBlob();
+    downloadBlob(blob, `report_${toLocalDateInputValue(new Date())}.pdf`);
+    showToast("PDF экспортирован","success");
+  }catch(err){
+    recordError("exportPdf", err);
+    showToast("Ошибка PDF: "+errText(err),"error",3600);
+  }
+};
+if(qs("exportPngBtn")) qs("exportPngBtn").onclick=()=>exportMapPng();
+if(qs("exportZipBtn")) qs("exportZipBtn").onclick=()=>exportZip();
 
 qs("refreshNowBtn").onclick=()=>updateNowFromAvailableSources();
 qs("refreshLiveBtn").onclick=()=>refreshLiveNow();
@@ -1566,7 +1600,6 @@ onAuthStateChanged(auth, async user => {
     qs("adminPanel").classList.add("hidden");
     return;
   }
-  
   const adminSnap = await get(ref(db, `admins/${user.uid}`));
   const allowed = adminSnap.val() === true;
   if(!allowed){
@@ -1604,22 +1637,5 @@ onAuthStateChanged(auth, async user => {
   await renderBackups();
   await createMonthlyBackup(false);
 });
-
-function persistUiState(){
-  try {
-    const state = {
-      selectedUser: qs("userSelect")?.value || "",
-      activeTab: document.querySelector(".tab.active")?.dataset.tab || "",
-      filters: {
-        accuracy: qs("accuracyMax")?.value || "",
-        speed: qs("speedMax")?.value || ""
-      }
-    };
-    localStorage.setItem("admin_ui_state", JSON.stringify(state));
-  } catch(e){
-    console.warn("persistUiState error", e);
-  }
-}
-  
 </script>
 </body></html>
