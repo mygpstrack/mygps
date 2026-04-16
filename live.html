@@ -2,125 +2,72 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>MyGps Live</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
   <style>
-    body{margin:0;font-family:system-ui;background:#08111f;color:#e5e7eb}
-    #map{position:fixed;inset:0}
-    .panel{position:fixed;left:16px;right:16px;top:16px;z-index:1000;background:rgba(17,24,39,.92);border:1px solid rgba(148,163,184,.16);border-radius:20px;padding:16px;backdrop-filter:blur(8px)}
-    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-    .pill{display:inline-flex;gap:8px;align-items:center;padding:8px 12px;border-radius:999px;background:rgba(255,255,255,.05)}
-    .dot{width:10px;height:10px;border-radius:50%}.green{background:#22c55e}.yellow{background:#eab308}.red{background:#ef4444}
-    .muted{color:#94a3b8}
+    :root{--bg:#0f172a;--card:#111827;--muted:#94a3b8;--text:#e5e7eb;--accent:#22c55e;--warn:#eab308;--danger:#ef4444;--border:#1f2937;--blue:#2563eb}
+    *{box-sizing:border-box} body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text)}
+    .wrap{max-width:1100px;margin:0 auto;padding:16px}.top{display:grid;grid-template-columns:1.3fr .7fr;gap:16px}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:16px;box-shadow:0 8px 30px rgba(0,0,0,.18)}
+    h1,h2,p{margin:0}.sub{color:var(--muted);margin-top:6px;line-height:1.6}
+    #map{width:100%;height:65vh;border-radius:16px;overflow:hidden;margin-top:16px;border:1px solid var(--border)}
+    .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px}
+    .stat{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:14px;padding:12px}
+    .label{color:var(--muted);font-size:13px;margin-bottom:6px}.value{font-size:18px;font-weight:700;line-height:1.2;word-break:break-word}
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px}
+    .pill{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;border:1px solid var(--border);background:rgba(255,255,255,.03);color:var(--text);font-size:14px}
+    .dot{width:10px;height:10px;border-radius:50%;display:inline-block}.ok{background:var(--accent)}.warn{background:var(--warn)}.bad{background:var(--danger)}
+    .btn{border:0;border-radius:12px;padding:10px 14px;font-weight:600;cursor:pointer;background:#1d4ed8;color:white}.btn.secondary{background:#374151}
+    .footer{margin-top:16px;color:var(--muted);font-size:13px}.hidden{display:none!important}.emptyState{max-width:760px;margin:80px auto}
+    @media (max-width:800px){.top{grid-template-columns:1fr}#map{height:55vh}}
   </style>
 </head>
 <body>
-<div class="panel">
-  <div class="row">
-    <div class="pill"><span id="dot" class="dot yellow"></span><span id="status">Проверка…</span></div>
-    <div class="pill">Сессия: <span id="sessionText" class="muted">—</span></div>
-    <div class="pill">Осталось: <span id="remain">—</span></div>
+<div class="wrap hidden" id="appWrap">
+  <div class="top">
+    <div class="card">
+      <h1>MyGps Live</h1>
+      <p class="sub">Временная ссылка live-доступа к маршруту.</p>
+      <div class="row">
+        <div class="pill"><span class="dot warn" id="liveDot"></span><span id="liveStatus">Проверка статуса…</span></div>
+        <div class="pill">Session: <strong id="sessionText">—</strong></div>
+      </div>
+      <div class="grid">
+        <div class="stat"><div class="label">Последняя точка</div><div class="value" id="lastPoint">—</div></div>
+        <div class="stat"><div class="label">Последнее обновление</div><div class="value" id="lastUpdate">—</div></div>
+        <div class="stat"><div class="label">Осталось времени</div><div class="value" id="remain">—</div></div>
+        <div class="stat"><div class="label">Состояние доступа</div><div class="value" id="accessState">—</div></div>
+      </div>
+      <div class="row"><button class="btn" id="fitBtn">Показать весь маршрут</button><button class="btn secondary" id="lastBtn">К последней точке</button></div>
+    </div>
+    <div class="card"><h2>Live-доступ</h2><div class="sub">Эта страница работает только по временной ссылке с параметром <code>?session=TOKEN</code>.</div></div>
   </div>
-  <div class="row" style="margin-top:8px">
-    <div class="muted" id="message">Ожидание данных…</div>
-  </div>
+  <div id="map"></div>
+  <div class="footer">Данные доступны только пока live-сессия активна и не истекла.</div>
 </div>
-<div id="map"></div>
+<div class="wrap" id="emptyWrap"><div class="card emptyState"><h1 id="emptyTitle">Ссылка недействительна</h1><p class="sub" id="emptyText">Доступ к live возможен только по активной временной ссылке.</p></div></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getDatabase, ref, onValue, off } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
-
-const params = new URLSearchParams(location.search);
-const sessionId = params.get("session") || "";
-const qs = id => document.getElementById(id);
-qs("sessionText").textContent = sessionId || "—";
-
-const firebaseConfig = {
-  apiKey: "AIzaSyCXNCY-IpkhAXb8jNPhN8gf2UdOfPBc5gM",
-  authDomain: "mygpslive-57196.firebaseapp.com",
-  databaseURL: "https://mygpslive-57196-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "mygpslive-57196",
-  storageBucket: "mygpslive-57196.firebasestorage.app",
-  messagingSenderId: "20781107701",
-  appId: "1:20781107701:web:bd47061b9aca13abbeb8bc"
-};
-
-function fmtRemain(ms){
-  const sec=Math.max(0,Math.floor(ms/1000)); const h=Math.floor(sec/3600); const m=Math.floor((sec%3600)/60); const s=sec%60;
-  return h>0?`${h}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`:`${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
-}
-function setState(text,color,msg){ qs("status").textContent=text; qs("dot").className=`dot ${color}`; qs("message").textContent=msg; }
-
-if (!sessionId) {
-  setState("Недействительная ссылка","red","Не найден параметр session");
-} else {
-  const app = initializeApp(firebaseConfig);
-  const db = getDatabase(app);
-  const metaRef = ref(db, `liveSessions/${sessionId}/meta`);
-  const lastPointRef = ref(db, `liveSessions/${sessionId}/public/lastPoint`);
-  const recentRef = ref(db, `liveSessions/${sessionId}/public/recentPoints`);
-
-  const map = L.map("map").setView([56.95,24.10],12);
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"&copy; OpenStreetMap"}).addTo(map);
-  const poly = L.polyline([], {weight:5}).addTo(map);
-  const marker = L.circleMarker([56.95,24.10], {radius:8,color:"#22c55e",fillColor:"#22c55e",fillOpacity:1}).addTo(map);
-
-  let timer = null, currentMeta = null;
-  function stopTimer(){ if (timer) clearInterval(timer); timer = null; }
-  function tick(){
-    if (!currentMeta) return;
-    const now = Date.now();
-    if (!currentMeta.active) {
-      setState("Трансляция завершена","red","Эта live-сессия остановлена.");
-      qs("remain").textContent = "00:00";
-      return;
-    }
-    if (currentMeta.paused) {
-      setState("Трансляция на паузе","yellow","Время на странице остановлено.");
-      qs("remain").textContent = fmtRemain(Number(currentMeta.remainingMs || 0));
-      return;
-    }
-    const remain = Math.max(0, Number(currentMeta.expiresAt || 0) - now);
-    qs("remain").textContent = fmtRemain(remain);
-    if (remain <= 0) {
-      setState("Ссылка истекла","red","Срок действия этой live-ссылки закончился.");
-    } else {
-      setState("Трансляция активна","green","Маршрут обновляется в реальном времени.");
-    }
-  }
-
-  onValue(metaRef, snap => {
-    currentMeta = snap.val();
-    if (!currentMeta) {
-      stopTimer();
-      setState("Сессия не найдена","red","Сессия удалена или недоступна.");
-      return;
-    }
-    stopTimer();
-    tick();
-    timer = setInterval(tick, 1000);
-  }, () => {
-    stopTimer();
-    setState("Нет доступа","red","Ссылка недоступна правилами Firebase.");
-  });
-
-  onValue(lastPointRef, snap => {
-    const p = snap.val();
-    if (!p || p.latitude == null || p.longitude == null) return;
-    marker.setLatLng([Number(p.latitude), Number(p.longitude)]);
-  });
-
-  onValue(recentRef, snap => {
-    const pts = Object.values(snap.val() || {}).filter(Boolean).sort((a,b)=>(a.timestamp||0)-(b.timestamp||0));
-    const latlngs = pts.map(p => [Number(p.latitude), Number(p.longitude)]);
-    poly.setLatLngs(latlngs);
-    if (latlngs.length > 1) map.fitBounds(poly.getBounds(), {padding:[20,20]});
-    else if (latlngs.length === 1) map.setView(latlngs[0], 15);
-  });
-}
+const params=new URLSearchParams(window.location.search),sessionId=params.get("session")||"",sessionValid=/^[A-Za-z0-9_-]{16,128}$/.test(sessionId),qs=id=>document.getElementById(id);
+function showEmpty(title,text){qs("appWrap").classList.add("hidden");qs("emptyWrap").classList.remove("hidden");qs("emptyTitle").textContent=title;qs("emptyText").textContent=text}
+if(!sessionId||!sessionValid)showEmpty("Ссылка недействительна","Маршрут и live-данные доступны только по активной временной ссылке."); else {qs("emptyWrap").classList.add("hidden");qs("appWrap").classList.remove("hidden");qs("sessionText").textContent=sessionId}
+const firebaseConfig={apiKey:"AIzaSyCXNCY-IpkhAXb8jNPhN8gf2UdOfPBc5gM",authDomain:"mygpslive-57196.firebaseapp.com",databaseURL:"https://mygpslive-57196-default-rtdb.europe-west1.firebasedatabase.app",projectId:"mygpslive-57196",storageBucket:"mygpslive-57196.firebasestorage.app",messagingSenderId:"20781107701",appId:"1:20781107701:web:bd47061b9aca13abbeb8bc",measurementId:"G-BSCVNY9LH0"};
+const fmtTime=value=>value?new Date(value).toLocaleString("ru-RU"):"—";
+function fmtRemain(ms){if(ms==null)return"—";const sec=Math.max(0,Math.floor(ms/1000)),h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s=sec%60;return h>0?`${h}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`:`${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`}
+function setStatus(text,cls){qs("liveStatus").textContent=text;qs("liveDot").className="dot "+cls} function setAccessState(text){qs("accessState").textContent=text}
+const map=L.map("map").setView([56.95,24.10],12);L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"&copy; OpenStreetMap"}).addTo(map);
+const polyline=L.polyline([],{weight:5}).addTo(map), marker=L.circleMarker([56.95,24.10],{radius:8,color:"#22c55e",fillColor:"#22c55e",fillOpacity:1}).addTo(map);
+qs("fitBtn").onclick=()=>{const latlngs=polyline.getLatLngs();if(latlngs.length)map.fitBounds(polyline.getBounds(),{padding:[30,30]})}; qs("lastBtn").onclick=()=>map.setView(marker.getLatLng(),16);
+const app=initializeApp(firebaseConfig),db=getDatabase(app),metaRef=ref(db,`liveSessions/${sessionId}/meta`),publicLastPointRef=ref(db,`liveSessions/${sessionId}/public/lastPoint`),publicRecentPointsRef=ref(db,`liveSessions/${sessionId}/public/recentPoints`);
+let currentMeta=null,remainTimer=null; function stopRemainTimer(){if(remainTimer){clearInterval(remainTimer);remainTimer=null}}
+function disablePublicDataView(title,text){off(publicLastPointRef);off(publicRecentPointsRef);stopRemainTimer();showEmpty(title,text)}
+function updateRemaining(){if(!currentMeta){qs("remain").textContent="—";return}const active=!!currentMeta.active,paused=!!currentMeta.paused;if(!active){setStatus("Трансляция завершена","bad");setAccessState("доступ закрыт");qs("remain").textContent="00:00";return}if(paused){setStatus("Трансляция на паузе","warn");setAccessState("пауза");qs("remain").textContent=fmtRemain(Number(currentMeta.remainingMs||0));return}const expiresAt=Number(currentMeta.expiresAt||0),now=Date.now(),remainingMs=Math.max(0,expiresAt-now);qs("remain").textContent=fmtRemain(remainingMs);if(expiresAt>now){setStatus("Трансляция активна","ok");setAccessState("доступ открыт")}else{setStatus("Ссылка истекла","warn");setAccessState("срок закончился");disablePublicDataView("Ссылка истекла","Срок действия этой live-ссылки закончился.")}}
+onValue(metaRef,snap=>{const data=snap.val();if(!data)return disablePublicDataView("Сессия не найдена","Такой live-сессии нет, она была удалена или ссылка неверная.");currentMeta=data;updateRemaining();stopRemainTimer();remainTimer=setInterval(updateRemaining,1000);if(!data.active)disablePublicDataView("Трансляция завершена","Эта live-сессия была завершена владельцем.")},()=>disablePublicDataView("Нет доступа к live-сессии","Ссылка недоступна, истекла или чтение закрыто правилами Firebase."));
+onValue(publicLastPointRef,snap=>{const p=snap.val();if(!p||p.latitude==null||p.longitude==null)return;const lat=Number(p.latitude),lon=Number(p.longitude);marker.setLatLng([lat,lon]);qs("lastPoint").textContent=`${lat.toFixed(5)}, ${lon.toFixed(5)}`;qs("lastUpdate").textContent=fmtTime(p.timestamp)},()=>disablePublicDataView("Нет доступа к данным","Публичные данные этой live-сессии больше недоступны."));
+onValue(publicRecentPointsRef,snap=>{const raw=snap.val()||{},pts=Object.values(raw).filter(Boolean).sort((a,b)=>(a.timestamp||0)-(b.timestamp||0)).map(p=>[Number(p.latitude),Number(p.longitude)]);polyline.setLatLngs(pts);if(pts.length){marker.setLatLng(pts[pts.length-1]);if(pts.length===1)map.setView(pts[0],16);else map.fitBounds(polyline.getBounds(),{padding:[30,30]})}},()=>disablePublicDataView("Нет доступа к маршруту","Маршрут этой live-сессии больше недоступен."));
 </script>
-</body>
-</html>
+</body></html>
