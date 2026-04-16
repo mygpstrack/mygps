@@ -97,7 +97,6 @@
     <div class="card">
       <div class="row">
         <div class="pill"><span class="dot ok"></span><span id="userInfo">Вы вошли</span></div>
-        <div class="pill" id="adminPill"><span class="tag admin">ADMIN</span></div>
         <button id="logoutBtn" class="secondary">Выйти</button>
       </div>
 
@@ -356,6 +355,7 @@ function renderHeaderTime(){
   qs("pageDateTime").textContent = `${days[d.getDay()]}, ${d.toLocaleString("ru-RU")}`;
 }
 setInterval(renderHeaderTime, 1000); renderHeaderTime();
+console.log("ADMIN UI READY");
 
 function populateTimeSelects(){
   const hourOpts = Array.from({length:24}, (_,i)=>`<option value="${String(i).padStart(2,"0")}">${String(i).padStart(2,"0")}</option>`).join("");
@@ -875,7 +875,7 @@ qs("applyFiltersBtn").onclick=renderHistory;
 qs("resetFiltersBtn").onclick=()=>{ qs("maxAccuracyFilter").value=""; qs("minSpeedFilter").value=""; qs("maxSpeedFilter").value=""; qs("hideJunkToggle").checked=false; renderHistory(); };
 qs("refreshHistoryBtn").onclick=async()=>{ await loadAllData(); showToast("История обновлена"); };
 qs("fitRouteBtn").onclick=()=>{ const pts=currentFiltered.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]); if(pts.length) historyMap.fitBounds(L.latLngBounds(pts), {padding:[30,30]}); };
-qs("deleteRangeBtn").onclick=async()=>{
+qs("deleteRangeBtn").onclick=async()=>{ console.log("click deleteRangeBtn");
   const pts=filteredHistory();
   if(!pts.length) return alert("Нет точек в выбранном диапазоне.");
   if(!selectedUid) return alert("Нет выбранного пользователя.");
@@ -905,9 +905,9 @@ qs("copyCreatedShareBtn").onclick=async()=>{ if(createdShareUrl){ await navigato
 qs("openCreatedShareBtn").onclick=()=>{ if(createdShareUrl) window.open(createdShareUrl,"_blank","noopener,noreferrer"); };
 
 qs("refreshSessionsBtn").onclick=async()=>{ await loadSessions(); showToast("Live-сессии обновлены"); };
-qs("syncActiveSessionsBtn").onclick=async()=>{ showToast("Синхронизация..."); await syncActiveSessionsFromSelectedUser(); };
-qs("endAllActiveSessionsBtn").onclick=async()=>{ showToast("Останавливаю активные..."); await endAllActiveSessions(); };
-qs("cleanupSessionsBtn").onclick=async()=>{ showToast("Очищаю истёкшие..."); await cleanupExpiredSessions(); };
+qs("syncActiveSessionsBtn").onclick=async()=>{ console.log("click syncActiveSessionsBtn"); showToast("Синхронизация..."); await syncActiveSessionsFromSelectedUser(); };
+qs("endAllActiveSessionsBtn").onclick=async()=>{ console.log("click endAllActiveSessionsBtn"); showToast("Останавливаю активные..."); await endAllActiveSessions(); };
+qs("cleanupSessionsBtn").onclick=async()=>{ console.log("click cleanupSessionsBtn"); showToast("Очищаю истёкшие..."); await cleanupExpiredSessions(); };
 qs("sessionSearchInput").oninput=renderSessions;
 qs("sessionStatusFilter").onchange=renderSessions;
 
@@ -915,9 +915,9 @@ qs("userSelect").onchange=()=>{ selectedUid=qs("userSelect").value; updateUsage(
 qs("viewModeSelect").onchange=()=>{ updateUsage(); renderHistory(); updateNowFromAvailableSources(); renderSessions(); };
 qs("refreshUsersBtn").onclick=async()=>{ await loadUsers(); await loadAllData(); };
 
-qs("deleteHistoryBtn").onclick=async()=>{ if(!confirm("Очистить всю ветку history?")) return; try{ await remove(ref(db,"history")); await logAction("delete_history","Очищена ветка history"); await loadAllData(); showToast("History очищена"); }catch(e){ alert("Очистка history:\n"+errText(e)); } };
-qs("deleteLiveBtn").onclick=async()=>{ if(!confirm("Очистить live, liveSessions и liveOwners?")) return; try{ await remove(ref(db,"live")); await remove(ref(db,"liveSessions")); await remove(ref(db,"liveOwners")); await logAction("delete_live","Очищены live/liveSessions/liveOwners"); await loadAllData(); await loadSessions(); showToast("Live очищен"); }catch(e){ alert("Очистка live:\n"+errText(e)); } };
-qs("deleteAllDbBtn").onclick=async()=>{ const code=prompt("Для полной очистки введи DELETE"); if(code!=="DELETE") return; try{ await remove(ref(db,"history")); await remove(ref(db,"live")); await remove(ref(db,"liveSessions")); await remove(ref(db,"liveOwners")); await remove(ref(db,"adminLogs")); await loadAllData(); await loadSessions(); showToast("База очищена"); }catch(e){ alert("Полная очистка базы:\n"+errText(e)); } };
+qs("deleteHistoryBtn").onclick=async()=>{ console.log("click deleteHistoryBtn"); if(!confirm("Очистить всю ветку history?")) return; try{ await remove(ref(db,"history")); await logAction("delete_history","Очищена ветка history"); await loadAllData(); showToast("History очищена"); }catch(e){ alert("Очистка history:\n"+errText(e)); } };
+qs("deleteLiveBtn").onclick=async()=>{ console.log("click deleteLiveBtn"); if(!confirm("Очистить live, liveSessions и liveOwners?")) return; try{ await remove(ref(db,"live")); await remove(ref(db,"liveSessions")); await remove(ref(db,"liveOwners")); await logAction("delete_live","Очищены live/liveSessions/liveOwners"); await loadAllData(); await loadSessions(); showToast("Live очищен"); }catch(e){ alert("Очистка live:\n"+errText(e)); } };
+qs("deleteAllDbBtn").onclick=async()=>{ console.log("click deleteAllDbBtn"); const code=prompt("Для полной очистки введи DELETE"); if(code!=="DELETE") return; try{ await remove(ref(db,"history")); await remove(ref(db,"live")); await remove(ref(db,"liveSessions")); await remove(ref(db,"liveOwners")); await remove(ref(db,"adminLogs")); await loadAllData(); await loadSessions(); showToast("База очищена"); }catch(e){ alert("Полная очистка базы:\n"+errText(e)); } };
 
 onAuthStateChanged(auth, async user => {
   qs("errorBox").classList.add("hidden");
