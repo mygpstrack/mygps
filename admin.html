@@ -97,7 +97,7 @@
     <div class="card">
       <div class="row">
         <div class="pill"><span class="dot ok"></span><span id="userInfo">Вы вошли</span></div>
-        <div class="pill"><span class="tag admin">ADMIN</span><span id="userUidText" class="mono">—</span></div>
+        <div class="pill" id="adminPill"><span class="tag admin">ADMIN</span></div>
         <button id="logoutBtn" class="secondary">Выйти</button>
       </div>
 
@@ -277,8 +277,7 @@
         <div class="grid4">
           <div><div class="label">Поиск token</div><input id="sessionSearchInput" placeholder="Поиск"/></div>
           <div><div class="label">Статус</div><select id="sessionStatusFilter"><option value="all">Все</option><option value="active">Активные</option><option value="expired">Истёкшие</option><option value="ended">Завершённые</option></select></div>
-          <div><div class="label">Продлить, мин</div><input id="extendSessionMinutesInput" type="number" min="1" step="1" value="60"/></div>
-        </div>
+                  </div>
         <div class="row">
           <button id="refreshSessionsBtn">Обновить live-сессии</button>
           <button id="syncActiveSessionsBtn" class="secondary">Синхронизировать active</button>
@@ -729,6 +728,7 @@ async function deleteSession(token){
     await remove(ref(db, `liveSessions/${token}`));
     await logAction("session_delete", `Удалена live-сессия ${token}`);
     await loadSessions();
+    showToast("Сессия удалена");
   }catch(e){ alert("Удаление live-сессии:\n"+errText(e)); }
 }
 async function endSession(token){
@@ -737,6 +737,7 @@ async function endSession(token){
     await update(ref(db, `liveSessions/${token}/meta`), { active:false, endedAt:Date.now() });
     await logAction("session_end", `Завершена live-сессия ${token}`);
     await loadSessions();
+    showToast("Сессия завершена");
   }catch(e){ alert("Завершение live-сессии:\n"+errText(e)); }
 }
 async function extendSession(token){
@@ -760,6 +761,7 @@ async function endAllActiveSessions(){
     for(const token of activeTokens) await update(ref(db,`liveSessions/${token}/meta`),{active:false,endedAt:Date.now()});
     await logAction("session_end_all", `Остановлено активных сессий: ${activeTokens.length}`);
     await loadSessions();
+    showToast("Все активные остановлены");
   }catch(e){ alert("Остановка всех активных:\n"+errText(e)); }
 }
 async function cleanupExpiredSessions(){
@@ -771,6 +773,7 @@ async function cleanupExpiredSessions(){
     for(const token of expiredTokens) await remove(ref(db,`liveSessions/${token}`));
     await logAction("expired_sessions_cleanup", `Удалено истёкших сессий: ${expiredTokens.length}`);
     await loadSessions();
+    showToast("Истёкшие сессии очищены");
   }catch(e){ alert("Очистка истёкших:\n"+errText(e)); }
 }
 async function syncActiveSessionsFromSelectedUser(){
@@ -812,12 +815,11 @@ function renderSessions(){
   if(!entries.length){ tbody.innerHTML=`<tr><td colspan="6">Сессий нет</td></tr>`; return; }
   for(const [token,session,status] of entries){
     const meta=session?.meta||{}, stats=session?.viewStats||{}, tr=document.createElement("tr");
-    tr.innerHTML=`<td class="mono">${token}<br><span class="tag">${meta.ownerUid||"—"}</span></td><td>${getSessionStatusLabel(status)}</td><td>${fmtTime(meta.expiresAt)}</td><td>${stats.openCount||0}</td><td>${fmtTime(stats.firstOpenAt)}<br>${fmtTime(stats.lastOpenAt)}</td><td><div class="row"><button class="secondary small" data-copy="${token}">Копировать</button><button class="secondary small" data-view="${token}">Карта</button><button class="secondary small" data-extend="${token}">Продлить</button><button class="warn small" data-end="${token}">Завершить</button><button class="danger small" data-delete="${token}">Удалить</button></div></td>`;
+    tr.innerHTML=`<td class="mono">${token}<br><span class="tag">${meta.ownerUid||"—"}</span></td><td>${getSessionStatusLabel(status)}</td><td>${fmtTime(meta.expiresAt)}</td><td>${stats.openCount||0}</td><td>${fmtTime(stats.firstOpenAt)}<br>${fmtTime(stats.lastOpenAt)}</td><td><div class="row"><button class="secondary small" data-copy="${token}">Копировать</button><button class="secondary small" data-view="${token}">Карта</button><button class="warn small" data-end="${token}">Завершить</button><button class="danger small" data-delete="${token}">Удалить</button></div></td>`;
     tbody.appendChild(tr);
   }
-  tbody.querySelectorAll("[data-copy]").forEach(btn=>btn.onclick=async()=>{ try{ await navigator.clipboard.writeText(buildShareUrl(btn.dataset.copy)); alert("Ссылка скопирована"); }catch(e){ alert("Ошибка копирования: "+errText(e)); }});
-  tbody.querySelectorAll("[data-view]").forEach(btn=>btn.onclick=()=>showSessionOnMap(btn.dataset.view));
-  tbody.querySelectorAll("[data-extend]").forEach(btn=>btn.onclick=()=>extendSession(btn.dataset.extend));
+  tbody.querySelectorAll("[data-copy]").forEach(btn=>btn.onclick=async()=>{ try{ await navigator.clipboard.writeText(buildShareUrl(btn.dataset.copy)); showToast("Ссылка скопирована"); }catch(e){ alert("Ошибка копирования: "+errText(e)); }});
+  tbody.querySelectorAll("[data-view]").forEach(btn=>btn.onclick=async()=>{ await showSessionOnMap(btn.dataset.view); showToast("Сессия показана на карте"); });
   tbody.querySelectorAll("[data-end]").forEach(btn=>btn.onclick=()=>endSession(btn.dataset.end));
   tbody.querySelectorAll("[data-delete]").forEach(btn=>btn.onclick=()=>deleteSession(btn.dataset.delete));
 }
@@ -871,7 +873,7 @@ qs("range1hBtn").onclick=()=>{ const now=new Date(), start=new Date(Date.now()-6
 qs("range24hBtn").onclick=()=>{ const now=new Date(), start=new Date(Date.now()-24*60*60*1000); setDateTimeRange(start,now); renderHistory(); };
 qs("applyFiltersBtn").onclick=renderHistory;
 qs("resetFiltersBtn").onclick=()=>{ qs("maxAccuracyFilter").value=""; qs("minSpeedFilter").value=""; qs("maxSpeedFilter").value=""; qs("hideJunkToggle").checked=false; renderHistory(); };
-qs("refreshHistoryBtn").onclick=()=>loadAllData();
+qs("refreshHistoryBtn").onclick=async()=>{ await loadAllData(); showToast("История обновлена"); };
 qs("fitRouteBtn").onclick=()=>{ const pts=currentFiltered.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]); if(pts.length) historyMap.fitBounds(L.latLngBounds(pts), {padding:[30,30]}); };
 qs("deleteRangeBtn").onclick=async()=>{
   const pts=filteredHistory();
@@ -879,11 +881,11 @@ qs("deleteRangeBtn").onclick=async()=>{
   if(!selectedUid) return alert("Нет выбранного пользователя.");
   if(!confirm(`Удалить ${pts.length} точек?`)) return;
   try{
-    const updatesObj={};
-    pts.forEach(p=>updatesObj[`history/${selectedUid}/${String(p.timestamp)}`]=null);
     const entryRef=push(ref(db,"adminLogs/deletions"));
     await set(entryRef,{ts:Date.now(),kind:"range",description:`${pts.length} точек`,uid:auth.currentUser?.uid||null,email:auth.currentUser?.email||null});
-    await update(ref(db), updatesObj);
+    for (const p of pts){ await remove(ref(db,`history/${selectedUid}/${String(p.timestamp)}`)); }
+    await loadAllData();
+    showToast("Период удалён");
   }catch(e){ alert("Удаление периода:\n"+errText(e)); }
 };
 
@@ -892,17 +894,17 @@ qs("exportCsvBtn").onclick=()=>{ const pts=filteredHistory(), lines=["timestamp,
 qs("exportGpxBtn").onclick=()=>{ const pts=filteredHistory(), lines=['<?xml version="1.0" encoding="UTF-8"?>','<gpx version="1.1" creator="MyGps Admin" xmlns="http://www.topografix.com/GPX/1/1">','<trk><name>History Export</name><trkseg>']; pts.forEach(p=>lines.push(`<trkpt lat="${p.latitude}" lon="${p.longitude}"><time>${new Date(Number(p.timestamp||0)).toISOString()}</time></trkpt>`)); lines.push('</trkseg></trk></gpx>'); downloadText("history_export.gpx", lines.join(""), "application/gpx+xml"); };
 qs("exportPdfBtn").onclick=()=>{ const pts=filteredHistory(), s=computeSummary(pts), {jsPDF}=window.jspdf, doc=new jsPDF(); doc.text("MyGps History Report",14,16); doc.text(`Distance: ${s.km.toFixed(2)} km`,14,28); doc.text(`Average speed: ${s.avgSpeed.toFixed(1)} km/h`,14,36); doc.text(`Max speed: ${s.maxSpeed.toFixed(1)} km/h`,14,44); const rows=pts.slice(0,250).map(p=>[fmtTime(p.timestamp), `${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}`, p.speed != null ? Number(p.speed).toFixed(1) : "—"]); doc.autoTable({startY:52, head:[["Time","Coordinates","Speed km/h"]], body:rows, styles:{fontSize:9}}); doc.save("history_report.pdf"); };
 
-qs("refreshNowBtn").onclick=()=>updateNowFromAvailableSources();
-qs("refreshLiveBtn").onclick=()=>refreshLiveNow();
+qs("refreshNowBtn").onclick=async()=>{ await updateNowFromAvailableSources(); showToast("Обновлено"); };
+qs("refreshLiveBtn").onclick=async()=>{ await refreshLiveNow(); showToast("Live обновлён"); };
 qs("liveAutoCenterBtn").onclick=()=>{ liveAutoCenter=!liveAutoCenter; qs("liveAutoCenterBtn").textContent=`Автоцентр: ${liveAutoCenter?"вкл":"выкл"}`; };
 qs("btnDiag").onclick=showDiag;
 
 qs("createShareBtn").onclick=()=>createLiveSession();
 qs("clearShareResultBtn").onclick=()=>{ createdShareUrl=""; qs("shareResultBox").classList.add("hidden"); };
-qs("copyCreatedShareBtn").onclick=async()=>{ if(createdShareUrl) await navigator.clipboard.writeText(createdShareUrl); };
+qs("copyCreatedShareBtn").onclick=async()=>{ if(createdShareUrl){ await navigator.clipboard.writeText(createdShareUrl); showToast("Ссылка скопирована"); } };
 qs("openCreatedShareBtn").onclick=()=>{ if(createdShareUrl) window.open(createdShareUrl,"_blank","noopener,noreferrer"); };
 
-qs("refreshSessionsBtn").onclick=()=>loadSessions();
+qs("refreshSessionsBtn").onclick=async()=>{ await loadSessions(); showToast("Live-сессии обновлены"); };
 qs("syncActiveSessionsBtn").onclick=()=>syncActiveSessionsFromSelectedUser();
 qs("endAllActiveSessionsBtn").onclick=()=>endAllActiveSessions();
 qs("cleanupSessionsBtn").onclick=()=>cleanupExpiredSessions();
@@ -913,9 +915,9 @@ qs("userSelect").onchange=()=>{ selectedUid=qs("userSelect").value; updateUsage(
 qs("viewModeSelect").onchange=()=>{ updateUsage(); renderHistory(); updateNowFromAvailableSources(); renderSessions(); };
 qs("refreshUsersBtn").onclick=async()=>{ await loadUsers(); await loadAllData(); };
 
-qs("deleteHistoryBtn").onclick=async()=>{ if(!confirm("Очистить всю ветку history?")) return; try{ await remove(ref(db,"history")); await logAction("delete_history","Очищена ветка history"); }catch(e){ alert("Очистка history:\n"+errText(e)); } };
-qs("deleteLiveBtn").onclick=async()=>{ if(!confirm("Очистить live, liveSessions и liveOwners?")) return; try{ await update(ref(db),{live:null,liveSessions:null,liveOwners:null}); await logAction("delete_live","Очищены live/liveSessions/liveOwners"); }catch(e){ alert("Очистка live:\n"+errText(e)); } };
-qs("deleteAllDbBtn").onclick=async()=>{ const code=prompt("Для полной очистки введи DELETE"); if(code!=="DELETE") return; try{ await update(ref(db),{history:null,live:null,liveSessions:null,liveOwners:null,adminLogs:null}); }catch(e){ alert("Полная очистка базы:\n"+errText(e)); } };
+qs("deleteHistoryBtn").onclick=async()=>{ if(!confirm("Очистить всю ветку history?")) return; try{ await remove(ref(db,"history")); await logAction("delete_history","Очищена ветка history"); await loadAllData(); showToast("History очищена"); }catch(e){ alert("Очистка history:\n"+errText(e)); } };
+qs("deleteLiveBtn").onclick=async()=>{ if(!confirm("Очистить live, liveSessions и liveOwners?")) return; try{ await remove(ref(db,"live")); await remove(ref(db,"liveSessions")); await remove(ref(db,"liveOwners")); await logAction("delete_live","Очищены live/liveSessions/liveOwners"); await loadAllData(); await loadSessions(); showToast("Live очищен"); }catch(e){ alert("Очистка live:\n"+errText(e)); } };
+qs("deleteAllDbBtn").onclick=async()=>{ const code=prompt("Для полной очистки введи DELETE"); if(code!=="DELETE") return; try{ await remove(ref(db,"history")); await remove(ref(db,"live")); await remove(ref(db,"liveSessions")); await remove(ref(db,"liveOwners")); await remove(ref(db,"adminLogs")); await loadAllData(); await loadSessions(); showToast("База очищена"); }catch(e){ alert("Полная очистка базы:\n"+errText(e)); } };
 
 onAuthStateChanged(auth, async user => {
   qs("errorBox").classList.add("hidden");
@@ -935,8 +937,7 @@ onAuthStateChanged(auth, async user => {
 
   qs("authCard").classList.add("hidden");
   qs("adminPanel").classList.remove("hidden");
-  qs("userInfo").innerHTML = `${user.email || "Google user"} <span class="tag admin">ADMIN</span>`;
-  qs("userUidText").textContent = user.uid;
+  qs("userInfo").textContent = "Admin";
   setDefaultPeriodToday();
 
   onValue(ref(db, "live"), snap => { liveByUid=snap.val()||{}; updateUsage(); updateNowFromAvailableSources(); });
