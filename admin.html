@@ -1440,9 +1440,6 @@ onAuthStateChanged(auth, async user => {
     qs("adminPanel").classList.add("hidden");
     return;
   }
-
-  console.log("UID:", user.uid);
-  console.log("EMAIL:", user.email);
   
   const adminSnap = await get(ref(db, `admins/${user.uid}`));
   const allowed = adminSnap.val() === true;
@@ -1481,5 +1478,22 @@ onAuthStateChanged(auth, async user => {
   await renderBackups();
   await createMonthlyBackup(false);
 });
+
+function persistUiState(){
+  try {
+    const state = {
+      selectedUser: qs("userSelect")?.value || "",
+      activeTab: document.querySelector(".tab.active")?.dataset.tab || "",
+      filters: {
+        accuracy: qs("accuracyMax")?.value || "",
+        speed: qs("speedMax")?.value || ""
+      }
+    };
+    localStorage.setItem("admin_ui_state", JSON.stringify(state));
+  } catch(e){
+    console.warn("persistUiState error", e);
+  }
+}
+  
 </script>
 </body></html>
