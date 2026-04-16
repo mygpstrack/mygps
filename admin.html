@@ -219,10 +219,72 @@ qs("userSelect").onchange=()=>{selectedUid=qs("userSelect").value;updateUsage();
 qs("deleteHistoryBtn").onclick=async()=>{if(!confirm("Очистить всю ветку history?"))return;await runSafe("Очистка history",async()=>{await remove(ref(db,"history"));await logAction("delete_history","Очищена ветка history")},{reloadData:true,silentSuccess:true})};
 qs("deleteLiveBtn").onclick=async()=>{if(!confirm("Очистить live, liveSessions и liveOwners?"))return;await runSafe("Очистка live",async()=>{await update(ref(db),{live:null,liveSessions:null,liveOwners:null});await logAction("delete_live","Очищены live/liveSessions/liveOwners")},{reloadData:true,reloadSessions:true,silentSuccess:true})};
 qs("deleteAllDbBtn").onclick=async()=>{const code=prompt("Для полной очистки введи DELETE");if(code!=="DELETE")return;await runSafe("Полная очистка базы",async()=>{await update(ref(db),{history:null,live:null,liveSessions:null,liveOwners:null,adminLogs:null})},{reloadData:true,reloadSessions:true,silentSuccess:true})};
-onAuthStateChanged(auth,async user=>{qs("errorBox").classList.add("hidden");if(!user){qs("authCard").classList.remove("hidden");qs("adminPanel").classList.add("hidden");return}const adminSnap=await get(ref(db,`admins/${user.uid}`)),allowed=adminSnap.val()===true;if(!allowed){qs("authCard").classList.remove("hidden");qs("adminPanel").classList.add("hidden");qs("authMessage").innerHTML=`Ты вошёл, но ещё не добавлен как админ.<br><br><span class="mono">admins/${user.uid} = true</span>`;return}qs("authCard").classList.add("hidden");qs("adminPanel").classList.remove("hidden");qs("userInfo").textContent=user.email||"Google user";setDefaultPeriodToday();onValue(ref(db,"live"),snap=>{liveByUid=snap.val()||{};updateUsage();updateNowFromAvailableSources()});onValue(ref(db,"history"),snap=>{const raw=snap.val()||{};historyByUid={};Object.entries(raw).forEach(([uid,pointsObj])=>historyByUid[uid]=Object.values(pointsObj||{}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0)));updateUsage();renderHistory();updateNowFromAvailableSources()});onValue(ref(db,"liveSessions"),snap=>{allSessions=snap.val()||{};updateUsage();renderSessions();updateNowFromAvailableSources()});onValue(ref(db,"adminLogs/deletions"),snap=>{deletionsLog=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0));renderJournal()});onValue(ref(db,"adminLogs/actions"),snap=>{actionLogs=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0));renderJournal()});await loadUsers();await loadAllData();await loadSessions()});
-firebase.auth().onAuthStateChanged(user => {
-    if (user) {
-        console.log("UID:", user.uid);
+onAuthStateChanged(auth,async user=>{qs("errorBox").classList.add("hidden");if(!user){qs("authCard").classList.remove("hidden");qs("adminPanel").classList.add("hidden");return}const adminSnap=await get(ref(db,`admins/${user.uid}`)),allowed=adminSnap.val()===true;if(!allowed){qs("authCard").classList.remove("hidden");qs("adminPanel").classList.add("hidden");qs("authMessage").innerHTML=`Ты вошёл, но ещё не добавлен как админ.<br><br><span class="mono">admins/${user.uid} = true</span>`;return} onAuthStateChanged(auth,async user=>{
+  qs("errorBox").classList.add("hidden");
+
+  if(!user){
+    qs("authCard").classList.remove("hidden");
+    qs("adminPanel").classList.add("hidden");
+    return;
+  }
+
+  console.log("UID:", user.uid);
+  console.log("EMAIL:", user.email);
+
+  const adminSnap=await get(ref(db,`admins/${user.uid}`)),
+        allowed=adminSnap.val()===true;
+
+  if(!allowed){
+    qs("authCard").classList.remove("hidden");
+    qs("adminPanel").classList.add("hidden");
+    qs("authMessage").innerHTML=`Ты вошёл, но ещё не добавлен как админ.<br><br><span class="mono">admins/${user.uid} = true</span>`;
+    return;
+  }
+
+  qs("authCard").classList.add("hidden");
+  qs("adminPanel").classList.remove("hidden");
+  qs("userInfo").textContent=user.email||"Google user";
+  setDefaultPeriodToday();
+
+  onValue(ref(db,"live"),snap=>{
+    liveByUid=snap.val()||{};
+    updateUsage();
+    updateNowFromAvailableSources()
+  });
+
+  onValue(ref(db,"history"),snap=>{
+    const raw=snap.val()||{};
+    historyByUid={};
+    Object.entries(raw).forEach(([uid,pointsObj])=>
+      historyByUid[uid]=Object.values(pointsObj||{}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0))
+    );
+    updateUsage();
+    renderHistory();
+    updateNowFromAvailableSources()
+  });
+
+  onValue(ref(db,"liveSessions"),snap=>{
+    allSessions=snap.val()||{};
+    updateUsage();
+    renderSessions();
+    updateNowFromAvailableSources()
+  });
+
+  onValue(ref(db,"adminLogs/deletions"),snap=>{
+    deletionsLog=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0));
+    renderJournal()
+  });
+
+  onValue(ref(db,"adminLogs/actions"),snap=>{
+    actionLogs=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0));
+    renderJournal()
+  });
+
+  await loadUsers();
+  await loadAllData();
+  await loadSessions();
+}); qs("authCard").classList.add("hidden");qs("adminPanel").classList.remove("hidden");qs("userInfo").textContent=user.email||"Google user";setDefaultPeriodToday();onValue(ref(db,"live"),snap=>{liveByUid=snap.val()||{};updateUsage();updateNowFromAvailableSources()});onValue(ref(db,"history"),snap=>{const raw=snap.val()||{};historyByUid={};Object.entries(raw).forEach(([uid,pointsObj])=>historyByUid[uid]=Object.values(pointsObj||{}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0)));updateUsage();renderHistory();updateNowFromAvailableSources()});onValue(ref(db,"liveSessions"),snap=>{allSessions=snap.val()||{};updateUsage();renderSessions();updateNowFromAvailableSources()});onValue(ref(db,"adminLogs/deletions"),snap=>{deletionsLog=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0));renderJournal()});onValue(ref(db,"adminLogs/actions"),snap=>{actionLogs=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0));renderJournal()});await loadUsers();await loadAllData();await loadSessions()});
+
 </script>
   
 </body></html>
