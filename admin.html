@@ -111,22 +111,19 @@
         <div class="pill"><span class="dot ok"></span><span id="userInfo">Вы вошли</span></div>
         <button id="logoutBtn" class="secondary">Выйти</button>
       </div>
-
       <div class="row">
-        <div style="min-width:220px;flex:1">
+        <div>
+          <div class="label">Пользователь</div>
+          <select id="userSelect"></select>
+        </div>
+        <div>
           <div class="label">Режим просмотра</div>
           <select id="viewModeSelect">
             <option value="selected" selected>Выбранный пользователь</option>
             <option value="all">Все пользователи</option>
           </select>
         </div>
-        <div style="min-width:260px;flex:2">
-          <div class="label">Пользователь</div>
-          <select id="userSelect">
-            <option value="">Загрузка…</option>
-          </select>
-        </div>
-        <div class="pill">UID: <span id="selectedUidText">—</span></div>
+        <button id="refreshUsersBtn" class="secondary">Обновить пользователей</button>
       </div>
 
       <div class="tabs">
@@ -283,9 +280,9 @@
           <div>
             <div class="label">Источник</div>
             <select id="shareSource">
-              <option value="auto" selected>Авто: live пользователя → history</option>
+              <option value="auto" selected>Авто</option>
               <option value="live">Только live пользователя</option>
-              <option value="history">Только history пользователя</option>
+              <option value="history">Только history</option>
             </select>
           </div>
           <div>
@@ -397,15 +394,13 @@ const db = getDatabase(app);
 const provider = new GoogleAuthProvider();
 const qs = (id)=>document.getElementById(id);
 
-let allHistoryByUid = {};
-let allLiveByUid = {};
 let allHistoryPoints = [];
 let allSessions = {};
 let liveDefaultData = null;
-let selectedUserLiveData = null;
 let selectedUid = "";
-let currentViewMode = "selected";
-let allUserMarkers = [];
+let allUsers = [];
+let liveByUid = {};
+let historyByUid = {};
 let deletionsLog = [];
 let actionLogs = [];
 let currentFiltered = [];
@@ -502,6 +497,49 @@ function setDefaultPeriodToday(){
   setDateTimeRange(start, now);
 }
 
+async function loadUsers(){
+  const [historySnap, liveSnap] = await Promise.all([
+    get(ref(db, "history")),
+    get(ref(db, "live"))
+  ]);
+  const userSet = new Set();
+  const historyRaw = historySnap.val() || {};
+  const liveRaw = liveSnap.val() || {};
+  Object.keys(historyRaw).forEach(uid => userSet.add(uid));
+  Object.keys(liveRaw).forEach(uid => userSet.add(uid));
+  allUsers = Array.from(userSet).sort();
+
+  const select = qs("userSelect");
+  const current = selectedUid;
+  select.innerHTML = allUsers.length
+    ? allUsers.map(uid => `<option value="${uid}">${uid}</option>`).join("")
+    : '<option value="">Нет пользователей</option>';
+
+  if (current && allUsers.includes(current)) {
+    select.value = current;
+    selectedUid = current;
+  } else {
+    selectedUid = allUsers[0] || "";
+    if (selectedUid) select.value = selectedUid;
+  }
+}
+
+function getSelectedHistoryPoints(){
+  if (!selectedUid) return [];
+  return historyByUid[selectedUid] || [];
+}
+
+function getSelectedLiveData(){
+  if (!selectedUid) return null;
+  return liveByUid[selectedUid] || null;
+}
+
+function getAllLastPoints(){
+  return Object.entries(liveByUid)
+    .map(([uid, live]) => ({ uid, point: live?.lastPoint }))
+    .filter(item => item.point && item.point.latitude != null && item.point.longitude != null);
+}
+
 function distanceMeters(a,b){
   const toRad=(v)=>v*Math.PI/180, R=6371000;
   const dLat=toRad(b.latitude-a.latitude), dLon=toRad(b.longitude-a.longitude);
@@ -588,57 +626,6 @@ const liveMarker = L.circleMarker([56.95,24.10], {radius:8,color:"#22c55e",fillC
 const sessionTrail = L.polyline([], {weight:5}).addTo(sessionMap);
 const sessionMarker = L.circleMarker([56.95,24.10], {radius:8,color:"#22c55e",fillColor:"#22c55e",fillOpacity:1}).addTo(sessionMap);
 
-function clearAllUserMarkers(){
-  allUserMarkers.forEach(m => liveMap.removeLayer(m));
-  allUserMarkers = [];
-}
-
-function collectUserIds(){
-  const ids = new Set([
-    ...Object.keys(allHistoryByUid || {}),
-    ...Object.keys(allLiveByUid || {})
-  ].filter(Boolean));
-  return Array.from(ids).sort();
-}
-
-function renderUserSelect(){
-  const select = qs("userSelect");
-  const ids = collectUserIds();
-  const prev = selectedUid;
-  select.innerHTML = ids.length
-    ? ids.map(uid => `<option value="${uid}">${uid}</option>`).join("")
-    : '<option value="">Нет пользователей</option>';
-
-  if (prev && ids.includes(prev)) {
-    select.value = prev;
-  } else if (ids.length) {
-    selectedUid = ids[0];
-    select.value = selectedUid;
-  } else {
-    selectedUid = "";
-  }
-
-  qs("selectedUidText").textContent = selectedUid || "—";
-  refreshSelectedUserData();
-}
-
-function refreshSelectedUserData(){
-  allHistoryPoints = selectedUid
-    ? Object.values(allHistoryByUid?.[selectedUid] || {}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0))
-    : [];
-  selectedUserLiveData = selectedUid ? (allLiveByUid?.[selectedUid] || null) : null;
-  updateUsage();
-  renderHistory();
-  updateNowFromAvailableSources();
-}
-
-function setViewMode(mode){
-  currentViewMode = mode === "all" ? "all" : "selected";
-  qs("viewModeSelect").value = currentViewMode;
-  qs("userSelect").disabled = currentViewMode === "all";
-  updateNowFromAvailableSources();
-}
-
 let routeSegments = [];
 const startMarker = L.marker([56.95,24.10]).addTo(historyMap);
 const endMarker = L.marker([56.95,24.10]).addTo(historyMap);
@@ -668,10 +655,9 @@ async function updateHistoryMap(points){
 }
 
 function updateUsage(){
-  const historyObj = selectedUid ? (allHistoryByUid?.[selectedUid] || {}) : {};
-  const liveObj = selectedUid ? (allLiveByUid?.[selectedUid] || {}) : {};
+  const historyObj = Object.fromEntries(allHistoryPoints.map(p => [String(p.timestamp), p]));
   const historyBytes = new Blob([JSON.stringify(historyObj)]).size;
-  const sessionsBytes = new Blob([JSON.stringify(allSessions||{})]).size + new Blob([JSON.stringify(liveObj||{})]).size;
+  const sessionsBytes = new Blob([JSON.stringify(allSessions||{})]).size + new Blob([JSON.stringify(liveDefaultData||{})]).size;
   qs("historySize").textContent = formatSize(historyBytes);
   qs("sessionsSize").textContent = formatSize(sessionsBytes);
   qs("totalSize").textContent = formatSize(historyBytes + sessionsBytes);
@@ -775,45 +761,31 @@ function updateNowUI(point, sourceLabel, recentPoints=[]){
 }
 
 function updateNowFromAvailableSources(){
-  clearAllUserMarkers();
+  const viewMode = qs("viewModeSelect").value;
 
-  if (currentViewMode === "all") {
-    const latestPoints = collectUserIds()
-      .map(uid => {
-        const liveLast = allLiveByUid?.[uid]?.lastPoint || null;
-        const hist = Object.values(allHistoryByUid?.[uid] || {}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
-        return { uid, point: liveLast || (hist.length ? hist[hist.length - 1] : null) };
-      })
-      .filter(item => item.point && item.point.latitude != null && item.point.longitude != null);
-
-    liveTrail.setLatLngs([]);
-    latestPoints.forEach(({uid, point}) => {
-      const marker = L.circleMarker([Number(point.latitude), Number(point.longitude)], {
-        radius: 7, color: "#22c55e", fillColor: "#22c55e", fillOpacity: 1
-      }).addTo(liveMap).bindPopup(`${uid}<br>${fmtTime(point.timestamp)}`);
-      allUserMarkers.push(marker);
-    });
-
-    if (latestPoints.length) {
-      const latlngs = latestPoints.map(({point}) => [Number(point.latitude), Number(point.longitude)]);
-      liveMap.fitBounds(L.latLngBounds(latlngs), {padding:[30,30]});
-      updateNowUI(latestPoints[0].point, `Все пользователи: ${latestPoints.length}`);
-    } else {
-      updateNowUI(null, "Все пользователи");
+  if (viewMode === "all") {
+    const allPoints = getAllLastPoints();
+    if (allPoints.length) {
+      const latlngs = allPoints.map(item => [Number(item.point.latitude), Number(item.point.longitude)]);
+      liveTrail.setLatLngs(latlngs);
+      liveMarker.setLatLng(latlngs[latlngs.length - 1]);
+      updateNowUI(allPoints[allPoints.length - 1].point, `Все пользователи (${allPoints.length})`);
+      return;
     }
-    return;
   }
 
-  if (selectedUserLiveData && selectedUserLiveData.lastPoint) {
-    const pts = Object.values(selectedUserLiveData.recentPoints || {}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+  const selectedLive = getSelectedLiveData();
+  if(selectedLive && selectedLive.lastPoint){
+    const pts = Object.values(selectedLive.recentPoints || {}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
     liveTrail.setLatLngs(pts.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]));
-    updateNowUI(selectedUserLiveData.lastPoint, `live/${selectedUid}`, pts);
+    updateNowUI(selectedLive.lastPoint, selectedUid ? `live/${selectedUid}` : "live");
     return;
   }
 
   const now = Date.now();
   const active = Object.entries(allSessions)
-    .filter(([k,v])=>k!=="_init" && v?.meta?.ownerUid === selectedUid && v?.meta?.active && Number(v?.meta?.expiresAt||0)>now)
+    .filter(([k,v])=>k!=="_init" && v?.meta?.active && Number(v?.meta?.expiresAt||0)>now)
+    .filter(([,v])=> !selectedUid || !v?.meta?.ownerUid || v.meta.ownerUid === selectedUid)
     .sort((a,b)=>Number((b[1]?.meta?.createdAt||0))-Number((a[1]?.meta?.createdAt||0)));
 
   if(active.length){
@@ -824,9 +796,10 @@ function updateNowFromAvailableSources(){
     return;
   }
 
-  const point = allHistoryPoints.length ? allHistoryPoints[allHistoryPoints.length-1] : null;
+  const points = viewMode === "all" ? allHistoryPoints : getSelectedHistoryPoints();
+  const point = points.length ? points[points.length-1] : null;
   liveTrail.setLatLngs([]);
-  updateNowUI(point, selectedUid ? `history/${selectedUid}` : "История");
+  updateNowUI(point, selectedUid ? `history/${selectedUid}` : "history");
 }
 
 async function logDeletion(kind, description){
@@ -840,7 +813,20 @@ async function logAction(kind, description){
 }
 
 async function loadHistory(){
-  refreshSelectedUserData();
+  const snap = await get(ref(db, "history"));
+  const raw = snap.val() || {};
+  historyByUid = {};
+  Object.entries(raw).forEach(([uid, pointsObj]) => {
+    historyByUid[uid] = Object.values(pointsObj || {})
+      .filter(Boolean)
+      .sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+  });
+  allHistoryPoints = qs("viewModeSelect").value === "all"
+    ? Object.values(historyByUid).flat().sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0))
+    : getSelectedHistoryPoints();
+  updateUsage();
+  renderHistory();
+  updateNowFromAvailableSources();
 }
 
 function buildShareUrl(token){
@@ -849,8 +835,9 @@ function buildShareUrl(token){
 
 function getRecentSourcePoints(mode, pointsLimit){
   const limit = Math.max(2, Math.min(500, Number(pointsLimit || 100)));
-  const livePoints = Object.values(selectedUserLiveData?.recentPoints || {}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
-  const historyPoints = allHistoryPoints.filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+  const selectedLive = getSelectedLiveData();
+  const livePoints = Object.values(selectedLive?.recentPoints || {}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+  const historyPoints = getSelectedHistoryPoints().filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
   if(mode==="live") return livePoints.slice(-limit);
   if(mode==="history") return historyPoints.slice(-limit);
   if(livePoints.length) return livePoints.slice(-limit);
@@ -864,15 +851,6 @@ function generateSessionToken(){
 }
 
 async function createLiveSession(){
-  if (!selectedUid) {
-    alert("Сначала выбери пользователя.");
-    return;
-  }
-  if (currentViewMode === "all") {
-    alert("Для создания live-ссылки выбери конкретного пользователя.");
-    return;
-  }
-
   const durationMinutes = Number(qs("shareDurationPreset").value || 60);
   const sourceMode = qs("shareSource").value;
   const pointsLimit = Number(qs("sharePointsLimit").value || 100);
@@ -897,7 +875,7 @@ async function createLiveSession(){
       createdAt: now,
       expiresAt,
       remainingMs: durationMinutes * 60 * 1000,
-      ownerUid: selectedUid,
+      ownerUid: selectedUid || null,
       createdBy: auth.currentUser?.uid || null,
       createdByEmail: auth.currentUser?.email || null,
       durationMinutes
@@ -914,8 +892,9 @@ async function createLiveSession(){
   };
 
   await runSafe("Создание live-ссылки", async()=>{
+    if (!selectedUid) throw new Error("Сначала выбери пользователя");
+    await set(ref(db, `liveSessions/${token}`), payload);
     await update(ref(db), {
-      [`liveSessions/${token}`]: payload,
       [`liveOwners/${selectedUid}/activeSessionId`]: token,
       [`liveOwners/${selectedUid}/lastCreatedAt`]: now
     });
@@ -1050,12 +1029,13 @@ async function cleanupExpiredSessions() {
 }
 
 async function syncActiveSessionsFromLiveDefault() {
+  const selectedLive = getSelectedLiveData();
   if (!selectedUid) {
     alert("Сначала выбери пользователя.");
     return;
   }
-  if (!selectedUserLiveData?.lastPoint) {
-    alert("Нет live пользователя для синхронизации.");
+  if (!selectedLive?.lastPoint) {
+    alert("Нет live выбранного пользователя для синхронизации.");
     return;
   }
 
@@ -1063,18 +1043,18 @@ async function syncActiveSessionsFromLiveDefault() {
   const activeTokens = Object.entries(allSessions || {})
     .filter(([token, session]) => {
       if (token === "_init") return false;
-      return session?.meta?.ownerUid === selectedUid &&
-             !!session?.meta?.active &&
-             Number(session?.meta?.expiresAt || 0) > now;
+      return !!session?.meta?.active &&
+             Number(session?.meta?.expiresAt || 0) > now &&
+             session?.meta?.ownerUid === selectedUid;
     })
     .map(([token]) => token);
 
   if (!activeTokens.length) {
-    alert("Активных live-сессий для пользователя нет.");
+    alert("Активных live-сессий для выбранного пользователя нет.");
     return;
   }
 
-  const livePoints = Object.values(selectedUserLiveData.recentPoints || {})
+  const livePoints = Object.values(selectedLive.recentPoints || {})
     .filter(Boolean)
     .sort((a, b) => Number(a.timestamp || 0) - Number(b.timestamp || 0))
     .slice(-100);
@@ -1086,18 +1066,15 @@ async function syncActiveSessionsFromLiveDefault() {
 
   await runSafe("Синхронизация active-сессий", async () => {
     for (const token of activeTokens) {
-      await update(ref(db, `liveSessions/${token}`), {
-        public: {
-          lastPoint: selectedUserLiveData.lastPoint,
-          recentPoints: recentPointsObj
-        },
-        meta: {
-          ...(allSessions[token]?.meta || {}),
-          lastSyncedAt: Date.now()
-        }
+      await update(ref(db, `liveSessions/${token}/public`), {
+        lastPoint: selectedLive.lastPoint,
+        recentPoints: recentPointsObj
+      });
+      await update(ref(db, `liveSessions/${token}/meta`), {
+        lastSyncedAt: Date.now()
       });
     }
-    await logAction("session_sync_active", `Синхронизировано active-сессий ${activeTokens.length} для ${selectedUid}`);
+    await logAction("session_sync_active", `Синхронизировано active-сессий: ${activeTokens.length} для ${selectedUid}`);
   }, { reloadSessions: true, silentSuccess:true });
 }
 
@@ -1289,8 +1266,28 @@ qs("endAllActiveSessionsBtn").onclick=endAllActiveSessions;
 qs("cleanupSessionsBtn").onclick=cleanupExpiredSessions;
 qs("sessionSearchInput").oninput=renderSessions;
 qs("sessionStatusFilter").onchange=renderSessions;
-qs("userSelect").onchange=()=>{ selectedUid = qs("userSelect").value || ""; qs("selectedUidText").textContent = selectedUid || "—"; refreshSelectedUserData(); };
-qs("viewModeSelect").onchange=()=>setViewMode(qs("viewModeSelect").value);
+qs("userSelect").onchange=async()=>{
+  selectedUid = qs("userSelect").value;
+  await loadHistory();
+  updateNowFromAvailableSources();
+};
+qs("viewModeSelect").onchange=async()=>{
+  await loadHistory();
+  updateNowFromAvailableSources();
+};
+qs("refreshUsersBtn").onclick=async()=>{
+  await loadUsers();
+  await loadHistory();
+  await loadUserLiveAll();
+  updateNowFromAvailableSources();
+};
+
+async function loadUserLiveAll(){
+  const snap = await get(ref(db, "live"));
+  const raw = snap.val() || {};
+  liveByUid = raw;
+  liveDefaultData = selectedUid ? (liveByUid[selectedUid] || null) : null;
+}
 
 /* auth */
 onAuthStateChanged(auth, async(user)=>{
@@ -1319,15 +1316,24 @@ onAuthStateChanged(auth, async(user)=>{
   setDefaultPeriodToday();
 
   onValue(ref(db, "live"), (snap)=>{
-    allLiveByUid = snap.val() || {};
-    liveDefaultData = selectedUid ? (allLiveByUid[selectedUid] || null) : null;
-    renderUserSelect();
+    liveByUid = snap.val() || {};
+    liveDefaultData = selectedUid ? (liveByUid[selectedUid] || null) : null;
+    updateUsage();
     updateNowFromAvailableSources();
   });
 
   onValue(ref(db, "history"), (snap)=>{
-    allHistoryByUid = snap.val() || {};
-    renderUserSelect();
+    const raw=snap.val()||{};
+    historyByUid = {};
+    Object.entries(raw).forEach(([uid, pointsObj])=>{
+      historyByUid[uid] = Object.values(pointsObj || {}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+    });
+    allHistoryPoints = qs("viewModeSelect").value === "all"
+      ? Object.values(historyByUid).flat().sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0))
+      : getSelectedHistoryPoints();
+    updateUsage();
+    renderHistory();
+    updateNowFromAvailableSources();
   });
 
   onValue(ref(db, "liveSessions"), (snap)=>{
@@ -1349,7 +1355,8 @@ onAuthStateChanged(auth, async(user)=>{
     renderJournal();
   });
 
-  setViewMode("selected");
+  await loadUsers();
+  await loadUserLiveAll();
   await loadHistory();
   await loadSessions();
 });
