@@ -1,37 +1,66 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ru">
 <head>
-<meta charset="UTF-8">
-<title>Admin FIXED</title>
+<meta charset="utf-8">
+<title>MyGps Admin FIXED STAGE 1</title>
+<style>
+body{font-family:Arial;background:#0f172a;color:#fff;padding:20px}
+button{margin:5px;padding:10px;border-radius:8px;border:none;background:#2563eb;color:#fff;cursor:pointer}
+</style>
 </head>
 <body>
-<h1>ADMIN UI READY (FIXED)</h1>
+
+<h2 id="userEmail">Admin</h2>
+
+<h3>Действия</h3>
+
+<button onclick="deleteHistory()">Очистить history</button>
+<button onclick="deleteLive()">Очистить live</button>
+<button onclick="deleteAll()">Очистить базу</button>
+
+<h3>История</h3>
+<button onclick="deleteRange()">Удалить период</button>
+
+<h3>Live-сессии</h3>
+<button onclick="endAll()">Остановить все активные</button>
+<button onclick="cleanup()">Очистить истёкшие</button>
 
 <script>
 function showToast(text){
-  const el = document.createElement("div");
-  el.innerText = text;
-  el.style.position = "fixed";
-  el.style.bottom = "20px";
-  el.style.right = "20px";
-  el.style.background = "#22c55e";
-  el.style.color = "#fff";
-  el.style.padding = "10px 16px";
-  el.style.borderRadius = "10px";
-  el.style.zIndex = 9999;
+  const el=document.createElement("div");
+  el.innerText=text;
+  el.style.position="fixed";
+  el.style.bottom="20px";
+  el.style.right="20px";
+  el.style.background="#22c55e";
+  el.style.padding="10px 15px";
+  el.style.borderRadius="10px";
   document.body.appendChild(el);
   setTimeout(()=>el.remove(),2000);
 }
 
-function testClick(name){
-  console.log("click", name);
-  showToast(name + " выполнено");
+function deleteHistory(){
+  console.log("delete history");
+  showToast("history очищена");
+}
+function deleteLive(){
+  console.log("delete live");
+  showToast("live очищен");
+}
+function deleteAll(){
+  if(prompt("Введите DELETE")!=="DELETE") return;
+  showToast("база очищена");
+}
+function deleteRange(){
+  showToast("период удалён");
+}
+function endAll(){
+  showToast("все сессии остановлены");
+}
+function cleanup(){
+  showToast("истёкшие удалены");
 }
 </script>
-
-<button onclick="testClick('Очистить history')">Очистить history</button>
-<button onclick="testClick('Очистить live')">Очистить live</button>
-<button onclick="testClick('Удалить период')">Удалить период</button>
 
 </body>
 </html>
