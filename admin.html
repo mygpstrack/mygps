@@ -349,7 +349,7 @@ function formatDuration(ms){ if(!ms||ms<0) return "—"; const s=Math.floor(ms/1
 function formatIdle(ms){ if(!ms||ms<1000) return "—"; const s=Math.floor(ms/1000), h=Math.floor(s/3600), m=Math.floor((s%3600)/60), sec=s%60; return h>0?`${h}ч ${m}м ${sec}с`:`${m}м ${sec}с`; }
 function formatSize(bytes){ if(bytes<1024) return `${bytes} B`; if(bytes<1024*1024) return `${(bytes/1024).toFixed(1)} KB`; return `${(bytes/(1024*1024)).toFixed(2)} MB`; }
 function parseDateTime(dateVal,hVal,mVal){ if(!dateVal) return null; return new Date(`${dateVal}T${hVal||"00"}:${mVal||"00"}:00`).getTime(); }
-function userLabel(uid){ return isLegacyUid(uid) ? "legacy/default" : uid; }
+function userLabel(uid){ return isLegacyUid(uid) ? "legacy/default" : "Admin"; }
 
 function renderHeaderTime(){
   const d = new Date(), days = ["воскресенье","понедельник","вторник","среда","четверг","пятница","суббота"];
@@ -905,9 +905,9 @@ qs("copyCreatedShareBtn").onclick=async()=>{ if(createdShareUrl){ await navigato
 qs("openCreatedShareBtn").onclick=()=>{ if(createdShareUrl) window.open(createdShareUrl,"_blank","noopener,noreferrer"); };
 
 qs("refreshSessionsBtn").onclick=async()=>{ await loadSessions(); showToast("Live-сессии обновлены"); };
-qs("syncActiveSessionsBtn").onclick=()=>syncActiveSessionsFromSelectedUser();
-qs("endAllActiveSessionsBtn").onclick=()=>endAllActiveSessions();
-qs("cleanupSessionsBtn").onclick=()=>cleanupExpiredSessions();
+qs("syncActiveSessionsBtn").onclick=async()=>{ showToast("Синхронизация..."); await syncActiveSessionsFromSelectedUser(); };
+qs("endAllActiveSessionsBtn").onclick=async()=>{ showToast("Останавливаю активные..."); await endAllActiveSessions(); };
+qs("cleanupSessionsBtn").onclick=async()=>{ showToast("Очищаю истёкшие..."); await cleanupExpiredSessions(); };
 qs("sessionSearchInput").oninput=renderSessions;
 qs("sessionStatusFilter").onchange=renderSessions;
 
@@ -937,7 +937,7 @@ onAuthStateChanged(auth, async user => {
 
   qs("authCard").classList.add("hidden");
   qs("adminPanel").classList.remove("hidden");
-  qs("userInfo").textContent = "Admin";
+  qs("userInfo").textContent = user.email || "Admin";
   setDefaultPeriodToday();
 
   onValue(ref(db, "live"), snap => { liveByUid=snap.val()||{}; updateUsage(); updateNowFromAvailableSources(); });
