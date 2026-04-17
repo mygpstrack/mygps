@@ -890,6 +890,59 @@ function getSelectedLiveData(){ return selectedUid ? (liveByUid[selectedUid] || 
 function getVisibleHistoryPoints(){ return qs("viewModeSelect").value==="all" ? Object.values(historyByUid).flat().sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0)) : getSelectedHistoryPoints(); }
 function getAllLastPoints(){ return Object.entries(liveByUid).map(([uid,live])=>({uid,point:live?.lastPoint})).filter(item=>item.point && item.point.latitude!=null && item.point.longitude!=null); }
 
+
+function updateTodaySummary(){
+  try{
+    const now = new Date();
+    const start = new Date();
+    start.setHours(0,0,0,0);
+    const startTs = start.getTime();
+    const endTs = now.getTime();
+
+    const visible = getVisibleHistoryPoints().filter(p => {
+      const ts = Number(p.timestamp || 0);
+      return ts >= startTs && ts <= endTs;
+    });
+
+    qs("todayPoints").textContent = String(visible.length);
+
+    if(!visible.length){
+      qs("todayKm").textContent = "0 км";
+      qs("todayMove").textContent = "—";
+      qs("todayStop").textContent = "—";
+      qs("todayLast").textContent = "—";
+      return;
+    }
+
+    let meters = 0;
+    let moveMs = 0;
+    let stopMs = 0;
+
+    for(let i=1;i<visible.length;i++){
+      const prev = visible[i-1];
+      const cur = visible[i];
+      const dt = Math.max(0, Number(cur.timestamp||0) - Number(prev.timestamp||0));
+      meters += distanceMeters(prev, cur);
+
+      const spPrev = Number(prev.speed || 0);
+      const spCur = Number(cur.speed || 0);
+      const avgSp = (spPrev + spCur) / 2;
+
+      if(avgSp > 2) moveMs += dt;
+      else stopMs += dt;
+    }
+
+    const last = visible[visible.length - 1];
+    qs("todayKm").textContent = `${(meters/1000).toFixed(2)} км`;
+    qs("todayMove").textContent = formatDuration(moveMs);
+    qs("todayStop").textContent = formatDuration(stopMs);
+    qs("todayLast").textContent = fmtTime(last.timestamp);
+  }catch(e){
+    console.warn("updateTodaySummary error", e);
+  }
+}
+
+
 async function loadAllData(){
   const [historySnap, liveSnap, usersSnap] = await Promise.all([get(ref(db,"history")), get(ref(db,"live")), get(ref(db,"users"))]);
   usersMeta = usersSnap.val() || {};
@@ -900,6 +953,7 @@ async function loadAllData(){
     historyByUid[uid] = Object.values(pointsObj||{}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
   });
   updateUsage();
+  updateTodaySummary();
   renderHistory();
   await updateNowFromAvailableSources();
 }
@@ -1633,8 +1687,8 @@ qs("cleanupSessionsBtn").onclick=()=>cleanupExpiredSessions();
 qs("sessionSearchInput").oninput=renderSessions;
 qs("sessionStatusFilter").onchange=renderSessions;
 
-qs("userSelect").onchange=()=>{ selectedUid=qs("userSelect").value; updateUsage(); renderHistory(); updateNowFromAvailableSources(); renderSessions(); };
-qs("viewModeSelect").onchange=()=>{ updateUsage(); renderHistory(); updateNowFromAvailableSources(); renderSessions(); };
+qs("userSelect").onchange=()=>{ selectedUid=qs("userSelect").value; updateUsage(); updateTodaySummary(); renderHistory(); updateNowFromAvailableSources(); renderSessions(); };
+qs("viewModeSelect").onchange=()=>{ updateUsage(); updateTodaySummary(); renderHistory(); updateNowFromAvailableSources(); renderSessions(); };
 qs("refreshUsersBtn").onclick=async()=>{ await loadUsers(); await loadAllData(); showToast("Пользователи обновлены","success"); };
 
 qs("deleteHistoryBtn").onclick=async()=>{ const count = Object.values(historyByUid).flat().length; if(!confirm(`Очистить всю ветку history?\nТочек: ${count}`)) return; try{ await safeAction("Очистка history", async()=>{ await remove(ref(db,"history")); await logAction("delete_history","Очищена ветка history"); await loadAllData(); }, "History очищена"); }catch(e){} };
