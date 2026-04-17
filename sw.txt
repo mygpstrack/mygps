@@ -1,1 +1,0 @@
-// PWA disabled intentionally. Do not register service worker.
