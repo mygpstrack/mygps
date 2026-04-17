@@ -329,6 +329,7 @@
           <button id="syncActiveSessionsBtn" class="secondary">Синхронизировать active</button>
           <button id="endAllActiveSessionsBtn" class="warn">Остановить все активные</button>
           <button id="cleanupSessionsBtn" class="warn">Очистить истёкшие сессии</button>
+          <button id="cleanupEndedSessionsBtn" class="warn">Очистить завершённые сессии</button>
         </div>
         <div style="overflow:auto">
           <table>
@@ -1610,7 +1611,52 @@ async function exportZip(){
 }
 function downloadText(name,content,type){ const blob=new Blob([content],{type}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=name; a.click(); URL.revokeObjectURL(url); }
 
-if (qs("googleBtn")) qs("googleBtn").onclick = async()=>{ try{ await signInWithPopup(auth,provider); }catch(e){ qs("errorBox").textContent="Ошибка Google-входа: "+errText(e); qs("errorBox").classList.remove("hidden"); }};
+if (qs("googleBtn")) 
+if (qs("refreshLiveBtn")) qs("refreshLiveBtn").onclick = async () => {
+  try{
+    await loadSessions();
+    await updateNowFromAvailableSources();
+    renderSessions?.();
+    showToast("Live обновлён", "success");
+  }catch(e){
+    recordError("refreshLiveBtn", e);
+    showToast("Ошибка обновления live: " + errText(e), "error", 3600);
+  }
+};
+
+if (qs("cleanupEndedSessionsBtn")) qs("cleanupEndedSessionsBtn").onclick = async () => {
+  if(!confirm("Очистить завершённые сессии?")) return;
+  try{
+    const snap = await get(ref(db, "liveSessions"));
+    const sessions = snap.val() || {};
+    const updates = {};
+    let count = 0;
+    Object.entries(sessions).forEach(([token, session]) => {
+      if(token === "_init") return;
+      const root = getSessionRoot(session);
+      const active = !!root?.meta?.active;
+      if(!active){
+        updates[`liveSessions/${token}`] = null;
+        count++;
+      }
+    });
+    if(count === 0){
+      showToast("Завершённых сессий нет", "info");
+      return;
+    }
+    await update(ref(db), updates);
+    await logAction("cleanup_ended_sessions", `Удалено завершённых сессий: ${count}`);
+    showToast(`Удалено завершённых сессий: ${count}`, "success");
+    await loadSessions();
+    renderSessions?.();
+  }catch(e){
+    recordError("cleanupEndedSessionsBtn", e);
+    showToast("Ошибка очистки завершённых сессий: " + errText(e), "error", 3600);
+  }
+};
+
+
+qs("googleBtn").onclick = async()=>{ try{ await signInWithPopup(auth,provider); }catch(e){ qs("errorBox").textContent="Ошибка Google-входа: "+errText(e); qs("errorBox").classList.remove("hidden"); }};
 if (qs("emailLoginBtn")) qs("emailLoginBtn").onclick = async()=>{ try{ await signInWithEmailAndPassword(auth,qs("emailInput").value.trim(),qs("passwordInput").value); }catch(e){ qs("errorBox").textContent="Ошибка входа: "+errText(e); qs("errorBox").classList.remove("hidden"); }};
 if (qs("emailRegisterBtn")) qs("emailRegisterBtn").onclick = async()=>{ try{ await createUserWithEmailAndPassword(auth,qs("emailInput").value.trim(),qs("passwordInput").value); }catch(e){ qs("errorBox").textContent="Ошибка регистрации: "+errText(e); qs("errorBox").classList.remove("hidden"); }};
 if (qs("logoutBtn")) qs("logoutBtn").onclick = async()=>{ await signOut(auth); };
