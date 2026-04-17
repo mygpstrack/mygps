@@ -1610,20 +1610,20 @@ async function exportZip(){
 }
 function downloadText(name,content,type){ const blob=new Blob([content],{type}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=name; a.click(); URL.revokeObjectURL(url); }
 
-qs("googleBtn").onclick=async()=>{ try{ await signInWithPopup(auth,provider); }catch(e){ qs("errorBox").textContent="Ошибка Google-входа: "+errText(e); qs("errorBox").classList.remove("hidden"); }};
-qs("emailLoginBtn").onclick=async()=>{ try{ await signInWithEmailAndPassword(auth,qs("emailInput").value.trim(),qs("passwordInput").value); }catch(e){ qs("errorBox").textContent="Ошибка входа: "+errText(e); qs("errorBox").classList.remove("hidden"); }};
-qs("emailRegisterBtn").onclick=async()=>{ try{ await createUserWithEmailAndPassword(auth,qs("emailInput").value.trim(),qs("passwordInput").value); }catch(e){ qs("errorBox").textContent="Ошибка регистрации: "+errText(e); qs("errorBox").classList.remove("hidden"); }};
-qs("logoutBtn").onclick=async()=>{ await signOut(auth); };
+if (qs("googleBtn")) qs("googleBtn").onclick = async()=>{ try{ await signInWithPopup(auth,provider); }catch(e){ qs("errorBox").textContent="Ошибка Google-входа: "+errText(e); qs("errorBox").classList.remove("hidden"); }};
+if (qs("emailLoginBtn")) qs("emailLoginBtn").onclick = async()=>{ try{ await signInWithEmailAndPassword(auth,qs("emailInput").value.trim(),qs("passwordInput").value); }catch(e){ qs("errorBox").textContent="Ошибка входа: "+errText(e); qs("errorBox").classList.remove("hidden"); }};
+if (qs("emailRegisterBtn")) qs("emailRegisterBtn").onclick = async()=>{ try{ await createUserWithEmailAndPassword(auth,qs("emailInput").value.trim(),qs("passwordInput").value); }catch(e){ qs("errorBox").textContent="Ошибка регистрации: "+errText(e); qs("errorBox").classList.remove("hidden"); }};
+if (qs("logoutBtn")) qs("logoutBtn").onclick = async()=>{ await signOut(auth); };
 
-qs("todayBtn").onclick=()=>{ const now=new Date(), start=new Date(); start.setHours(0,0,0,0); setDateTimeRange(start,now); renderHistory(); };
-qs("yesterdayBtn").onclick=()=>{ const start=new Date(); start.setDate(start.getDate()-1); start.setHours(0,0,0,0); const end=new Date(start); end.setHours(23,59,0,0); setDateTimeRange(start,end); renderHistory(); };
-qs("weekBtn").onclick=()=>{ const now=new Date(), start=new Date(); start.setDate(start.getDate()-7); setDateTimeRange(start,now); renderHistory(); };
-qs("range1hBtn").onclick=()=>{ const now=new Date(), start=new Date(Date.now()-60*60*1000); setDateTimeRange(start,now); renderHistory(); };
-qs("range24hBtn").onclick=()=>{ const now=new Date(), start=new Date(Date.now()-24*60*60*1000); setDateTimeRange(start,now); renderHistory(); };
-qs("applyFiltersBtn").onclick=renderHistory;
-qs("resetFiltersBtn").onclick=()=>{ qs("maxAccuracyFilter").value=""; qs("minSpeedFilter").value=""; qs("maxSpeedFilter").value=""; qs("hideJunkToggle").checked=false; renderHistory(); };
-qs("refreshHistoryBtn").onclick=async()=>{ await loadAllData(); showToast("История обновлена","success"); };
-qs("fitRouteBtn").onclick=()=>{ const pts=currentFiltered.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]); if(pts.length) historyMap.fitBounds(L.latLngBounds(pts), {padding:[30,30]}); };
+if (qs("todayBtn")) qs("todayBtn").onclick = ()=>{ const now=new Date(), start=new Date(); start.setHours(0,0,0,0); setDateTimeRange(start,now); renderHistory(); };
+if (qs("yesterdayBtn")) qs("yesterdayBtn").onclick = ()=>{ const start=new Date(); start.setDate(start.getDate()-1); start.setHours(0,0,0,0); const end=new Date(start); end.setHours(23,59,0,0); setDateTimeRange(start,end); renderHistory(); };
+if (qs("weekBtn")) qs("weekBtn").onclick = ()=>{ const now=new Date(), start=new Date(); start.setDate(start.getDate()-7); setDateTimeRange(start,now); renderHistory(); };
+if (qs("range1hBtn")) qs("range1hBtn").onclick = ()=>{ const now=new Date(), start=new Date(Date.now()-60*60*1000); setDateTimeRange(start,now); renderHistory(); };
+if (qs("range24hBtn")) qs("range24hBtn").onclick = ()=>{ const now=new Date(), start=new Date(Date.now()-24*60*60*1000); setDateTimeRange(start,now); renderHistory(); };
+if (qs("applyFiltersBtn")) qs("applyFiltersBtn").onclick = renderHistory;
+if (qs("resetFiltersBtn")) qs("resetFiltersBtn").onclick = ()=>{ qs("maxAccuracyFilter").value=""; qs("minSpeedFilter").value=""; qs("maxSpeedFilter").value=""; qs("hideJunkToggle").checked=false; renderHistory(); };
+if (qs("refreshHistoryBtn")) qs("refreshHistoryBtn").onclick = async()=>{ await loadAllData(); showToast("История обновлена","success"); };
+if (qs("fitRouteBtn")) qs("fitRouteBtn").onclick = ()=>{ const pts=currentFiltered.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]); if(pts.length) historyMap.fitBounds(L.latLngBounds(pts), {padding:[30,30]}); };
 qs("deleteRangeBtn").onclick=async()=>{
   const pts=filteredHistory();
   if(!pts.length) return showToast("Нет точек в выбранном диапазоне.","warn");
@@ -1677,30 +1677,30 @@ qs("exportPdfBtn").onclick=async()=>{
 if(qs("exportPngBtn")) qs("exportPngBtn").onclick=()=>exportMapPng();
 if(qs("exportZipBtn")) qs("exportZipBtn").onclick=()=>exportZip();
 
-qs("refreshNowBtn").onclick=async()=>{ await updateNowFromAvailableSources(); showToast("Блок «Сейчас» обновлён","success"); };
-qs("refreshLiveBtn").onclick=()=>refreshLiveNow();
-qs("liveAutoCenterBtn").onclick=()=>{ liveAutoCenter=!liveAutoCenter; qs("liveAutoCenterBtn").textContent=`Автоцентр: ${liveAutoCenter?"вкл":"выкл"}`; };
-qs("btnDiag").onclick=showDiag;
+if (qs("refreshNowBtn")) qs("refreshNowBtn").onclick = async()=>{ await updateNowFromAvailableSources(); showToast("Блок «Сейчас» обновлён","success"); };
+if (qs("refreshLiveBtn")) qs("refreshLiveBtn").onclick = ()=>refreshLiveNow();
+if (qs("liveAutoCenterBtn")) qs("liveAutoCenterBtn").onclick = ()=>{ liveAutoCenter=!liveAutoCenter; qs("liveAutoCenterBtn").textContent=`Автоцентр: ${liveAutoCenter?"вкл":"выкл"}`; };
+if (qs("btnDiag")) qs("btnDiag").onclick = showDiag;
 
-qs("createShareBtn").onclick=()=>createLiveSession();
-qs("clearShareResultBtn").onclick=()=>{ createdShareUrl=""; qs("shareResultBox").classList.add("hidden"); };
-qs("copyCreatedShareBtn").onclick=async()=>{ if(createdShareUrl){ await navigator.clipboard.writeText(createdShareUrl); showToast("Ссылка скопирована","success"); } };
-qs("openCreatedShareBtn").onclick=()=>{ if(createdShareUrl) window.open(createdShareUrl,"_blank","noopener,noreferrer"); };
+if (qs("createShareBtn")) qs("createShareBtn").onclick = ()=>createLiveSession();
+if (qs("clearShareResultBtn")) qs("clearShareResultBtn").onclick = ()=>{ createdShareUrl=""; qs("shareResultBox").classList.add("hidden"); };
+if (qs("copyCreatedShareBtn")) qs("copyCreatedShareBtn").onclick = async()=>{ if(createdShareUrl){ await navigator.clipboard.writeText(createdShareUrl); showToast("Ссылка скопирована","success"); } };
+if (qs("openCreatedShareBtn")) qs("openCreatedShareBtn").onclick = ()=>{ if(createdShareUrl) window.open(createdShareUrl,"_blank","noopener,noreferrer"); };
 
-qs("refreshSessionsBtn").onclick=async()=>{ await loadSessions(); showToast("Live-сессии обновлены","success"); };
-qs("syncActiveSessionsBtn").onclick=()=>syncActiveSessionsFromSelectedUser();
-qs("endAllActiveSessionsBtn").onclick=()=>endAllActiveSessions();
-qs("cleanupSessionsBtn").onclick=()=>cleanupExpiredSessions();
+if (qs("refreshSessionsBtn")) qs("refreshSessionsBtn").onclick = async()=>{ await loadSessions(); showToast("Live-сессии обновлены","success"); };
+if (qs("syncActiveSessionsBtn")) qs("syncActiveSessionsBtn").onclick = ()=>syncActiveSessionsFromSelectedUser();
+if (qs("endAllActiveSessionsBtn")) qs("endAllActiveSessionsBtn").onclick = ()=>endAllActiveSessions();
+if (qs("cleanupSessionsBtn")) qs("cleanupSessionsBtn").onclick = ()=>cleanupExpiredSessions();
 qs("sessionSearchInput").oninput=renderSessions;
 qs("sessionStatusFilter").onchange=renderSessions;
 
 qs("userSelect").onchange=()=>{ selectedUid=qs("userSelect").value; updateUsage(); updateTodaySummary(); renderHistory(); updateNowFromAvailableSources(); renderSessions(); };
 qs("viewModeSelect").onchange=()=>{ updateUsage(); updateTodaySummary(); renderHistory(); updateNowFromAvailableSources(); renderSessions(); };
-qs("refreshUsersBtn").onclick=async()=>{ await loadUsers(); await loadAllData(); showToast("Пользователи обновлены","success"); };
+if (qs("refreshUsersBtn")) qs("refreshUsersBtn").onclick = async()=>{ await loadUsers(); await loadAllData(); showToast("Пользователи обновлены","success"); };
 
-qs("deleteHistoryBtn").onclick=async()=>{ const count = Object.values(historyByUid).flat().length; if(!confirm(`Очистить всю ветку history?\nТочек: ${count}`)) return; try{ await safeAction("Очистка history", async()=>{ await remove(ref(db,"history")); await logAction("delete_history","Очищена ветка history"); await loadAllData(); }, "History очищена"); }catch(e){} };
-qs("deleteLiveBtn").onclick=async()=>{ const c = Object.keys(allSessions||{}).filter(k=>k!=="_init").length; if(!confirm(`Очистить live, liveSessions и liveOwners?\nСессий: ${c}`)) return; try{ await safeAction("Очистка live", async()=>{ await update(ref(db),{live:null,liveSessions:null,liveOwners:null}); await logAction("delete_live","Очищены live/liveSessions/liveOwners"); await loadAllData(); await loadSessions(); }, "Live очищен"); }catch(e){} };
-qs("deleteAllDbBtn").onclick=async()=>{ const code=prompt("Для полной очистки базы введи DELETE"); if(code!=="DELETE") return showToast("Очистка отменена","warn"); if(!confirm("Это удалит history, live, liveSessions, liveOwners и adminLogs. Продолжить?")) return; try{ await safeAction("Полная очистка базы", async()=>{ await update(ref(db),{history:null,live:null,liveSessions:null,liveOwners:null,adminLogs:null}); }, "База очищена"); }catch(e){} };
+if (qs("deleteHistoryBtn")) qs("deleteHistoryBtn").onclick = async()=>{ const count = Object.values(historyByUid).flat().length; if(!confirm(`Очистить всю ветку history?\nТочек: ${count}`)) return; try{ await safeAction("Очистка history", async()=>{ await remove(ref(db,"history")); await logAction("delete_history","Очищена ветка history"); await loadAllData(); }, "History очищена"); }catch(e){} };
+if (qs("deleteLiveBtn")) qs("deleteLiveBtn").onclick = async()=>{ const c = Object.keys(allSessions||{}).filter(k=>k!=="_init").length; if(!confirm(`Очистить live, liveSessions и liveOwners?\nСессий: ${c}`)) return; try{ await safeAction("Очистка live", async()=>{ await update(ref(db),{live:null,liveSessions:null,liveOwners:null}); await logAction("delete_live","Очищены live/liveSessions/liveOwners"); await loadAllData(); await loadSessions(); }, "Live очищен"); }catch(e){} };
+if (qs("deleteAllDbBtn")) qs("deleteAllDbBtn").onclick = async()=>{ const code=prompt("Для полной очистки базы введи DELETE"); if(code!=="DELETE") return showToast("Очистка отменена","warn"); if(!confirm("Это удалит history, live, liveSessions, liveOwners и adminLogs. Продолжить?")) return; try{ await safeAction("Полная очистка базы", async()=>{ await update(ref(db),{history:null,live:null,liveSessions:null,liveOwners:null,adminLogs:null}); }, "База очищена"); }catch(e){} };
 
 
 ["fromDate","fromHour","fromMinute","toDate","toHour","toMinute","maxAccuracyFilter","minSpeedFilter","maxSpeedFilter","hideJunkToggle","viewModeSelect"].forEach(id=>{ if(qs(id)) qs(id).addEventListener("change", persistUiState); });
@@ -1718,22 +1718,22 @@ qs("renameUserBtn").onclick=async()=>{
     showToast("Имя сохранено","success");
   }catch(e){ recordError("renameUser", e); showToast("Ошибка сохранения имени","error"); }
 };
-qs("saveSettingsBtn").onclick=async()=>{ await safeAction("Сохранение настроек", saveAdminSettings, "Настройки сохранены"); };
-qs("backupNowBtn").onclick=async()=>{ await safeAction("Создание backup", async()=>{ await createMonthlyBackup(true); await renderBackups(); }, "Backup создан"); };
+if (qs("saveSettingsBtn")) qs("saveSettingsBtn").onclick = async()=>{ await safeAction("Сохранение настроек", saveAdminSettings, "Настройки сохранены"); };
+if (qs("backupNowBtn")) qs("backupNowBtn").onclick = async()=>{ await safeAction("Создание backup", async()=>{ await createMonthlyBackup(true); await renderBackups(); }, "Backup создан"); };
 qs("downloadBackupBtn").onclick=async()=>{
   const payload = {history:historyByUid, live:liveByUid, liveSessions:allSessions, users:usersMeta, adminSettings};
   downloadText(`backup_${new Date().toISOString().slice(0,19).replace(/[:T]/g,"-")}.json`, JSON.stringify(payload,null,2), "application/json");
   showToast("Backup скачан","success");
 };
-qs("restoreBackupBtn").onclick=()=>qs("restoreBackupFile").click();
+if (qs("restoreBackupBtn")) qs("restoreBackupBtn").onclick = ()=>qs("restoreBackupFile").click();
 qs("restoreBackupFile").onchange=async()=>{ const file=qs("restoreBackupFile").files?.[0]; if(!file) return; const code=prompt("Для восстановления введи RESTORE"); if(code!=="RESTORE") return showToast("Восстановление отменено","warn"); try{ const data=JSON.parse(await file.text()); await update(ref(db), data); await loadAdminSettings(); await loadUsers(); await loadAllData(); await loadSessions(); showToast("Backup восстановлен","success",3400);}catch(e){ recordError("restoreBackupFile",e); showToast("Ошибка восстановления: "+errText(e),"error",3600);} };
-qs("importDataBtn").onclick=()=>safeAction("Импорт данных", importDataFile, "Импорт завершён");
-qs("copyNowCoordsBtn").onclick=async()=>{ const p=getSelectedLiveData()?.lastPoint || getSelectedHistoryPoints().slice(-1)[0]; if(!p) return showToast("Нет координат","warn"); await navigator.clipboard.writeText(`${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}`); showToast("Координаты скопированы","success"); };
-qs("openNowMapsBtn").onclick=()=>{ const p=getSelectedLiveData()?.lastPoint || getSelectedHistoryPoints().slice(-1)[0]; if(!p) return showToast("Нет координат","warn"); window.open(`https://maps.google.com/?q=${encodeURIComponent(Number(p.latitude).toFixed(5)+","+Number(p.longitude).toFixed(5))}`,"_blank"); };
-qs("exportTodayBtn").onclick=()=>{ const now=new Date(), start=new Date(); start.setHours(0,0,0,0); setDateTimeRange(start, now); renderHistory(); persistUiState(); };
-qs("exportYesterdayBtn").onclick=()=>{ const start=new Date(); start.setDate(start.getDate()-1); start.setHours(0,0,0,0); const end=new Date(start); end.setHours(23,59,59,999); setDateTimeRange(start,end); renderHistory(); persistUiState(); };
-qs("exportWeekBtn").onclick=()=>{ const now=new Date(), start=new Date(); start.setDate(start.getDate()-7); setDateTimeRange(start,now); renderHistory(); persistUiState(); };
-qs("lastRouteBtn").onclick=()=>{ const pts=getSelectedHistoryPoints(); if(!pts.length) return showToast("Нет истории","warn"); const last=pts[pts.length-1]; let i=pts.length-1; while(i>0 && (Number(pts[i].speed||0)>2 || Number(pts[i-1].speed||0)>2)) i--; const start=new Date(Number(pts[Math.max(0,i)].timestamp||Date.now())-5*60*1000); const end=new Date(Number(last.timestamp||Date.now())); setDateTimeRange(start,end); renderHistory(); persistUiState(); showToast("Выбран последний маршрут","info"); };
+if (qs("importDataBtn")) qs("importDataBtn").onclick = ()=>safeAction("Импорт данных", importDataFile, "Импорт завершён");
+if (qs("copyNowCoordsBtn")) qs("copyNowCoordsBtn").onclick = async()=>{ const p=getSelectedLiveData()?.lastPoint || getSelectedHistoryPoints().slice(-1)[0]; if(!p) return showToast("Нет координат","warn"); await navigator.clipboard.writeText(`${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}`); showToast("Координаты скопированы","success"); };
+if (qs("openNowMapsBtn")) qs("openNowMapsBtn").onclick = ()=>{ const p=getSelectedLiveData()?.lastPoint || getSelectedHistoryPoints().slice(-1)[0]; if(!p) return showToast("Нет координат","warn"); window.open(`https://maps.google.com/?q=${encodeURIComponent(Number(p.latitude).toFixed(5)+","+Number(p.longitude).toFixed(5))}`,"_blank"); };
+if (qs("exportTodayBtn")) qs("exportTodayBtn").onclick = ()=>{ const now=new Date(), start=new Date(); start.setHours(0,0,0,0); setDateTimeRange(start, now); renderHistory(); persistUiState(); };
+if (qs("exportYesterdayBtn")) qs("exportYesterdayBtn").onclick = ()=>{ const start=new Date(); start.setDate(start.getDate()-1); start.setHours(0,0,0,0); const end=new Date(start); end.setHours(23,59,59,999); setDateTimeRange(start,end); renderHistory(); persistUiState(); };
+if (qs("exportWeekBtn")) qs("exportWeekBtn").onclick = ()=>{ const now=new Date(), start=new Date(); start.setDate(start.getDate()-7); setDateTimeRange(start,now); renderHistory(); persistUiState(); };
+if (qs("lastRouteBtn")) qs("lastRouteBtn").onclick = ()=>{ const pts=getSelectedHistoryPoints(); if(!pts.length) return showToast("Нет истории","warn"); const last=pts[pts.length-1]; let i=pts.length-1; while(i>0 && (Number(pts[i].speed||0)>2 || Number(pts[i-1].speed||0)>2)) i--; const start=new Date(Number(pts[Math.max(0,i)].timestamp||Date.now())-5*60*1000); const end=new Date(Number(last.timestamp||Date.now())); setDateTimeRange(start,end); renderHistory(); persistUiState(); showToast("Выбран последний маршрут","info"); };
 
 function getExportPoints(){
   let pts = qs("expCurrentFilters")?.checked ? filteredHistory() : getVisibleHistoryPoints();
@@ -1751,12 +1751,12 @@ function exportBaseName(suffix=""){
   const d2 = qs("toDate")?.value || d1;
   return `history${suffix? "_"+suffix:""}_${d1}_${d2}`;
 }
-qs("exportJsonBtn").onclick=()=>downloadText(`${exportBaseName()}.json`, JSON.stringify(getExportPoints(),null,2), "application/json");
-qs("exportCsvBtn").onclick=()=>{ const pts=getExportPoints(), lines=["timestamp,latitude,longitude,accuracy,speed"]; pts.forEach(p=>lines.push([p.timestamp??"",p.latitude??"",p.longitude??"",p.accuracy??"",p.speed??""].join(","))); downloadText(`${exportBaseName()}.csv`, lines.join("\n"), "text/csv"); showToast("CSV экспортирован","success"); };
-qs("exportGpxBtn").onclick=()=>{ const pts=getExportPoints(), lines=['<?xml version="1.0" encoding="UTF-8"?>','<gpx version="1.1" creator="MyGps Admin" xmlns="http://www.topografix.com/GPX/1/1">','<trk><name>History Export</name><trkseg>']; pts.forEach(p=>lines.push(`<trkpt lat="${p.latitude}" lon="${p.longitude}"><time>${new Date(Number(p.timestamp||0)).toISOString()}</time></trkpt>`)); lines.push('</trkseg></trk></gpx>'); downloadText(`${exportBaseName()}.gpx`, lines.join(""), "application/gpx+xml"); showToast("GPX экспортирован","success"); };
-qs("exportPdfBtn").onclick=()=>{ const pts=getExportPoints(), s=computeSummary(pts), {jsPDF}=window.jspdf, doc=new jsPDF(); doc.text("MyGps History Report",14,16); doc.text(`Distance: ${s.km.toFixed(2)} km`,14,28); doc.text(`Average speed: ${s.avgSpeed.toFixed(1)} km/h`,14,36); doc.text(`Max speed: ${s.maxSpeed.toFixed(1)} km/h`,14,44); const rows=pts.slice(0,250).map(p=>[fmtTime(p.timestamp), `${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}`, p.speed != null ? Number(p.speed).toFixed(1) : "—"]); doc.autoTable({startY:52, head:[["Time","Coordinates","Speed km/h"]], body:rows, styles:{fontSize:9}}); doc.save(`${exportBaseName()}.pdf`); showToast("PDF экспортирован","success"); };
-qs("exportZipBtn").onclick=async()=>{ const pts=getExportPoints(); const zip=new JSZip(); zip.file(`${exportBaseName()}.json`, JSON.stringify(pts,null,2)); const lines=["timestamp,latitude,longitude,accuracy,speed"]; pts.forEach(p=>lines.push([p.timestamp??"",p.latitude??"",p.longitude??"",p.accuracy??"",p.speed??""].join(","))); zip.file(`${exportBaseName()}.csv`, lines.join("\n")); const blob=await zip.generateAsync({type:"blob"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=`${exportBaseName()}.zip`; a.click(); URL.revokeObjectURL(url); showToast("ZIP экспортирован","success"); };
-qs("exportPngBtn").onclick=async()=>{ const canvas=await html2canvas(qs("historyMap")); canvas.toBlob(blob=>{ const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=`${exportBaseName()}.png`; a.click(); URL.revokeObjectURL(url); showToast("PNG экспортирован","success"); }); };
+if (qs("exportJsonBtn")) qs("exportJsonBtn").onclick = ()=>downloadText(`${exportBaseName()}.json`, JSON.stringify(getExportPoints(),null,2), "application/json");
+if (qs("exportCsvBtn")) qs("exportCsvBtn").onclick = ()=>{ const pts=getExportPoints(), lines=["timestamp,latitude,longitude,accuracy,speed"]; pts.forEach(p=>lines.push([p.timestamp??"",p.latitude??"",p.longitude??"",p.accuracy??"",p.speed??""].join(","))); downloadText(`${exportBaseName()}.csv`, lines.join("\n"), "text/csv"); showToast("CSV экспортирован","success"); };
+if (qs("exportGpxBtn")) qs("exportGpxBtn").onclick = ()=>{ const pts=getExportPoints(), lines=['<?xml version="1.0" encoding="UTF-8"?>','<gpx version="1.1" creator="MyGps Admin" xmlns="http://www.topografix.com/GPX/1/1">','<trk><name>History Export</name><trkseg>']; pts.forEach(p=>lines.push(`<trkpt lat="${p.latitude}" lon="${p.longitude}"><time>${new Date(Number(p.timestamp||0)).toISOString()}</time></trkpt>`)); lines.push('</trkseg></trk></gpx>'); downloadText(`${exportBaseName()}.gpx`, lines.join(""), "application/gpx+xml"); showToast("GPX экспортирован","success"); };
+if (qs("exportPdfBtn")) qs("exportPdfBtn").onclick = ()=>{ const pts=getExportPoints(), s=computeSummary(pts), {jsPDF}=window.jspdf, doc=new jsPDF(); doc.text("MyGps History Report",14,16); doc.text(`Distance: ${s.km.toFixed(2)} km`,14,28); doc.text(`Average speed: ${s.avgSpeed.toFixed(1)} km/h`,14,36); doc.text(`Max speed: ${s.maxSpeed.toFixed(1)} km/h`,14,44); const rows=pts.slice(0,250).map(p=>[fmtTime(p.timestamp), `${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}`, p.speed != null ? Number(p.speed).toFixed(1) : "—"]); doc.autoTable({startY:52, head:[["Time","Coordinates","Speed km/h"]], body:rows, styles:{fontSize:9}}); doc.save(`${exportBaseName()}.pdf`); showToast("PDF экспортирован","success"); };
+if (qs("exportZipBtn")) qs("exportZipBtn").onclick = async()=>{ const pts=getExportPoints(); const zip=new JSZip(); zip.file(`${exportBaseName()}.json`, JSON.stringify(pts,null,2)); const lines=["timestamp,latitude,longitude,accuracy,speed"]; pts.forEach(p=>lines.push([p.timestamp??"",p.latitude??"",p.longitude??"",p.accuracy??"",p.speed??""].join(","))); zip.file(`${exportBaseName()}.csv`, lines.join("\n")); const blob=await zip.generateAsync({type:"blob"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=`${exportBaseName()}.zip`; a.click(); URL.revokeObjectURL(url); showToast("ZIP экспортирован","success"); };
+if (qs("exportPngBtn")) qs("exportPngBtn").onclick = async()=>{ const canvas=await html2canvas(qs("historyMap")); canvas.toBlob(blob=>{ const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=`${exportBaseName()}.png`; a.click(); URL.revokeObjectURL(url); showToast("PNG экспортирован","success"); }); };
 
 onAuthStateChanged(auth, async user => {
   qs("errorBox").classList.add("hidden");
