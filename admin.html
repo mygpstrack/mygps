@@ -496,7 +496,8 @@ let adminSettings = {
 };
 let errorLogs = [];
 let autoRefreshTimer = null;
-const geocodeCache = {};
+const geocodeCache = JSON.parse(localStorage.getItem("geocodeCache") || "{}");
+let geocodeQueue = Promise.resolve();
 
 const fmtTime = v => v ? new Date(v).toLocaleString("ru-RU") : "—";
 const errText = e => e?.message || e?.code || String(e);
@@ -784,26 +785,31 @@ async function reverseGeocode(lat, lon){
   const key = `${Number(lat).toFixed(5)},${Number(lon).toFixed(5)}`;
   if (geocodeCache[key]) return geocodeCache[key];
 
-  const fetchAddr = async () => {
-    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&accept-language=ru`;
-    const res = await fetch(url, { headers: { "Accept":"application/json" } });
-    const json = await res.json();
-    return json?.display_name || "";
+  const task = async () => {
+    try {
+      const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&accept-language=ru`;
+      const res = await fetch(url, {
+        headers: { "Accept": "application/json" }
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      const addr = json?.display_name || "Адрес не найден";
+      geocodeCache[key] = addr;
+      try {
+        localStorage.setItem("geocodeCache", JSON.stringify(geocodeCache));
+      } catch (e) {}
+      return addr;
+    } catch (e) {
+      console.warn("reverseGeocode error", e);
+      return "Адрес не найден";
+    }
   };
 
-  try {
-    let addr = await fetchAddr();
-    if (!addr) {
-      await new Promise(r => setTimeout(r, 900));
-      addr = await fetchAddr();
-    }
-    addr = addr || "Адрес не найден";
-    geocodeCache[key] = addr;
-    return addr;
-  } catch (e) {
-    console.warn("reverseGeocode error", e);
-    return "Адрес не найден";
-  }
+  geocodeQueue = geocodeQueue
+    .then(() => new Promise(r => setTimeout(r, 700)))
+    .then(task);
+
+  return geocodeQueue;
 }
 
 function distanceMeters(a,b){
