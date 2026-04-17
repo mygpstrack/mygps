@@ -437,6 +437,20 @@ setInterval(() => {
   qs('d_signal').innerText = meta.signal;
 }, 1000);
 
+  setInterval(() => {
+  if(!currentExpiresAt) return;
+
+  const leftMs = Math.max(0, currentExpiresAt - Date.now());
+  const leftText = fmtCountdown(leftMs);
+
+  qs('time').innerText = leftText;
+  qs('d_time').innerText = leftText;
+
+  if(leftMs <= 0){
+    showEnd('Время действия ссылки истекло.');
+  }
+}, 1000);
+
 if(!sessionId){
   showEnd('В ссылке отсутствует параметр session.');
 }else{
