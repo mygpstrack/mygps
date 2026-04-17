@@ -496,292 +496,35 @@ let adminSettings = {
 };
 let errorLogs = [];
 let autoRefreshTimer = null;
+
 const geocodeCache = {};
 
-const fmtTime = v => v ? new Date(v).toLocaleString("ru-RU") : "—";
-const errText = e => e?.message || e?.code || String(e);
-
-function statusByPoint(point){
-  if(!point) return { text:"Нет данных", cls:"offline" };
-  const speed = Number(point.speed || 0);
-  const ts = Number(point.timestamp || 0);
-  const age = Date.now() - ts;
-  const offlineMs = Number(adminSettings?.offlineMinutes || 5) * 60 * 1000;
-
-  if(age > offlineMs) return { text:"Нет сигнала", cls:"offline" };
-  if(speed > 2) return { text:"Движение", cls:"online" };
-  return { text:"Стоит", cls:"idle" };
-}
-
-function isCleanPoint(prev, point){
-  if(!point) return false;
-  if(point.latitude == null || point.longitude == null) return false;
-
-  const acc = Number(point.accuracy || 9999);
-  if(acc > 100) return false;
-
-  if(prev && prev.latitude != null && prev.longitude != null && prev.timestamp && point.timestamp){
-    const dt = (Number(point.timestamp) - Number(prev.timestamp)) / 1000;
-    if(dt > 0){
-      const dist = Math.sqrt(
-        Math.pow(Number(point.latitude) - Number(prev.latitude), 2) +
-        Math.pow(Number(point.longitude) - Number(prev.longitude), 2)
-      ) * 111000;
-      const calcSpeed = (dist / dt) * 3.6;
-      if(calcSpeed > 250) return false;
-    }
-  }
-  return true;
-}
-
-function persistUiState(){
-  try{
-    const state = {
-      selectedUid: (typeof selectedUid !== "undefined" ? selectedUid : ""),
-      activeTab: document.querySelector(".tab-btn.active")?.dataset?.tab || "nowPanel",
-      fromDate: qs("fromDate")?.value || "",
-      fromHour: qs("fromHour")?.value || "",
-      fromMinute: qs("fromMinute")?.value || "",
-      toDate: qs("toDate")?.value || "",
-      toHour: qs("toHour")?.value || "",
-      toMinute: qs("toMinute")?.value || "",
-      maxAccuracyFilter: qs("maxAccuracyFilter")?.value || "",
-      minSpeedFilter: qs("minSpeedFilter")?.value || "",
-      maxSpeedFilter: qs("maxSpeedFilter")?.value || "",
-      hideJunkToggle: !!qs("hideJunkToggle")?.checked,
-      viewModeSelect: qs("viewModeSelect")?.value || "selected",
-      toastPosition: qs("toastPositionSelect")?.value || "",
-      autoRefreshSec: qs("autoRefreshSecSelect")?.value || ""
-    };
-    localStorage.setItem("admin_ui_state", JSON.stringify(state));
-  }catch(e){
-    console.warn("persistUiState error", e);
-  }
-}
-
-function restoreUiState(){
-  try{
-    const raw = localStorage.getItem("admin_ui_state");
-    if(!raw) return;
-    const state = JSON.parse(raw);
-
-    if(qs("fromDate") && state.fromDate) qs("fromDate").value = state.fromDate;
-    if(qs("fromHour") && state.fromHour) qs("fromHour").value = state.fromHour;
-    if(qs("fromMinute") && state.fromMinute) qs("fromMinute").value = state.fromMinute;
-    if(qs("toDate") && state.toDate) qs("toDate").value = state.toDate;
-    if(qs("toHour") && state.toHour) qs("toHour").value = state.toHour;
-    if(qs("toMinute") && state.toMinute) qs("toMinute").value = state.toMinute;
-
-    if(qs("maxAccuracyFilter")) qs("maxAccuracyFilter").value = state.maxAccuracyFilter || "";
-    if(qs("minSpeedFilter")) qs("minSpeedFilter").value = state.minSpeedFilter || "";
-    if(qs("maxSpeedFilter")) qs("maxSpeedFilter").value = state.maxSpeedFilter || "";
-    if(qs("hideJunkToggle")) qs("hideJunkToggle").checked = !!state.hideJunkToggle;
-    if(qs("viewModeSelect") && state.viewModeSelect) qs("viewModeSelect").value = state.viewModeSelect;
-
-    if(qs("toastPositionSelect") && state.toastPosition) qs("toastPositionSelect").value = state.toastPosition;
-    if(qs("autoRefreshSecSelect") && state.autoRefreshSec) qs("autoRefreshSecSelect").value = state.autoRefreshSec;
-
-    if(state.activeTab){
-      document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
-      document.querySelectorAll("#nowPanel,#historyPanel,#reportsPanel,#usagePanel,#sessionsPanel,#journalPanel,#errorsPanel,#settingsPanel").forEach(p=>p.classList.add("hidden"));
-      const btn = document.querySelector(`.tab-btn[data-tab="${state.activeTab}"]`);
-      if(btn){
-        btn.classList.add("active");
-        const panel = qs(btn.dataset.tab);
-        if(panel) panel.classList.remove("hidden");
-      }
-    }
-
-    if(state.selectedUid && qs("userSelect")){
-      const hasOption = [...qs("userSelect").options].some(o => o.value === state.selectedUid);
-      if(hasOption){
-        qs("userSelect").value = state.selectedUid;
-        if(typeof selectedUid !== "undefined") selectedUid = state.selectedUid;
-      }
-    }
-  }catch(e){
-    console.warn("restoreUiState error", e);
-  }
-}
-
-const isLegacyUid = (uid) => uid === "default";
-
-const getToastHost = () => {
-  let host = document.getElementById("toastHost");
-  if (!host) {
-    host = document.createElement("div");
-    host.id = "toastHost";
-    host.style.cssText = "position:fixed;z-index:99999;display:flex;flex-direction:column;gap:10px;max-width:360px;pointer-events:none";
-    document.body.appendChild(host);
-  }
-  return host;
-};
-
-function applyToastPosition(){
-  const host = getToastHost();
-  const pos = adminSettings.toastPosition || "top-right";
-  host.style.top = "";
-  host.style.bottom = "";
-  host.style.left = "";
-  host.style.right = "";
-  if(pos.startsWith("top")) host.style.top = "18px";
-  else host.style.bottom = "18px";
-  if(pos.endsWith("right")) host.style.right = "18px";
-  else host.style.left = "18px";
-}
-
-function showToast(message, type="success", duration=2600){
-  const cfg = {
-    success:{bg:"#15803d", icon:"✔"},
-    error:{bg:"#b91c1c", icon:"❌"},
-    warn:{bg:"#b45309", icon:"⚠"},
-    info:{bg:"#2563eb", icon:"ℹ"}
-  }[type] || {bg:"#15803d", icon:"✔"};
-  const host = getToastHost();
-  applyToastPosition();
-  const toast = document.createElement("div");
-  toast.style.pointerEvents = "auto";
-  toast.style.display = "flex";
-  toast.style.alignItems = "center";
-  toast.style.gap = "10px";
-  toast.style.padding = "12px 14px";
-  toast.style.borderRadius = "14px";
-  toast.style.background = cfg.bg;
-  toast.style.color = "#fff";
-  toast.style.boxShadow = "0 10px 28px rgba(0,0,0,.28)";
-  toast.style.fontWeight = "600";
-  toast.style.lineHeight = "1.35";
-  toast.style.opacity = "0";
-  toast.style.transform = (adminSettings.toastPosition||"top-right").startsWith("top") ? "translateY(-8px)" : "translateY(8px)";
-  toast.style.transition = "all .22s ease";
-  toast.style.wordBreak = "break-word";
-
-  const iconEl = document.createElement("span");
-  iconEl.textContent = cfg.icon;
-  iconEl.style.fontSize = "16px";
-  iconEl.style.flex = "0 0 auto";
-
-  const textEl = document.createElement("div");
-  textEl.textContent = message;
-  textEl.style.flex = "1 1 auto";
-
-  const closeEl = document.createElement("button");
-  closeEl.textContent = "×";
-  closeEl.style.border = "0";
-  closeEl.style.background = "transparent";
-  closeEl.style.color = "#fff";
-  closeEl.style.fontSize = "18px";
-  closeEl.style.cursor = "pointer";
-  closeEl.style.padding = "0";
-  closeEl.style.marginLeft = "6px";
-  closeEl.style.lineHeight = "1";
-
-  toast.appendChild(iconEl);
-  toast.appendChild(textEl);
-  toast.appendChild(closeEl);
-  host.appendChild(toast);
-
-  requestAnimationFrame(() => {
-    toast.style.opacity = "1";
-    toast.style.transform = "translateY(0)";
-  });
-
-  const removeToast = () => {
-    toast.style.opacity = "0";
-    toast.style.transform = (adminSettings.toastPosition||"top-right").startsWith("top") ? "translateY(-8px)" : "translateY(8px)";
-    setTimeout(() => toast.remove(), 220);
-  };
-  const timer = setTimeout(removeToast, duration);
-  closeEl.onclick = () => {
-    clearTimeout(timer);
-    removeToast();
-  };
-}
-
-function recordError(source, error){
-  const item = { ts: Date.now(), source, message: errText(error) };
-  errorLogs.unshift(item);
-  if (errorLogs.length > 500) errorLogs = errorLogs.slice(0, 500);
-  const tbody = qs("errorsTbody");
-  const empty = qs("errorsEmpty");
-  if (tbody) {
-    if (empty) empty.classList.add("hidden");
-    const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${new Date(item.ts).toLocaleString("ru-RU")}</td><td>${item.source}</td><td>${item.message}</td>`;
-    tbody.prepend(tr);
-  }
-}
-
-async function safeAction(title, fn, successText){
-  const loader = qs("loaderOverlay");
-  if (loader) loader.classList.remove("hidden");
-  try{
-    await fn();
-    if(successText) showToast(successText, "success");
-  }catch(e){
-    recordError(title, e);
-    showToast(`${title}: ${errText(e)}`, "error", 3600);
-    throw e;
-  }finally{
-    if (loader) loader.classList.add("hidden");
-  }
-}
-
-function getDisplayName(uid){
-  if(!uid) return "";
-  if(isLegacyUid(uid)) return "legacy/default";
-  return usersMeta?.[uid]?.name || usersMeta?.[uid]?.email || "Admin";
-}
-
-function formatAccuracy(v){ return v != null ? `${Number(v).toFixed(2)} м` : "—"; }
-function formatDuration(ms){ if(!ms||ms<0) return "—"; const s=Math.floor(ms/1000), h=Math.floor(s/3600), m=Math.floor((s%3600)/60); return h>0?`${h}ч ${m}м`:`${m}м`; }
-function formatIdle(ms){ if(!ms||ms<1000) return "—"; const s=Math.floor(ms/1000), h=Math.floor(s/3600), m=Math.floor((s%3600)/60), sec=s%60; return h>0?`${h}ч ${m}м ${sec}с`:`${m}м ${sec}с`; }
-function formatSize(bytes){ if(bytes<1024) return `${bytes} B`; if(bytes<1024*1024) return `${(bytes/1024).toFixed(1)} KB`; return `${(bytes/(1024*1024)).toFixed(2)} MB`; }
-function parseDateTime(dateVal,hVal,mVal){ if(!dateVal) return null; return new Date(`${dateVal}T${hVal||"00"}:${mVal||"00"}:00`).getTime(); }
-function userLabel(uid){ return getDisplayName(uid); }
-
-function renderHeaderTime(){
-  const d = new Date(), days = ["воскресенье","понедельник","вторник","среда","четверг","пятница","суббота"];
-  qs("pageDateTime").textContent = `${days[d.getDay()]}, ${d.toLocaleString("ru-RU")}`;
-}
-setInterval(renderHeaderTime, 1000); renderHeaderTime();
-
-function populateTimeSelects(){
-  const hourOpts = Array.from({length:24}, (_,i)=>`<option value="${String(i).padStart(2,"0")}">${String(i).padStart(2,"0")}</option>`).join("");
-  const minuteOpts = Array.from({length:60}, (_,i)=>`<option value="${String(i).padStart(2,"0")}">${String(i).padStart(2,"0")}</option>`).join("");
-  qs("fromHour").innerHTML = hourOpts; qs("toHour").innerHTML = hourOpts;
-  qs("fromMinute").innerHTML = minuteOpts; qs("toMinute").innerHTML = minuteOpts;
-}
-populateTimeSelects();
-
-function toLocalDateInputValue(date){
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2,"0");
-  const d = String(date.getDate()).padStart(2,"0");
-  return `${y}-${m}-${d}`;
-}
-function setDateTimeRange(start,end){
-  qs("fromDate").value = toLocalDateInputValue(start);
-  qs("fromHour").value = String(start.getHours()).padStart(2,"0");
-  qs("fromMinute").value = String(start.getMinutes()).padStart(2,"0");
-  qs("toDate").value = toLocalDateInputValue(end);
-  qs("toHour").value = String(end.getHours()).padStart(2,"0");
-  qs("toMinute").value = String(end.getMinutes()).padStart(2,"0");
-}
-function setDefaultPeriodToday(){ const now=new Date(), start=new Date(); start.setHours(0,0,0,0); setDateTimeRange(start,now); }
-
-document.querySelectorAll(".tab-btn").forEach(btn=>{
-  btn.onclick=()=>{
-    document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
-    document.querySelectorAll("#nowPanel,#historyPanel,#reportsPanel,#usagePanel,#sessionsPanel,#journalPanel,#errorsPanel,#settingsPanel").forEach(p=>p.classList.add("hidden"));
-    btn.classList.add("active");
-    qs(btn.dataset.tab).classList.remove("hidden");
-    setTimeout(()=>{ historyMap.invalidateSize(); liveMap.invalidateSize(); sessionMap.invalidateSize(); speedChart?.resize(); distanceChart?.resize(); },50);
-  };
-});
-
 async function reverseGeocode(lat, lon){
-  const key = `${Number(lat).toFixed(5)},${Number(lon).toFixed(5)}`;
+  const key = lat.toFixed(5)+","+lon.toFixed(5);
+  if(geocodeCache[key]) return geocodeCache[key];
+
+  async function fetchAddr(){
+    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`;
+    const res = await fetch(url, {headers:{'User-Agent':'mygps-app'}});
+    const json = await res.json();
+    return json.display_name;
+  }
+
+  try{
+    let addr = await fetchAddr();
+    if(!addr){
+      await new Promise(r=>setTimeout(r,1000));
+      addr = await fetchAddr();
+    }
+    addr = addr || "Адрес не найден";
+    geocodeCache[key] = addr;
+    return addr;
+  }catch(e){
+    console.warn("geocode error", e);
+    return "Адрес не найден";
+  }
+}
+,${Number(lon).toFixed(5)}`;
   if (geocodeCache[key]) return geocodeCache[key];
   try {
     const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&accept-language=ru`;
@@ -1072,8 +815,8 @@ async function renderHistory() {
   const first = pts[0];
   const last = pts[pts.length - 1];
 
-  qs("routeStartCoords").textContent = "Загрузка адреса…";
-  qs("routeEndCoords").textContent = "Загрузка адреса…";
+  qs("routeStartCoords").textContent = "Поиск адреса...";
+  qs("routeEndCoords").textContent = "Поиск адреса...";
   qs("routeDuration").textContent = formatDuration(Number(last.timestamp || 0) - Number(first.timestamp || 0));
   qs("routeStops").textContent = String(stops.length);
   qs("stopsNotice").textContent = stops.length ? `Стоянки: ${stops.map(s=>formatDuration(s.duration)).join(", ")}` : "Стоянок не найдено.";
