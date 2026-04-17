@@ -500,6 +500,77 @@ const geocodeCache = {};
 
 const fmtTime = v => v ? new Date(v).toLocaleString("ru-RU") : "—";
 const errText = e => e?.message || e?.code || String(e);
+
+function persistUiState(){
+  try{
+    const state = {
+      selectedUid: typeof selectedUid !== "undefined" ? selectedUid : "",
+      activeTab: document.querySelector(".tab-btn.active")?.dataset?.tab || "nowPanel",
+      fromDate: qs("fromDate")?.value || "",
+      fromHour: qs("fromHour")?.value || "",
+      fromMinute: qs("fromMinute")?.value || "",
+      toDate: qs("toDate")?.value || "",
+      toHour: qs("toHour")?.value || "",
+      toMinute: qs("toMinute")?.value || "",
+      maxAccuracyFilter: qs("maxAccuracyFilter")?.value || "",
+      minSpeedFilter: qs("minSpeedFilter")?.value || "",
+      maxSpeedFilter: qs("maxSpeedFilter")?.value || "",
+      hideJunkToggle: !!qs("hideJunkToggle")?.checked,
+      viewModeSelect: qs("viewModeSelect")?.value || "selected",
+      toastPosition: qs("toastPositionSelect")?.value || "",
+      autoRefreshSec: qs("autoRefreshSecSelect")?.value || ""
+    };
+    localStorage.setItem("admin_ui_state", JSON.stringify(state));
+  }catch(e){
+    console.warn("persistUiState error", e);
+  }
+}
+
+function restoreUiState(){
+  try{
+    const raw = localStorage.getItem("admin_ui_state");
+    if(!raw) return;
+    const state = JSON.parse(raw);
+
+    if(qs("fromDate") && state.fromDate) qs("fromDate").value = state.fromDate;
+    if(qs("fromHour") && state.fromHour) qs("fromHour").value = state.fromHour;
+    if(qs("fromMinute") && state.fromMinute) qs("fromMinute").value = state.fromMinute;
+    if(qs("toDate") && state.toDate) qs("toDate").value = state.toDate;
+    if(qs("toHour") && state.toHour) qs("toHour").value = state.toHour;
+    if(qs("toMinute") && state.toMinute) qs("toMinute").value = state.toMinute;
+
+    if(qs("maxAccuracyFilter")) qs("maxAccuracyFilter").value = state.maxAccuracyFilter || "";
+    if(qs("minSpeedFilter")) qs("minSpeedFilter").value = state.minSpeedFilter || "";
+    if(qs("maxSpeedFilter")) qs("maxSpeedFilter").value = state.maxSpeedFilter || "";
+    if(qs("hideJunkToggle")) qs("hideJunkToggle").checked = !!state.hideJunkToggle;
+    if(qs("viewModeSelect") && state.viewModeSelect) qs("viewModeSelect").value = state.viewModeSelect;
+
+    if(qs("toastPositionSelect") && state.toastPosition) qs("toastPositionSelect").value = state.toastPosition;
+    if(qs("autoRefreshSecSelect") && state.autoRefreshSec) qs("autoRefreshSecSelect").value = state.autoRefreshSec;
+
+    if(state.activeTab){
+      document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+      document.querySelectorAll("#nowPanel,#historyPanel,#reportsPanel,#usagePanel,#sessionsPanel,#journalPanel,#errorsPanel,#settingsPanel").forEach(p=>p.classList.add("hidden"));
+      const btn = document.querySelector(`.tab-btn[data-tab="${state.activeTab}"]`);
+      if(btn){
+        btn.classList.add("active");
+        const panel = qs(btn.dataset.tab);
+        if(panel) panel.classList.remove("hidden");
+      }
+    }
+
+    if(state.selectedUid && qs("userSelect")){
+      const hasOption = [...qs("userSelect").options].some(o => o.value === state.selectedUid);
+      if(hasOption){
+        qs("userSelect").value = state.selectedUid;
+        if(typeof selectedUid !== "undefined") selectedUid = state.selectedUid;
+      }
+    }
+  }catch(e){
+    console.warn("restoreUiState error", e);
+  }
+}
+
 const isLegacyUid = (uid) => uid === "default";
 
 const getToastHost = () => {
