@@ -2367,6 +2367,21 @@
     </div>
     <div id="js-global-screen-reader-notice" class="sr-only mt-n1" aria-live="polite" aria-atomic="true" ></div>
     <div id="js-global-screen-reader-notice-assertive" class="sr-only mt-n1" aria-live="assertive" aria-atomic="true"></div>
+ <script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", async () => {
+    try {
+      const reg = await navigator.serviceWorker.register("/mygps/sw.js", {
+        scope: "/mygps/"
+      });
+      console.log("SW registered:", reg.scope);
+    } catch (e) {
+      console.error("SW register error:", e);
+    }
+  });
+}
+</script>
+    
   </body>
 </html>
 
