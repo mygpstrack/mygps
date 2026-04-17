@@ -229,8 +229,7 @@
             <button id="exportCsvBtn" class="secondary">CSV</button>
             <button id="exportGpxBtn" class="secondary">GPX</button>
             <button id="exportPdfBtn" class="secondary">PDF</button>
-            <button id="exportZipBtn" class="secondary">ZIP</button>
-            <button id="exportPngBtn" class="secondary">PNG</button>
+            
           </div>
         </div>
       </div>
@@ -1068,11 +1067,18 @@ async function renderHistory() {
   const first = pts[0];
   const last = pts[pts.length - 1];
 
-  qs("routeStartCoords").textContent = `${Number(first.latitude).toFixed(5)}, ${Number(first.longitude).toFixed(5)}`;
-  qs("routeEndCoords").textContent = `${Number(last.latitude).toFixed(5)}, ${Number(last.longitude).toFixed(5)}`;
+  qs("routeStartCoords").textContent = "Загрузка адреса…";
+  qs("routeEndCoords").textContent = "Загрузка адреса…";
   qs("routeDuration").textContent = formatDuration(Number(last.timestamp || 0) - Number(first.timestamp || 0));
   qs("routeStops").textContent = String(stops.length);
   qs("stopsNotice").textContent = stops.length ? `Стоянки: ${stops.map(s=>formatDuration(s.duration)).join(", ")}` : "Стоянок не найдено.";
+
+  reverseGeocode(Number(first.latitude), Number(first.longitude)).then(addr => {
+    if(qs("routeStartCoords")) qs("routeStartCoords").textContent = addr;
+  });
+  reverseGeocode(Number(last.latitude), Number(last.longitude)).then(addr => {
+    if(qs("routeEndCoords")) qs("routeEndCoords").textContent = addr;
+  });
 
   for (const p of pts.slice().reverse()) {
     const tr = document.createElement("tr");
@@ -1123,6 +1129,7 @@ async function renderHistory() {
     tbody.appendChild(tr);
   }
 
+  updateCharts(pts);
   await updateHistoryMap(pts);
   qs("startAddress").textContent = await reverseGeocode(Number(first.latitude), Number(first.longitude));
   qs("endAddress").textContent = await reverseGeocode(Number(last.latitude), Number(last.longitude));
@@ -1670,7 +1677,7 @@ qs("exportPdfBtn").onclick=async()=>{
 if(qs("exportPngBtn")) qs("exportPngBtn").onclick=()=>exportMapPng();
 if(qs("exportZipBtn")) qs("exportZipBtn").onclick=()=>exportZip();
 
-qs("refreshNowBtn").onclick=()=>updateNowFromAvailableSources();
+qs("refreshNowBtn").onclick=async()=>{ await updateNowFromAvailableSources(); showToast("Блок «Сейчас» обновлён","success"); };
 qs("refreshLiveBtn").onclick=()=>refreshLiveNow();
 qs("liveAutoCenterBtn").onclick=()=>{ liveAutoCenter=!liveAutoCenter; qs("liveAutoCenterBtn").textContent=`Автоцентр: ${liveAutoCenter?"вкл":"выкл"}`; };
 qs("btnDiag").onclick=showDiag;
