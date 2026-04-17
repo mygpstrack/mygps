@@ -184,6 +184,7 @@ let tailLine=L.polyline([], {color:'#3b82f6', weight:4, opacity:0.9}).addTo(map)
 let warnedFive=false;
 let warnedOne=false;
 let lastPoint=null;
+let currentExpiresAt=null;
 let displayPoint=null;
 let animationFrameId=null;
 
@@ -337,6 +338,7 @@ function animateMarkerTo(target){
 }
 
 function updateUi(p, expiresAt){
+  currentExpiresAt=expiresAt;
   const meta=getStatusMeta(p);
   const leftMs=expiresAt ? Math.max(0, Number(expiresAt)-Date.now()) : 0;
   const leftText=expiresAt ? fmtCountdown(leftMs) : '—';
