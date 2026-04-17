@@ -1,73 +1,390 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>MyGps Live</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
-  <style>
-    :root{--bg:#0f172a;--card:#111827;--muted:#94a3b8;--text:#e5e7eb;--accent:#22c55e;--warn:#eab308;--danger:#ef4444;--border:#1f2937;--blue:#2563eb}
-    *{box-sizing:border-box} body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text)}
-    .wrap{max-width:1100px;margin:0 auto;padding:16px}.top{display:grid;grid-template-columns:1.3fr .7fr;gap:16px}
-    .card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:16px;box-shadow:0 8px 30px rgba(0,0,0,.18)}
-    h1,h2,p{margin:0}.sub{color:var(--muted);margin-top:6px;line-height:1.6}
-    #map{width:100%;height:65vh;border-radius:16px;overflow:hidden;margin-top:16px;border:1px solid var(--border)}
-    .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px}
-    .stat{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:14px;padding:12px}
-    .label{color:var(--muted);font-size:13px;margin-bottom:6px}.value{font-size:18px;font-weight:700;line-height:1.2;word-break:break-word}
-    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px}
-    .pill{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;border:1px solid var(--border);background:rgba(255,255,255,.03);color:var(--text);font-size:14px}
-    .dot{width:10px;height:10px;border-radius:50%;display:inline-block}.ok{background:var(--accent)}.warn{background:var(--warn)}.bad{background:var(--danger)}
-    .btn{border:0;border-radius:12px;padding:10px 14px;font-weight:600;cursor:pointer;background:#1d4ed8;color:white}.btn.secondary{background:#374151}
-    .footer{margin-top:16px;color:var(--muted);font-size:13px}.hidden{display:none!important}.emptyState{max-width:760px;margin:80px auto}
-    @media (max-width:800px){.top{grid-template-columns:1fr}#map{height:55vh}}
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>MyGps Live</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+<style>
+:root{
+  --bg:#0b1220;
+  --panel:rgba(0,0,0,.75);
+  --panel-card:rgba(255,255,255,.05);
+  --line:rgba(255,255,255,.10);
+  --text:#fff;
+  --muted:#cbd5e1;
+  --green:#22c55e;
+  --yellow:#f59e0b;
+  --red:#ef4444;
+  --gray:#94a3b8;
+  --blue:#3b82f6;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+#map{position:absolute;inset:0;z-index:1}
+.top{
+  position:fixed;top:10px;left:10px;right:10px;
+  display:grid;grid-template-columns:1fr 1fr;gap:8px;z-index:1000;
+}
+.card{
+  background:rgba(0,0,0,.62);
+  padding:10px;border-radius:12px;
+  font-size:13px;text-align:center;
+  backdrop-filter:blur(10px);
+  border:1px solid var(--line);
+  box-shadow:0 10px 26px rgba(0,0,0,.24);
+}
+.card b{font-size:15px;line-height:1.15}
+.bottom{
+  position:fixed;left:10px;right:10px;bottom:10px;
+  background:var(--panel);
+  border-radius:18px;padding:10px;
+  z-index:1000;border:1px solid var(--line);
+  box-shadow:0 -10px 30px rgba(0,0,0,.32);
+  backdrop-filter:blur(12px);
+}
+.bottom.full{max-height:55vh;overflow:auto}
+button{
+  width:100%;padding:10px;border:none;
+  border-radius:10px;background:#1f2937;color:#fff;
+  font-size:14px;font-weight:bold;cursor:pointer;
+}
+.details{display:none;margin-top:10px;font-size:13px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.box{
+  background:var(--panel-card);
+  padding:8px;border-radius:10px;
+  line-height:1.35;border:1px solid var(--line);
+}
+.followBtn{margin-top:10px;background:#14532d}
+.followBtn.off{background:#7f1d1d}
+.alert{
+  position:fixed;top:30%;left:50%;
+  transform:translateX(-50%);
+  background:rgba(0,0,0,.78);
+  padding:14px 16px;border-radius:14px;display:none;z-index:2000;
+  border:1px solid rgba(255,255,255,.12);
+  box-shadow:0 12px 34px rgba(0,0,0,.35);
+  min-width:280px;max-width:88vw;text-align:center;font-weight:800;
+}
+.alert small{display:block;margin-top:6px;color:var(--muted);font-size:12px;font-weight:700}
+.end-overlay{
+  position:fixed;inset:0;z-index:3000;display:none;align-items:center;justify-content:center;
+  background:radial-gradient(circle at top,#111827,#020617 70%);
+  padding:22px;
+}
+.end-card{
+  width:min(92vw,420px);
+  background:rgba(15,23,42,.92);
+  border:1px solid rgba(255,255,255,.12);
+  border-radius:24px;padding:26px 20px;text-align:center;
+  box-shadow:0 18px 50px rgba(0,0,0,.38)
+}
+.end-icon{font-size:52px;line-height:1}
+.end-title{font-size:28px;font-weight:900;margin-top:12px}
+.end-text{font-size:15px;color:var(--muted);margin-top:10px;line-height:1.5}
+.marker-arrow{
+  width:0;height:0;
+  border-left:10px solid transparent;
+  border-right:10px solid transparent;
+  border-bottom:22px solid var(--green);
+  transform-origin:50% 80%;
+}
+.marker-circle{
+  width:16px;height:16px;border-radius:50%;
+  border:3px solid white;
+}
+.leaflet-control-attribution{
+  opacity:.18;
+  font-size:10px;
+  background:rgba(0,0,0,.10) !important;
+  color:#d1d5db !important;
+  padding:2px 6px !important;
+  border-radius:10px 0 0 0;
+}
+.leaflet-control-attribution a{color:#d1d5db !important;text-decoration:none}
+@media (max-width: 768px){
+  .bottom{left:8px;right:8px;bottom:8px}
+  .top{left:8px;right:8px;top:8px}
+}
+</style>
 </head>
 <body>
-<div class="wrap hidden" id="appWrap">
-  <div class="top">
-    <div class="card">
-      <h1>MyGps Live</h1>
-      <p class="sub">Временная ссылка live-доступа к маршруту.</p>
-      <div class="row">
-        <div class="pill"><span class="dot warn" id="liveDot"></span><span id="liveStatus">Проверка статуса…</span></div>
-        <div class="pill">Session: <strong id="sessionText">—</strong></div>
-      </div>
-      <div class="grid">
-        <div class="stat"><div class="label">Последняя точка</div><div class="value" id="lastPoint">—</div></div>
-        <div class="stat"><div class="label">Последнее обновление</div><div class="value" id="lastUpdate">—</div></div>
-        <div class="stat"><div class="label">Осталось времени</div><div class="value" id="remain">—</div></div>
-        <div class="stat"><div class="label">Состояние доступа</div><div class="value" id="accessState">—</div></div>
-      </div>
-      <div class="row"><button class="btn" id="fitBtn">Показать весь маршрут</button><button class="btn secondary" id="lastBtn">К последней точке</button></div>
-    </div>
-    <div class="card"><h2>Live-доступ</h2><div class="sub">Эта страница работает только по временной ссылке с параметром <code>?session=TOKEN</code>.</div></div>
-  </div>
-  <div id="map"></div>
-  <div class="footer">Данные доступны только пока live-сессия активна и не истекла.</div>
+<div id="map"></div>
+
+<div class="top">
+  <div class="card">Статус<br><b id="status">—</b></div>
+  <div class="card">Скорость<br><b id="speed">—</b></div>
+  <div class="card">Обновлено<br><b id="updated">—</b></div>
+  <div class="card">Осталось<br><b id="time">—</b></div>
 </div>
-<div class="wrap" id="emptyWrap"><div class="card emptyState"><h1 id="emptyTitle">Ссылка недействительна</h1><p class="sub" id="emptyText">Доступ к live возможен только по активной временной ссылке.</p></div></div>
+
+<div class="bottom" id="panel">
+  <button onclick="togglePanel()" id="toggleBtn">Подробнее</button>
+
+  <div class="details" id="details">
+    <div class="grid">
+      <div class="box">Статус: <span id="d_status"></span></div>
+      <div class="box">Скорость: <span id="d_speed"></span></div>
+      <div class="box">Обновлено: <span id="d_updated"></span></div>
+      <div class="box">Осталось: <span id="d_time"></span></div>
+      <div class="box">Направление: <span id="d_bearing"></span></div>
+      <div class="box">Координаты: <span id="d_coords"></span></div>
+      <div class="box">Сигнал: <span id="d_signal"></span></div>
+      <div class="box">Последних точек: <span id="d_tail"></span></div>
+      <div class="box">Слежение: <span id="d_follow"></span></div>
+      <div class="box">Возраст точки: <span id="d_age"></span></div>
+    </div>
+
+    <button class="followBtn" id="followBtn" onclick="toggleFollow()">🎯 Слежение: Вкл</button>
+  </div>
+</div>
+
+<div class="alert" id="alert"></div>
+
+<div class="end-overlay" id="endOverlay">
+  <div class="end-card">
+    <div class="end-icon">❌</div>
+    <div class="end-title">Трансляция завершена</div>
+    <div class="end-text" id="endText">Эта live-ссылка больше недоступна.</div>
+  </div>
+</div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
-import { getDatabase, ref, onValue, off } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
-const params=new URLSearchParams(window.location.search),sessionId=params.get("session")||"",sessionValid=/^[A-Za-z0-9_-]{16,128}$/.test(sessionId),qs=id=>document.getElementById(id);
-function showEmpty(title,text){qs("appWrap").classList.add("hidden");qs("emptyWrap").classList.remove("hidden");qs("emptyTitle").textContent=title;qs("emptyText").textContent=text}
-if(!sessionId||!sessionValid)showEmpty("Ссылка недействительна","Маршрут и live-данные доступны только по активной временной ссылке."); else {qs("emptyWrap").classList.add("hidden");qs("appWrap").classList.remove("hidden");qs("sessionText").textContent=sessionId}
-const firebaseConfig={apiKey:"AIzaSyCXNCY-IpkhAXb8jNPhN8gf2UdOfPBc5gM",authDomain:"mygpslive-57196.firebaseapp.com",databaseURL:"https://mygpslive-57196-default-rtdb.europe-west1.firebasedatabase.app",projectId:"mygpslive-57196",storageBucket:"mygpslive-57196.firebasestorage.app",messagingSenderId:"20781107701",appId:"1:20781107701:web:bd47061b9aca13abbeb8bc",measurementId:"G-BSCVNY9LH0"};
-const fmtTime=value=>value?new Date(value).toLocaleString("ru-RU"):"—";
-function fmtRemain(ms){if(ms==null)return"—";const sec=Math.max(0,Math.floor(ms/1000)),h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s=sec%60;return h>0?`${h}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`:`${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`}
-function setStatus(text,cls){qs("liveStatus").textContent=text;qs("liveDot").className="dot "+cls} function setAccessState(text){qs("accessState").textContent=text}
-const map=L.map("map").setView([56.95,24.10],12);L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"&copy; OpenStreetMap"}).addTo(map);
-const polyline=L.polyline([],{weight:5}).addTo(map), marker=L.circleMarker([56.95,24.10],{radius:8,color:"#22c55e",fillColor:"#22c55e",fillOpacity:1}).addTo(map);
-qs("fitBtn").onclick=()=>{const latlngs=polyline.getLatLngs();if(latlngs.length)map.fitBounds(polyline.getBounds(),{padding:[30,30]})}; qs("lastBtn").onclick=()=>map.setView(marker.getLatLng(),16);
-const app=initializeApp(firebaseConfig),db=getDatabase(app),metaRef=ref(db,`liveSessions/${sessionId}/meta`),publicLastPointRef=ref(db,`liveSessions/${sessionId}/public/lastPoint`),publicRecentPointsRef=ref(db,`liveSessions/${sessionId}/public/recentPoints`);
-let currentMeta=null,remainTimer=null; function stopRemainTimer(){if(remainTimer){clearInterval(remainTimer);remainTimer=null}}
-function disablePublicDataView(title,text){off(publicLastPointRef);off(publicRecentPointsRef);stopRemainTimer();showEmpty(title,text)}
-function updateRemaining(){if(!currentMeta){qs("remain").textContent="—";return}const active=!!currentMeta.active,paused=!!currentMeta.paused;if(!active){setStatus("Трансляция завершена","bad");setAccessState("доступ закрыт");qs("remain").textContent="00:00";return}if(paused){setStatus("Трансляция на паузе","warn");setAccessState("пауза");qs("remain").textContent=fmtRemain(Number(currentMeta.remainingMs||0));return}const expiresAt=Number(currentMeta.expiresAt||0),now=Date.now(),remainingMs=Math.max(0,expiresAt-now);qs("remain").textContent=fmtRemain(remainingMs);if(expiresAt>now){setStatus("Трансляция активна","ok");setAccessState("доступ открыт")}else{setStatus("Ссылка истекла","warn");setAccessState("срок закончился");disablePublicDataView("Ссылка истекла","Срок действия этой live-ссылки закончился.")}}
-onValue(metaRef,snap=>{const data=snap.val();if(!data)return disablePublicDataView("Сессия не найдена","Такой live-сессии нет, она была удалена или ссылка неверная.");currentMeta=data;updateRemaining();stopRemainTimer();remainTimer=setInterval(updateRemaining,1000);if(!data.active)disablePublicDataView("Трансляция завершена","Эта live-сессия была завершена владельцем.")},()=>disablePublicDataView("Нет доступа к live-сессии","Ссылка недоступна, истекла или чтение закрыто правилами Firebase."));
-onValue(publicLastPointRef,snap=>{const p=snap.val();if(!p||p.latitude==null||p.longitude==null)return;const lat=Number(p.latitude),lon=Number(p.longitude);marker.setLatLng([lat,lon]);qs("lastPoint").textContent=`${lat.toFixed(5)}, ${lon.toFixed(5)}`;qs("lastUpdate").textContent=fmtTime(p.timestamp)},()=>disablePublicDataView("Нет доступа к данным","Публичные данные этой live-сессии больше недоступны."));
-onValue(publicRecentPointsRef,snap=>{const raw=snap.val()||{},pts=Object.values(raw).filter(Boolean).sort((a,b)=>(a.timestamp||0)-(b.timestamp||0)).map(p=>[Number(p.latitude),Number(p.longitude)]);polyline.setLatLngs(pts);if(pts.length){marker.setLatLng(pts[pts.length-1]);if(pts.length===1)map.setView(pts[0],16);else map.fitBounds(polyline.getBounds(),{padding:[30,30]})}},()=>disablePublicDataView("Нет доступа к маршруту","Маршрут этой live-сессии больше недоступен."));
+import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
+
+const firebaseConfig={
+  apiKey:"AIzaSyCXNCY-IpkhAXb8jNPhN8gf2UdOfPBc5gM",
+  authDomain:"mygpslive-57196.firebaseapp.com",
+  databaseURL:"https://mygpslive-57196-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId:"mygpslive-57196",
+  storageBucket:"mygpslive-57196.firebasestorage.app",
+  messagingSenderId:"20781107701",
+  appId:"1:20781107701:web:bd47061b9aca13abbeb8bc",
+  measurementId:"G-BSCVNY9LH0"
+};
+
+const app=initializeApp(firebaseConfig);
+const db=getDatabase(app);
+
+const qs=id=>document.getElementById(id);
+const params=new URLSearchParams(location.search);
+const sessionId=params.get("session");
+
+const map=L.map('map').setView([56.95,24.1],13);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{crossOrigin:true}).addTo(map);
+
+let marker=null;
+let follow=true;
+let open=false;
+let tailPoints=[];
+let tailLine=L.polyline([], {color:'#3b82f6', weight:4, opacity:0.9}).addTo(map);
+let warnedFive=false;
+let warnedOne=false;
+let lastPoint=null;
+
+function togglePanel(){
+  open=!open;
+  qs('details').style.display=open?'block':'none';
+  qs('panel').classList.toggle('full',open);
+  qs('toggleBtn').innerText=open?'Скрыть':'Подробнее';
+}
+window.togglePanel=togglePanel;
+
+function setFollowUi(){
+  const btn=qs('followBtn');
+  btn.innerText=follow?'🎯 Слежение: Вкл':'❌ Слежение: Выкл';
+  btn.classList.toggle('off',!follow);
+  qs('d_follow').innerText=follow?'Вкл':'Выкл';
+}
+
+function toggleFollow(){
+  follow=!follow;
+  setFollowUi();
+  if(follow && lastPoint) map.panTo([lastPoint.lat,lastPoint.lng], {animate:true});
+}
+window.toggleFollow=toggleFollow;
+
+function showAlert(text){
+  const el=qs('alert');
+  el.innerHTML=text+'<small>Предупреждение по времени ссылки</small>';
+  el.style.display='block';
+  clearTimeout(el._t);
+  el._t=setTimeout(()=>el.style.display='none',5000);
+}
+
+function showEnd(message){
+  qs('endText').textContent=message || 'Эта live-ссылка больше недоступна.';
+  qs('endOverlay').style.display='flex';
+}
+function hideEnd(){ qs('endOverlay').style.display='none'; }
+
+function relTime(ts){
+  if(!ts) return '—';
+  const sec=Math.max(0, Math.floor((Date.now()-ts)/1000));
+  if(sec<60) return sec+' сек';
+  const min=Math.floor(sec/60);
+  if(min<60) return min+' мин';
+  const h=Math.floor(min/60);
+  return h+' ч';
+}
+function fmtClock(ts){
+  if(!ts) return '—';
+  return new Date(ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+function fmtCountdown(ms){
+  if(ms<=0) return '0:00';
+  const sec=Math.floor(ms/1000), m=Math.floor(sec/60), s=sec%60;
+  return m+':'+String(s).padStart(2,'0');
+}
+function distanceMeters(a,b){
+  const toRad=v=>v*Math.PI/180,R=6371000;
+  const dLat=toRad(b.lat-a.lat), dLon=toRad(b.lng-a.lng), lat1=toRad(a.lat), lat2=toRad(b.lat);
+  const x=Math.sin(dLat/2)**2+Math.sin(dLon/2)**2*Math.cos(lat1)*Math.cos(lat2);
+  return R*(2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x)));
+}
+function filterJumps(list){
+  const out=[];
+  for(const p of list){
+    if(!out.length){ out.push(p); continue; }
+    const prev=out[out.length-1];
+    const dt=Math.max(1,(p.ts-prev.ts)/1000);
+    const speedCalc=(distanceMeters(prev,p)/dt)*3.6;
+    if(speedCalc>250) continue;
+    out.push(p);
+  }
+  return out;
+}
+
+function getStatusMeta(p){
+  const ageMs=(p.ts ? Date.now()-p.ts : 0);
+  if(ageMs>300000) return {status:'Нет сигнала', signal:'Потерян', type:'offline'};
+  if((p.speed||0)>2) return {status:'Движение', signal:'Есть', type:'moving'};
+  if(ageMs>=300000) return {status:'Стоянка', signal:'Есть', type:'stop_long'};
+  return {status:'Стоит', signal:'Есть', type:'stop_short'};
+}
+
+function setMarker(p){
+  let icon;
+  const meta=getStatusMeta(p);
+  if(meta.type==='offline'){
+    icon=L.divIcon({html:`<div class="marker-circle" style="background:#94a3b8"></div>`, className:''});
+  }else if(meta.type==='moving'){
+    icon=L.divIcon({html:`<div class="marker-arrow" style="transform:rotate(${p.bearing||0}deg)"></div>`, className:''});
+  }else{
+    const color=meta.type==='stop_long' ? 'red' : 'yellow';
+    icon=L.divIcon({html:`<div class="marker-circle" style="background:${color}"></div>`, className:''});
+  }
+  if(!marker){
+    marker=L.marker([p.lat,p.lng],{icon}).addTo(map);
+  }else{
+    marker.setLatLng([p.lat,p.lng]);
+    marker.setIcon(icon);
+  }
+}
+
+function updateTail(p){
+  tailPoints.push([p.lat,p.lng]);
+  if(tailPoints.length>30) tailPoints=tailPoints.slice(-30);
+  tailLine.setLatLngs(tailPoints);
+  qs('d_tail').innerText=String(tailPoints.length);
+}
+
+function updateUi(p, expiresAt){
+  const meta=getStatusMeta(p);
+  const leftMs=expiresAt ? Math.max(0, Number(expiresAt)-Date.now()) : 0;
+  const leftText=expiresAt ? fmtCountdown(leftMs) : '—';
+
+  qs('status').innerText=meta.status;
+  qs('speed').innerText=(Number(p.speed||0)).toFixed(1)+' км/ч';
+  qs('updated').innerText=relTime(p.ts);
+  qs('time').innerText=leftText;
+
+  qs('d_status').innerText=meta.status;
+  qs('d_speed').innerText=(Number(p.speed||0)).toFixed(1)+' км/ч';
+  qs('d_updated').innerText=fmtClock(p.ts)+' ('+relTime(p.ts)+' назад)';
+  qs('d_time').innerText=leftText;
+  qs('d_bearing').innerText=Math.round(Number(p.bearing||0))+'°';
+  qs('d_coords').innerText=Number(p.lat).toFixed(5)+', '+Number(p.lng).toFixed(5);
+  qs('d_signal').innerText=meta.signal;
+  qs('d_follow').innerText=follow?'Вкл':'Выкл';
+  qs('d_age').innerText=relTime(p.ts)+' назад';
+
+  if(leftMs<=5*60*1000 && !warnedFive && leftMs>60*1000){
+    warnedFive=true;
+    showAlert('Время действия ссылки заканчивается через '+leftText);
+  }
+  if(leftMs<=60*1000 && !warnedOne && leftMs>0){
+    warnedOne=true;
+    showAlert('Время действия ссылки заканчивается через '+leftText);
+  }
+  if(leftMs<=0 && expiresAt){
+    showEnd('Время действия ссылки истекло.');
+  }
+}
+
+function normalizePoint(p){
+  return {
+    lat:Number(p.latitude ?? p.lat),
+    lng:Number(p.longitude ?? p.lng),
+    speed:Number(p.speed ?? 0),
+    bearing:Number(p.bearing ?? 0),
+    ts:Number(p.timestamp ?? p.ts ?? Date.now())
+  };
+}
+
+function applySession(data){
+  if(!data){ showEnd('Ссылка не найдена или была удалена.'); return; }
+  const meta=data.meta||{};
+  if(meta.active===false){ showEnd('Эта трансляция была остановлена владельцем.'); return; }
+  if(meta.expiresAt && Number(meta.expiresAt)<=Date.now()){ showEnd('Время действия ссылки истекло.'); return; }
+  hideEnd();
+
+  const recent = Object.values(data.public?.recentPoints || {})
+    .filter(Boolean)
+    .map(normalizePoint)
+    .sort((a,b)=>a.ts-b.ts);
+  const filtered = filterJumps(recent);
+
+  const point = data.public?.lastPoint ? normalizePoint(data.public.lastPoint) : filtered[filtered.length-1];
+  if(!point) return;
+  lastPoint=point;
+
+  setMarker(point);
+  tailPoints = filtered.slice(-30).map(p=>[p.lat,p.lng]);
+  tailLine.setLatLngs(tailPoints);
+  qs('d_tail').innerText=String(tailPoints.length);
+  updateUi(point, meta.expiresAt);
+
+  if(follow) map.panTo([point.lat, point.lng], {animate:true});
+}
+
+map.on('dragstart',()=>{
+  follow=false;
+  setFollowUi();
+  clearTimeout(window._followTimer);
+  window._followTimer=setTimeout(()=>{
+    follow=true;
+    setFollowUi();
+    if(lastPoint) map.panTo([lastPoint.lat,lastPoint.lng], {animate:true});
+  },7000);
+});
+
+setFollowUi();
+
+if(!sessionId){
+  showEnd('В ссылке отсутствует параметр session.');
+}else{
+  const sessionRef=ref(db, `liveSessions/${sessionId}`);
+  onValue(sessionRef, snap => {
+    applySession(snap.val());
+  }, err => {
+    console.error(err);
+    showEnd('Не удалось загрузить live-сессию.');
+  });
+}
 </script>
-</body></html>
+</body>
+</html>
