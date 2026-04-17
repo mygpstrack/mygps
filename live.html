@@ -184,9 +184,9 @@ let tailLine=L.polyline([], {color:'#3b82f6', weight:4, opacity:0.9}).addTo(map)
 let warnedFive=false;
 let warnedOne=false;
 let lastPoint=null;
-let currentExpiresAt=null;
 let displayPoint=null;
 let animationFrameId=null;
+let currentExpiresAt=null;
 
 function togglePanel(){
   open=!open;
@@ -273,7 +273,6 @@ function smoothPoint(prev, cur){
 function getStatusMeta(p){
   const ageMs=(p.ts ? Date.now()-p.ts : 0);
   const speed = Number(p.speed || 0);
-
   if(ageMs > 10 * 60 * 1000) return {status:'Нет сигнала', signal:'Потерян', type:'offline'};
   if(speed > 2) return {status:'Движение', signal:'Хороший', type:'moving'};
   if(ageMs >= 5 * 60 * 1000) return {status:'Стоянка', signal:'Есть', type:'stop_long'};
@@ -304,12 +303,10 @@ function setMarkerIcon(p){
 function animateMarkerTo(target){
   if(!target) return;
   if(!marker){
-    setMarkerIcon(target);
     marker=L.marker([target.lat,target.lng],{icon:L.divIcon({html:buildIconHtml(target), className:''})}).addTo(map);
     displayPoint = {...target};
     return;
   }
-
   if(!displayPoint){
     displayPoint = {...target};
     marker.setLatLng([target.lat, target.lng]);
@@ -332,13 +329,15 @@ function animateMarkerTo(target){
     displayPoint = {...target, lat, lng};
     if(t < 1){
       animationFrameId=requestAnimationFrame(step);
+    } else {
+      animationFrameId=null;
     }
   }
   animationFrameId=requestAnimationFrame(step);
 }
 
 function updateUi(p, expiresAt){
-  currentExpiresAt=expiresAt;
+  currentExpiresAt = expiresAt || null;
   const meta=getStatusMeta(p);
   const leftMs=expiresAt ? Math.max(0, Number(expiresAt)-Date.now()) : 0;
   const leftText=expiresAt ? fmtCountdown(leftMs) : '—';
@@ -395,7 +394,11 @@ function applySession(data){
   const filtered = filterJumps(recent);
 
   const point = data.public?.lastPoint ? normalizePoint(data.public.lastPoint) : filtered[filtered.length-1];
-  if(!point) return;
+  if(!point){
+    qs('status').innerText='Ожидание GPS';
+    qs('d_status').innerText='Ожидание GPS';
+    return;
+  }
 
   const smoothed = smoothPoint(lastPoint, point);
   lastPoint = {...point};
@@ -430,26 +433,25 @@ map.on('dragstart',()=>{
 setFollowUi();
 
 setInterval(() => {
-  if(!lastPoint) return;
-  const meta = getStatusMeta(lastPoint);
-  qs('updated').innerText = relTime(lastPoint.ts);
-  qs('d_updated').innerText = fmtClock(lastPoint.ts)+' ('+relTime(lastPoint.ts)+' назад)';
-  qs('status').innerText = meta.status;
-  qs('d_status').innerText = meta.status;
-  qs('d_signal').innerText = meta.signal;
-}, 1000);
+  if(lastPoint){
+    const meta = getStatusMeta(lastPoint);
+    qs('updated').innerText = relTime(lastPoint.ts);
+    qs('d_updated').innerText = fmtClock(lastPoint.ts)+' ('+relTime(lastPoint.ts)+' назад)';
+    qs('status').innerText = meta.status;
+    qs('d_status').innerText = meta.status;
+    qs('d_signal').innerText = meta.signal;
+    qs('d_age').innerText = relTime(lastPoint.ts)+' назад';
+  }
 
-  setInterval(() => {
-  if(!currentExpiresAt) return;
+  if(currentExpiresAt){
+    const leftMs = Math.max(0, Number(currentExpiresAt) - Date.now());
+    const leftText = fmtCountdown(leftMs);
+    qs('time').innerText = leftText;
+    qs('d_time').innerText = leftText;
 
-  const leftMs = Math.max(0, currentExpiresAt - Date.now());
-  const leftText = fmtCountdown(leftMs);
-
-  qs('time').innerText = leftText;
-  qs('d_time').innerText = leftText;
-
-  if(leftMs <= 0){
-    showEnd('Время действия ссылки истекло.');
+    if(leftMs <= 0){
+      showEnd('Время действия ссылки истекло.');
+    }
   }
 }, 1000);
 
