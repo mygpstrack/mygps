@@ -184,6 +184,8 @@ let tailLine=L.polyline([], {color:'#3b82f6', weight:4, opacity:0.9}).addTo(map)
 let warnedFive=false;
 let warnedOne=false;
 let lastPoint=null;
+let displayPoint=null;
+let animationFrameId=null;
 
 function togglePanel(){
   open=!open;
@@ -203,7 +205,7 @@ function setFollowUi(){
 function toggleFollow(){
   follow=!follow;
   setFollowUi();
-  if(follow && lastPoint) map.panTo([lastPoint.lat,lastPoint.lng], {animate:true});
+  if(follow && displayPoint) map.panTo([displayPoint.lat,displayPoint.lng], {animate:true});
 }
 window.toggleFollow=toggleFollow;
 
@@ -257,39 +259,81 @@ function filterJumps(list){
   }
   return out;
 }
+function smoothPoint(prev, cur){
+  if(!prev) return {...cur};
+  const alpha = 0.35;
+  return {
+    ...cur,
+    lat: prev.lat + (cur.lat - prev.lat) * alpha,
+    lng: prev.lng + (cur.lng - prev.lng) * alpha
+  };
+}
 
 function getStatusMeta(p){
   const ageMs=(p.ts ? Date.now()-p.ts : 0);
-  if(ageMs>300000) return {status:'Нет сигнала', signal:'Потерян', type:'offline'};
-  if((p.speed||0)>2) return {status:'Движение', signal:'Есть', type:'moving'};
-  if(ageMs>=300000) return {status:'Стоянка', signal:'Есть', type:'stop_long'};
+  const speed = Number(p.speed || 0);
+
+  if(ageMs > 10 * 60 * 1000) return {status:'Нет сигнала', signal:'Потерян', type:'offline'};
+  if(speed > 2) return {status:'Движение', signal:'Хороший', type:'moving'};
+  if(ageMs >= 5 * 60 * 1000) return {status:'Стоянка', signal:'Есть', type:'stop_long'};
   return {status:'Стоит', signal:'Есть', type:'stop_short'};
 }
 
-function setMarker(p){
-  let icon;
+function buildIconHtml(p){
   const meta=getStatusMeta(p);
   if(meta.type==='offline'){
-    icon=L.divIcon({html:`<div class="marker-circle" style="background:#94a3b8"></div>`, className:''});
-  }else if(meta.type==='moving'){
-    icon=L.divIcon({html:`<div class="marker-arrow" style="transform:rotate(${p.bearing||0}deg)"></div>`, className:''});
-  }else{
-    const color=meta.type==='stop_long' ? 'red' : 'yellow';
-    icon=L.divIcon({html:`<div class="marker-circle" style="background:${color}"></div>`, className:''});
+    return `<div class="marker-circle" style="background:#94a3b8"></div>`;
   }
+  if(meta.type==='moving'){
+    return `<div class="marker-arrow" style="transform:rotate(${p.bearing||0}deg)"></div>`;
+  }
+  const color=meta.type==='stop_long' ? '#ef4444' : '#f59e0b';
+  return `<div class="marker-circle" style="background:${color}"></div>`;
+}
+
+function setMarkerIcon(p){
+  const icon=L.divIcon({html:buildIconHtml(p), className:''});
   if(!marker){
     marker=L.marker([p.lat,p.lng],{icon}).addTo(map);
   }else{
-    marker.setLatLng([p.lat,p.lng]);
     marker.setIcon(icon);
   }
 }
 
-function updateTail(p){
-  tailPoints.push([p.lat,p.lng]);
-  if(tailPoints.length>30) tailPoints=tailPoints.slice(-30);
-  tailLine.setLatLngs(tailPoints);
-  qs('d_tail').innerText=String(tailPoints.length);
+function animateMarkerTo(target){
+  if(!target) return;
+  if(!marker){
+    setMarkerIcon(target);
+    marker=L.marker([target.lat,target.lng],{icon:L.divIcon({html:buildIconHtml(target), className:''})}).addTo(map);
+    displayPoint = {...target};
+    return;
+  }
+
+  if(!displayPoint){
+    displayPoint = {...target};
+    marker.setLatLng([target.lat, target.lng]);
+    return;
+  }
+
+  const start = {lat: displayPoint.lat, lng: displayPoint.lng};
+  const end = {lat: target.lat, lng: target.lng};
+  const duration = 900;
+  const started = performance.now();
+
+  if(animationFrameId) cancelAnimationFrame(animationFrameId);
+
+  function step(now){
+    const t = Math.min(1, (now - started) / duration);
+    const eased = 1 - Math.pow(1 - t, 3);
+    const lat = start.lat + (end.lat - start.lat) * eased;
+    const lng = start.lng + (end.lng - start.lng) * eased;
+    marker.setLatLng([lat,lng]);
+    displayPoint = {...target, lat, lng};
+    if(t < 1){
+      animationFrameId=requestAnimationFrame(step);
+    }
+  }
+  animationFrameId=requestAnimationFrame(step);
 }
 
 function updateUi(p, expiresAt){
@@ -350,15 +394,24 @@ function applySession(data){
 
   const point = data.public?.lastPoint ? normalizePoint(data.public.lastPoint) : filtered[filtered.length-1];
   if(!point) return;
-  lastPoint=point;
 
-  setMarker(point);
+  const smoothed = smoothPoint(lastPoint, point);
+  lastPoint = {...point};
+
+  setMarkerIcon(point);
+  if(!marker){
+    marker=L.marker([smoothed.lat,smoothed.lng],{icon:L.divIcon({html:buildIconHtml(point), className:''})}).addTo(map);
+    displayPoint = {...smoothed};
+  }else{
+    animateMarkerTo(smoothed);
+  }
+
   tailPoints = filtered.slice(-30).map(p=>[p.lat,p.lng]);
   tailLine.setLatLngs(tailPoints);
   qs('d_tail').innerText=String(tailPoints.length);
-  updateUi(point, meta.expiresAt);
+  updateUi(smoothed, meta.expiresAt);
 
-  if(follow) map.panTo([point.lat, point.lng], {animate:true});
+  if(follow) map.panTo([smoothed.lat, smoothed.lng], {animate:true});
 }
 
 map.on('dragstart',()=>{
@@ -368,11 +421,21 @@ map.on('dragstart',()=>{
   window._followTimer=setTimeout(()=>{
     follow=true;
     setFollowUi();
-    if(lastPoint) map.panTo([lastPoint.lat,lastPoint.lng], {animate:true});
+    if(displayPoint) map.panTo([displayPoint.lat,displayPoint.lng], {animate:true});
   },7000);
 });
 
 setFollowUi();
+
+setInterval(() => {
+  if(!lastPoint) return;
+  const meta = getStatusMeta(lastPoint);
+  qs('updated').innerText = relTime(lastPoint.ts);
+  qs('d_updated').innerText = fmtClock(lastPoint.ts)+' ('+relTime(lastPoint.ts)+' назад)';
+  qs('status').innerText = meta.status;
+  qs('d_status').innerText = meta.status;
+  qs('d_signal').innerText = meta.signal;
+}, 1000);
 
 if(!sessionId){
   showEnd('В ссылке отсутствует параметр session.');
