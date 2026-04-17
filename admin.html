@@ -787,11 +787,11 @@ async function reverseGeocode(lat, lon){
     const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&accept-language=ru`;
     const res = await fetch(url, { headers: { "Accept":"application/json" } });
     const json = await res.json();
-    const addr = json.display_name || `${lat}, ${lon}`;
+    const addr = json.display_name || "Адрес не найден";
     geocodeCache[key] = addr;
     return addr;
   } catch {
-    return `${Number(lat).toFixed(5)}, ${Number(lon).toFixed(5)}`;
+    return "Адрес не найден";
   }
 }
 
@@ -990,8 +990,12 @@ async function updateHistoryMap(points){
   startMarker.setLatLng([Number(first.latitude), Number(first.longitude)]).bindPopup("Старт");
   endMarker.setLatLng([Number(last.latitude), Number(last.longitude)]).bindPopup("Финиш");
   if(latlngs.length===1) historyMap.setView(latlngs[0],16); else historyMap.fitBounds(L.latLngBounds(latlngs), {padding:[30,30]});
-  qs("startAddress").textContent = await reverseGeocode(Number(first.latitude), Number(first.longitude));
-  qs("endAddress").textContent = await reverseGeocode(Number(last.latitude), Number(last.longitude));
+  const startAddr = await reverseGeocode(Number(first.latitude), Number(first.longitude));
+  const endAddr = await reverseGeocode(Number(last.latitude), Number(last.longitude));
+  qs("startAddress").textContent = startAddr;
+  qs("endAddress").textContent = endAddr;
+  if(qs("routeStartCoords")) qs("routeStartCoords").textContent = startAddr;
+  if(qs("routeEndCoords")) qs("routeEndCoords").textContent = endAddr;
 }
 
 async function selectHistoryPoint(p){
@@ -1132,8 +1136,12 @@ async function renderHistory() {
 
   updateCharts(pts);
   await updateHistoryMap(pts);
-  qs("startAddress").textContent = await reverseGeocode(Number(first.latitude), Number(first.longitude));
-  qs("endAddress").textContent = await reverseGeocode(Number(last.latitude), Number(last.longitude));
+  const startAddr = await reverseGeocode(Number(first.latitude), Number(first.longitude));
+  const endAddr = await reverseGeocode(Number(last.latitude), Number(last.longitude));
+  qs("startAddress").textContent = startAddr;
+  qs("endAddress").textContent = endAddr;
+  if(qs("routeStartCoords")) qs("routeStartCoords").textContent = startAddr;
+  if(qs("routeEndCoords")) qs("routeEndCoords").textContent = endAddr;
 }
 
 async function updateNowUI(point, sourceLabel){
