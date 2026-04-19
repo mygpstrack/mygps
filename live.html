@@ -113,6 +113,7 @@ button{
 <div id="map"></div>
 
 <div class="top">
+  <div class="card">Погода<br><b id="weather">—</b></div>
   <div class="card">Статус<br><b id="status">—</b></div>
   <div class="card">Скорость<br><b id="speed">—</b></div>
   <div class="card">Обновлено<br><b id="updated">—</b></div>
@@ -437,6 +438,7 @@ function applySession(data){
   tailLine.setLatLngs(tailPoints);
   qs('d_tail').innerText=String(tailPoints.length);
   updateUi(smoothed, meta.expiresAt, meta);
+  fetchWeather(smoothed.lat, smoothed.lng);
 
   if(follow) map.panTo([smoothed.lat, smoothed.lng], {animate:true});
 }
@@ -453,6 +455,77 @@ map.on('dragstart',()=>{
 });
 
 setFollowUi();
+
+
+let weatherCache=null;
+
+let lastWeatherCoords=null;
+
+function distKm(a,b){
+  const toRad=v=>v*Math.PI/180, R=6371;
+  const dLat=toRad(b.lat-a.lat), dLon=toRad(b.lng-a.lng);
+  const lat1=toRad(a.lat), lat2=toRad(b.lat);
+  const x=Math.sin(dLat/2)**2+Math.sin(dLon/2)**2*Math.cos(lat1)*Math.cos(lat2);
+  return R*(2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x)));
+}
+
+let lastWeatherFetch=0;
+
+function windDir(deg){
+  const dirs=["С","СВ","В","ЮВ","Ю","ЮЗ","З","СЗ"];
+  return dirs[Math.round(deg/45)%8];
+}
+
+async function fetchCity(lat,lng){
+  try{
+    const r=await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&accept-language=en`);
+    const j=await r.json();
+    return j.address?.city || j.address?.town || j.address?.village || "";
+  }catch{ return ""; }
+}
+
+async function fetchWeather(lat,lng){
+  const now=Date.now();
+  const curr = {lat, lng};
+  if(lastWeatherCoords){
+    const d = distKm(lastWeatherCoords, curr);
+    if(d < 3 && now-lastWeatherFetch<600000 && weatherCache){
+      document.getElementById("weather").innerText=weatherCache;
+    lastWeatherCoords={lat,lng};
+      return;
+    }
+  } else {
+    if(now-lastWeatherFetch<600000 && weatherCache){
+      document.getElementById("weather").innerText=weatherCache;
+    lastWeatherCoords={lat,lng};
+      return;
+    }
+  }
+  try{
+    const res=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current_weather=true`);
+    const j=await res.json();
+    const w=j.current_weather;
+    if(!w) return;
+
+    const city=await fetchCity(lat,lng);
+
+    const temp=Math.round(w.temperature);
+    const wind=Math.round(w.windspeed);
+    const dir=windDir(w.winddirection);
+
+    weatherCache=`+${temp}°C
+${city} • ${dir} ветер ${wind} м/с`;
+    lastWeatherFetch=now;
+
+    document.getElementById("weather").innerText=weatherCache;
+    lastWeatherCoords={lat,lng};
+  }catch{
+    if(weatherCache){
+      document.getElementById("weather").innerText=weatherCache;
+    lastWeatherCoords={lat,lng};
+    }
+  }
+}
 
 setInterval(() => {
   if(!lastPoint) return;
