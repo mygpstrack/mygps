@@ -134,6 +134,7 @@ button{
       <div class="box">Обновлено: <span id="d_updated"></span></div>
       <div class="box">Осталось: <span id="d_time"></span></div>
       <div class="box">GPS / Сигнал: <span id="d_bearing"></span></div>
+      <div class="box">Тип: <span id="d_type">—</span></div>
       <div class="box">Координаты: <span id="d_coords"></span></div>
       <div class="box">Сигнал: <span id="d_signal"></span></div>
       <div class="box">Точность: <span id="d_tail"></span></div>
@@ -274,6 +275,21 @@ function smoothPoint(prev, cur){
   };
 }
 
+function getMoveType(points, currentPoint){
+  const sample = (points && points.length ? points : [currentPoint])
+    .slice(-5)
+    .map(p => Number(p.speed || 0))
+    .filter(v => Number.isFinite(v));
+
+  if(!sample.length) return '—';
+
+  const avg = sample.reduce((a,b)=>a+b,0) / sample.length;
+
+  if(avg < 2) return 'Стоит';
+  if(avg < 12) return 'Пешком';
+  return 'Авто/Мото';
+}
+
 function getStatusMeta(p, sessionMeta){
   if(sessionMeta?.paused){
     return {status:'Приостановлено', signal:'—', type:'paused'};
@@ -379,6 +395,7 @@ function updateUi(p, expiresAt, sessionMeta){
   qs('d_signal').innerText=meta.signal;
   qs('d_tail').innerText=accuracy>0 ? Math.round(accuracy)+' м' : '—';
   qs('d_age').innerText=relTime(p.ts)+' назад';
+  qs('d_type').innerText = sessionMeta?.moveType || '—';
 
   if(!sessionMeta?.paused && leftMs<=5*60*1000 && !warnedFive && leftMs>60*1000){
     warnedFive=true;
