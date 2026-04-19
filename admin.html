@@ -122,12 +122,25 @@
         </div>
       </div>
 
+      <div class="card" style="margin-top:12px">
+        <h3>Создать пользователя</h3>
+        <div class="grid4">
+          <div><div class="label">Имя</div><input id="newUserNameInput" placeholder="Имя пользователя"></div>
+          <div><div class="label">Email</div><input id="newUserEmailInput" type="email" placeholder="user@example.com"></div>
+          <div><div class="label">Пароль</div><input id="newUserPasswordInput" type="password" placeholder="Минимум 6 символов"></div>
+        </div>
+        <div class="row">
+          <button id="createManagedUserBtn" class="success">Создать пользователя</button>
+        </div>
+      </div>
+
       <div class="row">
         <div>
           <div class="label">Пользователь</div>
           <select id="userSelect"></select>
         </div>
-                <div>
+        <button id="renameUserBtn" class="secondary">Переименовать</button>
+        <div>
           <div class="label">Режим</div>
           <select id="viewModeSelect">
             <option value="selected" selected>Выбранный пользователь</option>
@@ -345,12 +358,12 @@
       <div class="card">
         <h2>Пользователи</h2>
         <div class="grid4">
-          <div><div class="label">Имя</div><input id="newUserNameInput" placeholder="Имя пользователя"></div>
-          <div><div class="label">Email</div><input id="newUserEmailInput" type="email" placeholder="user@example.com"></div>
-          <div><div class="label">Пароль</div><input id="newUserPasswordInput" type="password" placeholder="Минимум 6 символов"></div>
+          <div><div class="label">Имя</div><input id="tabUserNameInput" placeholder="Имя пользователя"></div>
+          <div><div class="label">Email</div><input id="tabUserEmailInput" type="email" placeholder="user@example.com"></div>
+          <div><div class="label">Пароль</div><input id="tabUserPasswordInput" type="password" placeholder="Минимум 6 символов"></div>
         </div>
         <div class="row">
-          <button id="createManagedUserBtn" class="success">Создать пользователя</button>
+          <button id="createTabUserBtn" class="success">Создать пользователя</button>
           <button id="refreshUsersManageBtn" class="secondary">Обновить список</button>
         </div>
         <div style="overflow:auto">
@@ -1825,25 +1838,22 @@ if (qs("cleanupEndedSessionsBtn")) qs("cleanupEndedSessionsBtn").onclick = async
 };
 
 
-
 function renderUsersManagement(){
   const tbody = qs("usersManageTbody");
   if(!tbody) return;
+
   const uids = Array.from(new Set([
     ...Object.keys(usersMeta || {}),
     ...Object.keys(historyByUid || {}),
     ...Object.keys(liveByUid || {})
-  ])).sort((a,b)=>{
-    const an = getDisplayName(a).toLowerCase();
-    const bn = getDisplayName(b).toLowerCase();
-    return an.localeCompare(bn, "ru");
-  });
+  ])).filter(Boolean);
 
   if(!uids.length){
     tbody.innerHTML = `<tr><td colspan="4" class="smallMuted">Пользователей пока нет.</td></tr>`;
     return;
   }
 
+  uids.sort((a,b)=>getDisplayName(a).localeCompare(getDisplayName(b), "ru"));
   tbody.innerHTML = uids.map(uid=>{
     const name = usersMeta?.[uid]?.name || "—";
     const email = usersMeta?.[uid]?.email || "—";
@@ -1863,24 +1873,26 @@ function renderUsersManagement(){
   tbody.querySelectorAll("[data-user-rename]").forEach(btn=>btn.onclick=async()=>{
     const uid = btn.dataset.userRename;
     const current = usersMeta?.[uid]?.name || "";
-    const name = prompt("Новое имя пользователя", current);
-    if(!name) return;
+    const next = prompt("Новое имя пользователя", current);
+    if(!next) return;
     try{
-      await update(ref(db,`users/${uid}`), {name, updatedAt:Date.now()});
-      await logAction("user_rename", `Переименован ${uid} в ${name}`);
+      await update(ref(db, `users/${uid}`), {name: next, updatedAt: Date.now()});
+      await logAction("user_rename", `Переименован ${uid} в ${next}`);
       await loadUsers();
       renderUsersManagement();
-      showToast("Имя сохранено","success");
+      showToast("Имя пользователя обновлено","success");
     }catch(e){
-      recordError("renameUser", e);
-      showToast("Ошибка сохранения имени","error");
+      recordError("renameUserFromTab", e);
+      showToast("Ошибка переименования: "+errText(e), "error", 3600);
     }
   });
 
   tbody.querySelectorAll("[data-user-delete]").forEach(btn=>btn.onclick=async()=>{
     const uid = btn.dataset.userDelete;
     const label = getDisplayName(uid) || uid;
-    const ok = confirm(`Удалить пользователя ${label} из базы?\n\nБудут удалены профиль, history, live и привязка live-сессий. Auth-аккаунт Firebase при этом не удаляется.`);
+    const ok = confirm(`Удалить пользователя ${label} из базы?
+
+Будут удалены профиль, history, live и привязка live-сессий. Firebase Auth аккаунт этим действием не удаляется.`);
     if(!ok) return;
     try{
       await Promise.all([
@@ -1889,17 +1901,41 @@ function renderUsersManagement(){
         remove(ref(db, `live/${uid}`)),
         remove(ref(db, `liveOwners/${uid}`))
       ]);
-      await logAction("user_delete", `Удалён пользователь ${uid} из базы`);
       if(selectedUid === uid) selectedUid = "";
+      await logAction("user_delete", `Удалён пользователь ${uid} из базы`);
       await loadUsers();
       renderUsersManagement();
       showToast("Пользователь удалён из базы","success");
     }catch(e){
-      recordError("deleteUser", e);
-      showToast("Ошибка удаления пользователя","error");
+      recordError("deleteUserFromTab", e);
+      showToast("Ошибка удаления: "+errText(e), "error", 3600);
     }
   });
 }
+
+async function createManagedUserFromTab(){
+  const name = qs("tabUserNameInput")?.value?.trim() || "Пользователь";
+  const email = qs("tabUserEmailInput")?.value?.trim();
+  const password = qs("tabUserPasswordInput")?.value || "";
+  if(!email || !password) return showToast("Укажи email и пароль","warn");
+
+  try{
+    const cred = await createUserWithEmailAndPassword(secondaryAuth, email, password);
+    await set(ref(db, `users/${cred.user.uid}`), {name, email, createdAt: Date.now(), updatedAt: Date.now()});
+    await logAction("user_create", `Создан пользователь ${email}`);
+    await signOut(secondaryAuth);
+    qs("tabUserNameInput").value = "";
+    qs("tabUserEmailInput").value = "";
+    qs("tabUserPasswordInput").value = "";
+    await loadUsers();
+    renderUsersManagement();
+    showToast("Пользователь создан","success");
+  }catch(e){
+    recordError("createManagedUserFromTab", e);
+    showToast("Ошибка создания пользователя: "+errText(e), "error", 3600);
+  }
+}
+
 
 async function createManagedUser(){
   const name = qs("newUserNameInput")?.value?.trim() || "Пользователь";
@@ -1915,7 +1951,6 @@ async function createManagedUser(){
     qs("newUserEmailInput").value = "";
     qs("newUserPasswordInput").value = "";
     await loadUsers();
-    renderUsersManagement();
     showToast("Пользователь создан","success");
   }catch(e){
     recordError("createManagedUser", e);
@@ -1997,6 +2032,7 @@ if (qs("btnDiag")) qs("btnDiag").onclick = showDiag;
 
 if (qs("createShareBtn")) qs("createShareBtn").onclick = ()=>createLiveSession();
 if (qs("createManagedUserBtn")) qs("createManagedUserBtn").onclick = ()=>createManagedUser();
+if (qs("createTabUserBtn")) qs("createTabUserBtn").onclick = ()=>createManagedUserFromTab();
 if (qs("refreshUsersManageBtn")) qs("refreshUsersManageBtn").onclick = async()=>{ await loadUsers(); renderUsersManagement(); showToast("Список пользователей обновлён","success"); };
 if (qs("clearShareResultBtn")) qs("clearShareResultBtn").onclick = ()=>{ createdShareUrl=""; qs("shareResultBox").classList.add("hidden"); };
 if (qs("copyCreatedShareBtn")) qs("copyCreatedShareBtn").onclick = async()=>{ if(createdShareUrl){ await navigator.clipboard.writeText(createdShareUrl); showToast("Ссылка скопирована","success"); } };
