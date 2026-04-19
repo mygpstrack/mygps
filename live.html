@@ -186,6 +186,9 @@ let warnedOne=false;
 let lastPoint=null;
 let displayPoint=null;
 let animationFrameId=null;
+let sessionPaused = false;
+let sessionRemainingMs = 0;
+let previousPauseState = null;  
 
 function togglePanel(){
   open=!open;
@@ -338,7 +341,9 @@ function animateMarkerTo(target){
 
 function updateUi(p, expiresAt){
   const meta=getStatusMeta(p);
-  const leftMs=expiresAt ? Math.max(0, Number(expiresAt)-Date.now()) : 0;
+  const leftMs = sessionPaused
+  ? Math.max(0, sessionRemainingMs)
+  : (expiresAt ? Math.max(0, Number(expiresAt) - Date.now()) : 0);
   const leftText=expiresAt ? fmtCountdown(leftMs) : '—';
 
   qs('status').innerText=meta.status;
@@ -364,7 +369,7 @@ function updateUi(p, expiresAt){
     warnedOne=true;
     showAlert('Время действия ссылки заканчивается через '+leftText);
   }
-  if(leftMs<=0 && expiresAt){
+  if(!sessionPaused && leftMs<=0 && expiresAt){
     showEnd('Время действия ссылки истекло.');
   }
 }
@@ -385,6 +390,21 @@ function applySession(data){
   if(meta.active===false){ showEnd('Эта трансляция была остановлена владельцем.'); return; }
   if(meta.expiresAt && Number(meta.expiresAt)<=Date.now()){ showEnd('Время действия ссылки истекло.'); return; }
   hideEnd();
+  
+  // ===== PAUSE SYNC (чистый фикс) =====
+sessionPaused = meta.paused === true;
+sessionRemainingMs = Number(meta.remainingMs || 0);
+
+if (previousPauseState === null) {
+  previousPauseState = sessionPaused;
+} else if (previousPauseState !== sessionPaused) {
+  if (sessionPaused) {
+    showAlert('Трансляция приостановлена');
+  } else {
+    showAlert('Трансляция продолжилась');
+  }
+  previousPauseState = sessionPaused;
+}
 
   const recent = Object.values(data.public?.recentPoints || {})
     .filter(Boolean)
