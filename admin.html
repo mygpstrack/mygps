@@ -84,9 +84,9 @@
 <body>
 <div class="wrap">
   <div class="card">
-    <h1>MyGps Admin</h1>
+    <h1>MyGps</h1>
     <div id="pageDateTime" class="headerTime">—</div>
-    <p class="sub">История, live, отчёты и управление временными live-ссылками.</p>
+    
   </div>
 
   <div class="card" id="authCard">
@@ -119,6 +119,18 @@
           <div class="stat"><div class="label">Стоянка</div><div class="value" id="todayStop">—</div></div>
           <div class="stat"><div class="label">Последняя активность</div><div class="value" id="todayLast">—</div></div>
           <div class="stat"><div class="label">Точек сегодня</div><div class="value" id="todayPoints">0</div></div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:12px">
+        <h3>Создать пользователя</h3>
+        <div class="grid4">
+          <div><div class="label">Имя</div><input id="newUserNameInput" placeholder="Имя пользователя"></div>
+          <div><div class="label">Email</div><input id="newUserEmailInput" type="email" placeholder="user@example.com"></div>
+          <div><div class="label">Пароль</div><input id="newUserPasswordInput" type="password" placeholder="Минимум 6 символов"></div>
+        </div>
+        <div class="row">
+          <button id="createManagedUserBtn" class="success">Создать пользователя</button>
         </div>
       </div>
 
@@ -165,6 +177,7 @@
           <div class="stat"><div class="label">Направление</div><div class="value" id="nowBearing">—</div></div>
           <div class="stat"><div class="label">Простой</div><div class="value" id="nowIdle">—</div></div>
           <div class="stat"><div class="label">Адрес</div><div class="value" id="nowAddress">—</div></div>
+          <div class="stat"><div class="label">Погода</div><div class="value" id="nowWeather">—</div></div>
         </div>
         <div class="row">
           <button id="liveAutoCenterBtn">Автоцентр: вкл</button>
@@ -305,15 +318,13 @@
         <h2>Создать live-ссылку</h2>
         <div class="grid4">
           <div><div class="label">Время доступа</div><select id="shareDurationPreset"><option value="15">15 минут</option><option value="30">30 минут</option><option value="60" selected>1 час</option><option value="180">3 часа</option><option value="360">6 часов</option><option value="720">12 часов</option><option value="1440">24 часа</option></select></div>
-          <div><div class="label">Источник</div><select id="shareSource"><option value="auto" selected>Авто</option><option value="live">Только live пользователя</option><option value="history">Только history</option></select></div>
-          <div><div class="label">Точек в хвосте</div><input id="sharePointsLimit" type="number" min="2" max="500" step="1" value="100"/></div>
         </div>
-        <div class="row"><button id="createShareBtn" class="success">Создать live-ссылку</button><button id="clearShareResultBtn" class="secondary">Очистить</button></div>
+        <div class="row"><button id="createShareBtn" class="success">Создать live-ссылку</button><button id="shareCreatedShareBtn" class="secondary">Поделиться</button><button id="openCreatedShareBtn">Открыть</button><button id="clearShareResultBtn" class="secondary">Очистить</button></div>
         <div id="shareResultBox" class="notice hidden">
           <div><strong>Ссылка создана</strong></div>
           <div style="margin-top:8px">Истекает: <span id="shareExpiresText">—</span></div>
           <div style="margin-top:8px" class="mono" id="shareLinkText">—</div>
-          <div class="row"><button id="copyCreatedShareBtn" class="secondary">Копировать</button><button id="openCreatedShareBtn">Открыть</button></div>
+          <div class="row"><button id="copyCreatedShareBtn" class="secondary">Копировать</button><button id="shareCreatedShareBtn2" class="secondary">Поделиться</button><button id="openCreatedShareBtn">Открыть</button></div>
         </div>
       </div>
 
@@ -322,7 +333,7 @@
         <div class="grid4">
           <div><div class="label">Поиск token</div><input id="sessionSearchInput" placeholder="Поиск"/></div>
           <div><div class="label">Статус</div><select id="sessionStatusFilter"><option value="all">Все</option><option value="active">Активные</option><option value="expired">Истёкшие</option><option value="ended">Завершённые</option></select></div>
-          <div><div class="label">Продлить, мин</div><input id="extendSessionMinutesInput" type="number" min="1" step="1" value="60"/></div>
+          
         </div>
         <div class="row">
           <button id="refreshSessionsBtn">Обновить live-сессии</button>
@@ -475,7 +486,9 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
+const secondaryApp = initializeApp(firebaseConfig, "adminSecondary");
 const auth = getAuth(app);
+const secondaryAuth = getAuth(secondaryApp);
 const db = getDatabase(app);
 const provider = new GoogleAuthProvider();
 const qs = (id) => document.getElementById(id);
@@ -501,6 +514,90 @@ let geocodeQueue = Promise.resolve();
 
 const fmtTime = v => v ? new Date(v).toLocaleString("ru-RU") : "—";
 const errText = e => e?.message || e?.code || String(e);
+let nowWeatherCache = null;
+let nowWeatherFetchedAt = 0;
+let nowWeatherCoords = null;
+
+function windDirShort(deg){
+  const dirs=["С","СВ","В","ЮВ","Ю","ЮЗ","З","СЗ"];
+  return dirs[Math.round((Number(deg)||0)/45)%8];
+}
+function distKmSimple(a,b){
+  const toRad=v=>v*Math.PI/180, R=6371;
+  const dLat=toRad(b.lat-a.lat), dLon=toRad(b.lng-a.lng), lat1=toRad(a.lat), lat2=toRad(b.lat);
+  const x=Math.sin(dLat/2)**2+Math.sin(dLon/2)**2*Math.cos(lat1)*Math.cos(lat2);
+  return R*(2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x)));
+}
+
+
+
+function weatherIcon(code){
+  if(code===0) return "☀";
+  if([1,2].includes(code)) return "⛅";
+  if(code===3) return "☁";
+  if(code>=45 && code<=48) return "🌫";
+  if(code>=51 && code<=67) return "🌧";
+  if(code>=71 && code<=77) return "❄";
+  if(code>=80 && code<=82) return "🌧";
+  if(code>=95) return "⛈";
+  return "☁";
+}
+
+async function updateRigaWeather(){
+  try{
+    const lat=56.95, lon=24.10;
+    const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`);
+    const j = await r.json();
+    const w = j.current_weather;
+    if(!w) return;
+    const dirs=["С","СВ","В","ЮВ","Ю","ЮЗ","З","СЗ"];
+    const d=dirs[Math.round(w.winddirection/45)%8];
+    qs("headerWeatherStatic").textContent = `Riga: ${weatherIcon(w.weathercode)} +${Math.round(w.temperature)}°C • ${d} ${Math.round(w.windspeed)} м/с`;
+  }catch{}
+}
+
+async function updateHeaderWeather(){
+  if(!window.currentPointForHeader) return;
+  const {lat, lon} = window.currentPointForHeader;
+  try{
+    const cityRaw = await reverseGeocode(lat, lon);
+    let city = "Here";
+    if(cityRaw && cityRaw !== "Адрес не найден"){
+      city = cityRaw.split(",")[0].trim() || "Here";
+    }
+
+    const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`);
+    const j = await r.json();
+    const w = j.current_weather;
+    if(!w) return;
+    const dirs=["С","СВ","В","ЮВ","Ю","ЮЗ","З","СЗ"];
+    const d=dirs[Math.round(w.winddirection/45)%8];
+    qs("headerWeatherDynamic").textContent = `${city}: ${weatherIcon(w.weathercode)} +${Math.round(w.temperature)}°C • ${d} ${Math.round(w.windspeed)} м/с`;
+  }catch{}
+}
+
+async function updateNowWeather(lat, lon){
+  if(!qs("nowWeather")) return;
+  const now = Date.now();
+  const curr = {lat:Number(lat), lng:Number(lon)};
+  if(nowWeatherCache && nowWeatherCoords && distKmSimple(nowWeatherCoords, curr) < 3 && (now - nowWeatherFetchedAt) < 600000){
+    qs("nowWeather").textContent = nowWeatherCache;
+    return;
+  }
+  try{
+    const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(lat)}&longitude=${encodeURIComponent(lon)}&current_weather=true`);
+    const data = await res.json();
+    const w = data?.current_weather;
+    if(!w) throw new Error("weather empty");
+    nowWeatherCache = `${Math.round(w.temperature)}°C • ${windDirShort(w.winddirection)} ${Math.round(w.windspeed)} м/с`;
+    nowWeatherFetchedAt = now;
+    nowWeatherCoords = curr;
+    qs("nowWeather").textContent = nowWeatherCache;
+  }catch(e){
+    if(nowWeatherCache) qs("nowWeather").textContent = nowWeatherCache;
+    else qs("nowWeather").textContent = "—";
+  }
+}
 
 function statusByPoint(point){
   if(!point) return { text:"Нет данных", cls:"offline" };
@@ -1164,8 +1261,13 @@ async function updateNowUI(point, sourceLabel){
     liveMarker.setLatLng([lat,lon]);
     if(liveAutoCenter) liveMap.setView([lat,lon],16);
     qs("nowAddress").textContent = await reverseGeocode(lat,lon);
+    window.currentPointForHeader = {lat, lon};
+    await updateNowWeather(lat, lon);
+    updateHeaderWeather();
+    updateRigaWeather();
   } else {
     qs("nowAddress").textContent = "—";
+    if(qs("nowWeather")) qs("nowWeather").textContent = "—";
   }
   const freshness = point?.timestamp ? Date.now() - Number(point.timestamp) : null;
   const isOnline = freshness != null && freshness <= 3*60*1000;
@@ -1360,12 +1462,10 @@ async function logAction(kind, description){
 }
 
 function buildShareUrl(token){ return `https://mygpstrack.github.io/mygps/live.html?session=${encodeURIComponent(token)}`; }
-function getRecentSourcePoints(mode, pointsLimit){
-  const limit=Math.max(2,Math.min(500,Number(pointsLimit||100)));
+function getRecentSourcePoints(){
+  const limit=30;
   const livePoints = Object.values(getSelectedLiveData()?.recentPoints || {}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
   const historyPoints = getSelectedHistoryPoints().filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
-  if(mode==="live") return livePoints.slice(-limit);
-  if(mode==="history") return historyPoints.slice(-limit);
   if(livePoints.length) return livePoints.slice(-limit);
   return historyPoints.slice(-limit);
 }
@@ -1374,9 +1474,27 @@ function generateSessionToken(){ const arr=new Uint8Array(24); crypto.getRandomV
 async function createLiveSession(){
   if(!selectedUid && allUsers.length===1){ selectedUid = allUsers[0]; qs("userSelect").value = selectedUid; }
   if(!selectedUid) return showToast("Нет пользователя. Сначала дождись появления данных GPS в Firebase или выбери пользователя.","warn");
-  const durationMinutes=Number(qs("shareDurationPreset").value||60), sourceMode=qs("shareSource").value, pointsLimit=Number(qs("sharePointsLimit").value||100), sourcePoints=getRecentSourcePoints(sourceMode,pointsLimit);
+
+  const now=Date.now();
+  const activeExisting = Object.entries(allSessions||{}).find(([token,session])=>{
+    if(token==="_init") return false;
+    const root=getSessionRoot(session), meta=root.meta||{};
+    return meta.ownerUid===selectedUid && !!meta.active && Number(meta.expiresAt||0)>now;
+  });
+  if(activeExisting){
+    const [token, session] = activeExisting;
+    createdShareUrl = buildShareUrl(token);
+    qs("shareLinkText").textContent = createdShareUrl;
+    qs("shareExpiresText").textContent = fmtTime(getSessionRoot(session).meta?.expiresAt);
+    qs("shareResultBox").classList.remove("hidden");
+    return showToast("У пользователя уже есть активная live-ссылка","warn");
+  }
+
+  const durationMinutes=Number(qs("shareDurationPreset").value||60);
+  const sourcePoints=getRecentSourcePoints();
   if(!sourcePoints.length) return showToast("Нет данных выбранного пользователя для создания live-ссылки.","warn");
-  const token=generateSessionToken(), now=Date.now(), expiresAt=now+durationMinutes*60*1000, lastPoint=sourcePoints[sourcePoints.length-1], recentPointsObj={};
+
+  const token=generateSessionToken(), expiresAt=now+durationMinutes*60*1000, lastPoint=sourcePoints[sourcePoints.length-1], recentPointsObj={};
   sourcePoints.forEach(p=>recentPointsObj[String(p.timestamp||Date.now()+Math.random())]=p);
   const payload={meta:{active:true,paused:false,createdAt:now,expiresAt,remainingMs:durationMinutes*60*1000,ownerUid:selectedUid,createdBy:auth.currentUser?.uid||null,createdByEmail:auth.currentUser?.email||null,durationMinutes},public:{lastPoint,recentPoints:recentPointsObj},viewStats:{openCount:0,firstOpenAt:null,lastOpenAt:null}};
   try{
@@ -1492,6 +1610,13 @@ async function showSessionOnMap(token){
     if(latlngs.length===1) sessionMap.setView(latlngs[0],16); else sessionMap.fitBounds(L.latLngBounds(latlngs), {padding:[30,30]});
   }
 }
+function centerSessionOnPoint(token){
+  const session=getSessionRoot(allSessions[token])||{};
+  const p=session?.public?.lastPoint || Object.values(session?.public?.recentPoints||{}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0)).slice(-1)[0];
+  if(!p || p.latitude==null || p.longitude==null) return showToast("Нет точки для центрирования","warn");
+  sessionMarker.setLatLng([Number(p.latitude), Number(p.longitude)]);
+  sessionMap.setView([Number(p.latitude), Number(p.longitude)], 17);
+}
 function renderSessions(){
   const tbody=qs("sessionsTbody"); tbody.innerHTML="";
   const search=(qs("sessionSearchInput").value||"").trim().toLowerCase(), statusFilter=qs("sessionStatusFilter").value;
@@ -1504,13 +1629,27 @@ function renderSessions(){
   if(!entries.length){ tbody.innerHTML=`<tr><td colspan="6">Сессий нет</td></tr>`; return; }
   for(const [token,session,status] of entries){
     const meta=session?.meta||{}, stats=session?.viewStats||{}, tr=document.createElement("tr");
-    tr.innerHTML=`<td class="mono">${token}<br><span class="tag">${getDisplayName(meta.ownerUid)||meta.ownerUid||"—"}</span></td><td>${getSessionStatusLabel(status)}</td><td>${fmtTime(meta.expiresAt)}</td><td>${stats.openCount||0}</td><td>${fmtTime(stats.firstOpenAt)}<br>${fmtTime(stats.lastOpenAt)}</td><td><div class="row"><button class="secondary small" data-copy="${token}">Копировать</button><button class="secondary small" data-view="${token}">Карта</button><button class="warn small" data-end="${token}">Завершить</button><button class="danger small" data-delete="${token}">Удалить</button></div></td>`;
+    tr.innerHTML=`<td class="mono">${token}<br><span class="tag">${getDisplayName(meta.ownerUid)||meta.ownerUid||"—"}</span></td><td>${getSessionStatusLabel(status)}</td><td>${fmtTime(meta.expiresAt)}</td><td>${stats.openCount||0}</td><td>${fmtTime(stats.firstOpenAt)}<br>${fmtTime(stats.lastOpenAt)}</td><td><div class="row"><button class="secondary small" data-copy="${token}">Копировать</button><button class="secondary small" data-share="${token}">Поделиться</button><button class="secondary small" data-open="${token}">Карта</button><button class="secondary small" data-center="${token}">Центр</button><button class="warn small" data-end="${token}">Завершить</button><button class="danger small" data-delete="${token}">Удалить</button></div></td>`;
     tbody.appendChild(tr);
   }
   tbody.querySelectorAll("[data-copy]").forEach(btn=>btn.onclick=async()=>{ try{ await navigator.clipboard.writeText(buildShareUrl(btn.dataset.copy)); showToast("Ссылка скопирована","success"); }catch(e){ alert("Ошибка копирования: "+errText(e)); }});
-  tbody.querySelectorAll("[data-view]").forEach(btn=>btn.onclick=()=>showSessionOnMap(btn.dataset.view));
+  tbody.querySelectorAll("[data-share]").forEach(btn=>btn.onclick=async()=>{
+    const url = buildShareUrl(btn.dataset.share);
+    try{
+      if(navigator.share){ await navigator.share({title:"MyGps Live", text:"Активная live-ссылка", url}); }
+      else { await navigator.clipboard.writeText(url); showToast("Ссылка скопирована для отправки","success"); }
+    }catch(e){}
+  });
+  tbody.querySelectorAll("[data-open]").forEach(btn=>btn.onclick=()=>window.open(buildShareUrl(btn.dataset.open), "_blank", "noopener,noreferrer"));
+  tbody.querySelectorAll("[data-center]").forEach(btn=>btn.onclick=()=>centerSessionOnPoint(btn.dataset.center));
   tbody.querySelectorAll("[data-end]").forEach(btn=>btn.onclick=()=>endSession(btn.dataset.end));
   tbody.querySelectorAll("[data-delete]").forEach(btn=>btn.onclick=()=>deleteSession(btn.dataset.delete));
+  const createBtn = qs("createShareBtn");
+  if(createBtn){
+    const hasActiveForSelected = entries.some(([token,session,status]) => status==="active" && (!selectedUid || session?.meta?.ownerUid===selectedUid));
+    createBtn.disabled = hasActiveForSelected;
+    createBtn.textContent = hasActiveForSelected ? "Есть активная ссылка" : "Создать live-ссылку";
+  }
 }
 
 
@@ -1632,7 +1771,6 @@ async function exportZip(){
 }
 function downloadText(name,content,type){ const blob=new Blob([content],{type}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=name; a.click(); URL.revokeObjectURL(url); }
 
-if (qs("googleBtn")) 
 if (qs("refreshLiveBtn")) qs("refreshLiveBtn").onclick = async () => {
   try{
     await loadSessions();
@@ -1676,6 +1814,27 @@ if (qs("cleanupEndedSessionsBtn")) qs("cleanupEndedSessionsBtn").onclick = async
   }
 };
 
+
+async function createManagedUser(){
+  const name = qs("newUserNameInput")?.value?.trim() || "Пользователь";
+  const email = qs("newUserEmailInput")?.value?.trim();
+  const password = qs("newUserPasswordInput")?.value || "";
+  if(!email || !password) return showToast("Укажи email и пароль","warn");
+  try{
+    const cred = await createUserWithEmailAndPassword(secondaryAuth, email, password);
+    await set(ref(db, `users/${cred.user.uid}`), {name, email, createdAt:Date.now(), updatedAt:Date.now()});
+    await logAction("user_create", `Создан пользователь ${email}`);
+    await signOut(secondaryAuth);
+    qs("newUserNameInput").value = "";
+    qs("newUserEmailInput").value = "";
+    qs("newUserPasswordInput").value = "";
+    await loadUsers();
+    showToast("Пользователь создан","success");
+  }catch(e){
+    recordError("createManagedUser", e);
+    showToast("Ошибка создания пользователя: "+errText(e), "error", 3600);
+  }
+}
 
 qs("googleBtn").onclick = async()=>{ try{ await signInWithPopup(auth,provider); }catch(e){ qs("errorBox").textContent="Ошибка Google-входа: "+errText(e); qs("errorBox").classList.remove("hidden"); }};
 if (qs("emailLoginBtn")) qs("emailLoginBtn").onclick = async()=>{ try{ await signInWithEmailAndPassword(auth,qs("emailInput").value.trim(),qs("passwordInput").value); }catch(e){ qs("errorBox").textContent="Ошибка входа: "+errText(e); qs("errorBox").classList.remove("hidden"); }};
@@ -1750,9 +1909,12 @@ if (qs("liveAutoCenterBtn")) qs("liveAutoCenterBtn").onclick = ()=>{ liveAutoCen
 if (qs("btnDiag")) qs("btnDiag").onclick = showDiag;
 
 if (qs("createShareBtn")) qs("createShareBtn").onclick = ()=>createLiveSession();
+if (qs("createManagedUserBtn")) qs("createManagedUserBtn").onclick = ()=>createManagedUser();
 if (qs("clearShareResultBtn")) qs("clearShareResultBtn").onclick = ()=>{ createdShareUrl=""; qs("shareResultBox").classList.add("hidden"); };
 if (qs("copyCreatedShareBtn")) qs("copyCreatedShareBtn").onclick = async()=>{ if(createdShareUrl){ await navigator.clipboard.writeText(createdShareUrl); showToast("Ссылка скопирована","success"); } };
 if (qs("openCreatedShareBtn")) qs("openCreatedShareBtn").onclick = ()=>{ if(createdShareUrl) window.open(createdShareUrl,"_blank","noopener,noreferrer"); };
+if (qs("shareCreatedShareBtn")) qs("shareCreatedShareBtn").onclick = async()=>{ if(!createdShareUrl) return; try{ if(navigator.share){ await navigator.share({title:"MyGps Live", text:"Live-ссылка", url:createdShareUrl}); } else { await navigator.clipboard.writeText(createdShareUrl); showToast("Ссылка скопирована для отправки","success"); } }catch(e){} };
+if (qs("shareCreatedShareBtn2")) qs("shareCreatedShareBtn2").onclick = async()=>{ if(!createdShareUrl) return; try{ if(navigator.share){ await navigator.share({title:"MyGps Live", text:"Live-ссылка", url:createdShareUrl}); } else { await navigator.clipboard.writeText(createdShareUrl); showToast("Ссылка скопирована для отправки","success"); } }catch(e){} };
 
 if (qs("refreshSessionsBtn")) qs("refreshSessionsBtn").onclick = async()=>{ await loadSessions(); showToast("Live-сессии обновлены","success"); };
 if (qs("syncActiveSessionsBtn")) qs("syncActiveSessionsBtn").onclick = ()=>syncActiveSessionsFromSelectedUser();
