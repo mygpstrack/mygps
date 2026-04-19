@@ -213,10 +213,14 @@
         <div class="grid6">
           <div><div class="label">Дата от</div><input id="fromDate" type="date"/></div>
           <div><div class="label">Часы от</div><select id="fromHour"></select></div>
+          <div id="customDurationBlock" style="display:none"><div class="label">Своё время</div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input id="customDurationDays" type="number" min="0" placeholder="0" style="max-width:110px"/><span class="smallMuted">дн</span><input id="customDurationHours" type="number" min="0" max="23" placeholder="0" style="max-width:110px"/><span class="smallMuted">ч</span><input id="customDurationMinutes" type="number" min="0" max="59" placeholder="0" style="max-width:110px"/><span class="smallMuted">мин</span></div></div>
           <div><div class="label">Минуты от</div><select id="fromMinute"></select></div>
+          <div id="customDurationBlock" style="display:none"><div class="label">Своё время</div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input id="customDurationDays" type="number" min="0" placeholder="0" style="max-width:110px"/><span class="smallMuted">дн</span><input id="customDurationHours" type="number" min="0" max="23" placeholder="0" style="max-width:110px"/><span class="smallMuted">ч</span><input id="customDurationMinutes" type="number" min="0" max="59" placeholder="0" style="max-width:110px"/><span class="smallMuted">мин</span></div></div>
           <div><div class="label">Дата до</div><input id="toDate" type="date"/></div>
           <div><div class="label">Часы до</div><select id="toHour"></select></div>
+          <div id="customDurationBlock" style="display:none"><div class="label">Своё время</div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input id="customDurationDays" type="number" min="0" placeholder="0" style="max-width:110px"/><span class="smallMuted">дн</span><input id="customDurationHours" type="number" min="0" max="23" placeholder="0" style="max-width:110px"/><span class="smallMuted">ч</span><input id="customDurationMinutes" type="number" min="0" max="59" placeholder="0" style="max-width:110px"/><span class="smallMuted">мин</span></div></div>
           <div><div class="label">Минуты до</div><select id="toMinute"></select></div>
+          <div id="customDurationBlock" style="display:none"><div class="label">Своё время</div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input id="customDurationDays" type="number" min="0" placeholder="0" style="max-width:110px"/><span class="smallMuted">дн</span><input id="customDurationHours" type="number" min="0" max="23" placeholder="0" style="max-width:110px"/><span class="smallMuted">ч</span><input id="customDurationMinutes" type="number" min="0" max="59" placeholder="0" style="max-width:110px"/><span class="smallMuted">мин</span></div></div>
         </div>
         <div class="row">
           <button id="todayBtn">Сегодня</button>
@@ -333,7 +337,8 @@
       <div class="card">
         <h2>Создать live-ссылку</h2>
         <div class="grid4">
-          <div><div class="label">Время доступа</div><select id="shareDurationPreset"><option value="15">15 минут</option><option value="30">30 минут</option><option value="60" selected>1 час</option><option value="180">3 часа</option><option value="360">6 часов</option><option value="720">12 часов</option><option value="1440">24 часа</option></select></div>
+          <div><div class="label">Время доступа</div><select id="shareDurationPreset" onchange="toggleCustomDuration()"><option value="5">5 минут</option><option value="10">10 минут</option><option value="15">15 минут</option><option value="20">20 минут</option><option value="30">30 минут</option><option value="45">45 минут</option><option value="60" selected>1 час</option><option value="90">1.5 часа</option><option value="120">2 часа</option><option value="180">3 часа</option><option value="240">4 часа</option><option value="360">6 часов</option><option value="480">8 часов</option><option value="720">12 часов</option><option value="1440">24 часа</option><option value="2880">48 часов</option><option value="custom">Своё время</option></select></div>
+          <div id="customDurationBlock" style="display:none"><div class="label">Своё время</div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input id="customDurationDays" type="number" min="0" placeholder="0" style="max-width:110px"/><span class="smallMuted">дн</span><input id="customDurationHours" type="number" min="0" max="23" placeholder="0" style="max-width:110px"/><span class="smallMuted">ч</span><input id="customDurationMinutes" type="number" min="0" max="59" placeholder="0" style="max-width:110px"/><span class="smallMuted">мин</span></div></div>
         </div>
         <div class="row"><button id="createShareBtn" class="success">Создать live-ссылку</button><button id="shareCreatedShareBtn" class="secondary">Поделиться</button><button id="openCreatedShareBtn">Открыть</button><button id="clearShareResultBtn" class="secondary">Очистить</button></div>
         <div id="shareResultBox" class="notice hidden">
@@ -349,6 +354,7 @@
         <div class="grid4">
           <div><div class="label">Поиск token</div><input id="sessionSearchInput" placeholder="Поиск"/></div>
           <div><div class="label">Статус</div><select id="sessionStatusFilter"><option value="all">Все</option><option value="active">Активные</option><option value="expired">Истёкшие</option><option value="ended">Завершённые</option></select></div>
+          <div id="customDurationBlock" style="display:none"><div class="label">Своё время</div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input id="customDurationDays" type="number" min="0" placeholder="0" style="max-width:110px"/><span class="smallMuted">дн</span><input id="customDurationHours" type="number" min="0" max="23" placeholder="0" style="max-width:110px"/><span class="smallMuted">ч</span><input id="customDurationMinutes" type="number" min="0" max="59" placeholder="0" style="max-width:110px"/><span class="smallMuted">мин</span></div></div>
           
         </div>
         <div class="row">
@@ -789,6 +795,12 @@ function applyToastPosition(){
   else host.style.bottom = "18px";
   if(pos.endsWith("right")) host.style.right = "18px";
   else host.style.left = "18px";
+}
+
+
+function toggleCustomDuration(){
+  const val = qs("shareDurationPreset").value;
+  qs("customDurationBlock").style.display = val === "custom" ? "block" : "none";
 }
 
 function showToast(message, type="success", duration=2600){
@@ -1553,7 +1565,17 @@ async function createLiveSession(){
     return showToast("У пользователя уже есть активная live-ссылка","warn");
   }
 
-  const durationMinutes=Number(qs("shareDurationPreset").value||60);
+  let durationVal = qs("shareDurationPreset").value;
+  let durationMinutes;
+  if(durationVal === "custom"){
+    const days = Number(qs("customDurationDays")?.value || 0);
+    const hours = Number(qs("customDurationHours")?.value || 0);
+    const minutes = Number(qs("customDurationMinutes")?.value || 0);
+    durationMinutes = days * 1440 + hours * 60 + minutes;
+  } else {
+    durationMinutes = Number(durationVal || 60);
+  }
+  if(!durationMinutes || durationMinutes <= 0) return showToast("Укажи корректное время","warn");
   const sourcePoints=getRecentSourcePoints();
   if(!sourcePoints.length) return showToast("Нет данных выбранного пользователя для создания live-ссылки.","warn");
 
