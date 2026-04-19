@@ -26,6 +26,9 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-famil
   position:fixed;top:10px;left:10px;right:10px;
   display:grid;grid-template-columns:1fr 1fr;gap:8px;z-index:1000;
 }
+.time-normal{color:var(--text)}
+.time-warn{color:var(--yellow)}
+.time-danger{color:var(--red)}
 .card{
   background:rgba(0,0,0,.62);
   padding:10px;border-radius:12px;
@@ -114,6 +117,7 @@ button{
 
 <div class="top">
   <div class="card">Погода<br><b id="weather">—</b></div>
+  <div class="card">Локация<br><b id="location">—</b></div>
   <div class="card">Статус<br><b id="status">—</b></div>
   <div class="card">Скорость<br><b id="speed">—</b></div>
   <div class="card">Обновлено<br><b id="updated">—</b></div>
@@ -129,12 +133,11 @@ button{
       <div class="box">Скорость: <span id="d_speed"></span></div>
       <div class="box">Обновлено: <span id="d_updated"></span></div>
       <div class="box">Осталось: <span id="d_time"></span></div>
-      <div class="box">Направление: <span id="d_bearing"></span></div>
+      <div class="box">GPS / Сигнал: <span id="d_bearing"></span></div>
       <div class="box">Координаты: <span id="d_coords"></span></div>
       <div class="box">Сигнал: <span id="d_signal"></span></div>
-      <div class="box">Последних точек: <span id="d_tail"></span></div>
-      <div class="box">Слежение: <span id="d_follow"></span></div>
-      <div class="box">Возраст точки: <span id="d_age"></span></div>
+      <div class="box">Точность: <span id="d_tail"></span></div>
+            <div class="box">Возраст точки: <span id="d_age"></span></div>
     </div>
 
     <button class="followBtn" id="followBtn" onclick="toggleFollow()">🎯 Слежение: Вкл</button>
@@ -202,7 +205,6 @@ function setFollowUi(){
   const btn=qs('followBtn');
   btn.innerText=follow?'🎯 Слежение: Вкл':'❌ Слежение: Выкл';
   btn.classList.toggle('off',!follow);
-  qs('d_follow').innerText=follow?'Вкл':'Выкл';
 }
 
 function toggleFollow(){
@@ -358,15 +360,24 @@ function updateUi(p, expiresAt, sessionMeta){
   qs('speed').innerText=(Number(p.speed||0)).toFixed(1)+' км/ч';
   qs('updated').innerText=relTime(p.ts);
   qs('time').innerText=leftText;
+  qs('time').className = leftMs <= 60000 ? 'time-danger' : (leftMs <= 300000 ? 'time-warn' : 'time-normal');
+
+  let gpsState='OK';
+  const ageMs = Date.now() - Number(p.ts || 0);
+  const accuracy = Number(p.accuracy || 0);
+  if(ageMs > 10 * 60 * 1000) gpsState='Нет сигнала';
+  else if(ageMs > 2 * 60 * 1000) gpsState='Точка старая';
+  else if(accuracy > 50) gpsState='Слабый';
+  else gpsState='OK';
 
   qs('d_status').innerText=meta.status;
   qs('d_speed').innerText=(Number(p.speed||0)).toFixed(1)+' км/ч';
   qs('d_updated').innerText=fmtClock(p.ts)+' ('+relTime(p.ts)+' назад)';
   qs('d_time').innerText=leftText;
-  qs('d_bearing').innerText=Math.round(Number(p.bearing||0))+'°';
+  qs('d_bearing').innerText=gpsState;
   qs('d_coords').innerText=Number(p.lat).toFixed(5)+', '+Number(p.lng).toFixed(5);
   qs('d_signal').innerText=meta.signal;
-  qs('d_follow').innerText=follow?'Вкл':'Выкл';
+  qs('d_tail').innerText=accuracy>0 ? Math.round(accuracy)+' м' : '—';
   qs('d_age').innerText=relTime(p.ts)+' назад';
 
   if(!sessionMeta?.paused && leftMs<=5*60*1000 && !warnedFive && leftMs>60*1000){
@@ -388,6 +399,7 @@ function normalizePoint(p){
     lng:Number(p.longitude ?? p.lng),
     speed:Number(p.speed ?? 0),
     bearing:Number(p.bearing ?? 0),
+    accuracy:Number(p.accuracy ?? p.acc ?? 0),
     ts:Number(p.timestamp ?? p.ts ?? Date.now())
   };
 }
@@ -436,7 +448,6 @@ function applySession(data){
 
   tailPoints = filtered.slice(-30).map(p=>[p.lat,p.lng]);
   tailLine.setLatLngs(tailPoints);
-  qs('d_tail').innerText=String(tailPoints.length);
   updateUi(smoothed, meta.expiresAt, meta);
   fetchWeather(smoothed.lat, smoothed.lng);
 
@@ -458,8 +469,14 @@ setFollowUi();
 
 
 let weatherCache=null;
-
+let locationCache=null;
+let lastWeatherFetch=0;
 let lastWeatherCoords=null;
+
+function windDir(deg){
+  const dirs=["С","СВ","В","ЮВ","Ю","ЮЗ","З","СЗ"];
+  return dirs[Math.round(deg/45)%8];
+}
 
 function distKm(a,b){
   const toRad=v=>v*Math.PI/180, R=6371;
@@ -469,61 +486,63 @@ function distKm(a,b){
   return R*(2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x)));
 }
 
-let lastWeatherFetch=0;
-
-function windDir(deg){
-  const dirs=["С","СВ","В","ЮВ","Ю","ЮЗ","З","СЗ"];
-  return dirs[Math.round(deg/45)%8];
-}
-
-async function fetchCity(lat,lng){
+async function fetchCityCountry(lat,lng){
   try{
-    const r=await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&accept-language=en`);
+    const r=await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=en`);
     const j=await r.json();
-    return j.address?.city || j.address?.town || j.address?.village || "";
-  }catch{ return ""; }
+    const a=j.address||{};
+    const city=a.city || a.town || a.village || a.municipality || a.county || "";
+    const cc=(a.country_code || "").toUpperCase();
+    const text=[city, cc].filter(Boolean).join(", ");
+    if(text){
+      locationCache=text;
+      qs('location').innerText=text;
+    }else if(locationCache){
+      qs('location').innerText=locationCache;
+    }
+    return text;
+  }catch(e){
+    if(locationCache) qs('location').innerText=locationCache;
+    return locationCache || "";
+  }
 }
 
 async function fetchWeather(lat,lng){
   const now=Date.now();
-  const curr = {lat, lng};
+  const curr={lat,lng};
+
   if(lastWeatherCoords){
-    const d = distKm(lastWeatherCoords, curr);
-    if(d < 3 && now-lastWeatherFetch<600000 && weatherCache){
-      document.getElementById("weather").innerText=weatherCache;
-    lastWeatherCoords={lat,lng};
+    const d=distKm(lastWeatherCoords, curr);
+    if(d < 3 && now-lastWeatherFetch < 600000 && weatherCache){
+      qs("weather").innerText=weatherCache;
+      if(locationCache) qs("location").innerText=locationCache;
       return;
     }
-  } else {
-    if(now-lastWeatherFetch<600000 && weatherCache){
-      document.getElementById("weather").innerText=weatherCache;
-    lastWeatherCoords={lat,lng};
-      return;
-    }
+  }else if(now-lastWeatherFetch < 600000 && weatherCache){
+    qs("weather").innerText=weatherCache;
+    if(locationCache) qs("location").innerText=locationCache;
+    return;
   }
+
   try{
     const res=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current_weather=true`);
     const j=await res.json();
     const w=j.current_weather;
     if(!w) return;
 
-    const city=await fetchCity(lat,lng);
-
     const temp=Math.round(w.temperature);
     const wind=Math.round(w.windspeed);
     const dir=windDir(w.winddirection);
-
     weatherCache=`+${temp}°C
-${city} • ${dir} ветер ${wind} м/с`;
+${dir} ветер ${wind} м/с`;
     lastWeatherFetch=now;
+    lastWeatherCoords={lat,lng};
+    qs("weather").innerText=weatherCache;
 
-    document.getElementById("weather").innerText=weatherCache;
-    lastWeatherCoords={lat,lng};
-  }catch{
-    if(weatherCache){
-      document.getElementById("weather").innerText=weatherCache;
-    lastWeatherCoords={lat,lng};
-    }
+    await fetchCityCountry(lat,lng);
+  }catch(e){
+    if(weatherCache) qs("weather").innerText=weatherCache;
+    if(locationCache) qs("location").innerText=locationCache;
   }
 }
 
@@ -544,6 +563,7 @@ setInterval(() => {
     const txt = fmtCountdown(leftMs);
     qs('time').innerText = txt;
     qs('d_time').innerText = txt;
+    qs('time').className = leftMs <= 60000 ? 'time-danger' : (leftMs <= 300000 ? 'time-warn' : 'time-normal');
     if(!currentSessionMeta?.paused && leftMs<=0){
       showEnd('Время действия ссылки истекло.');
     }
