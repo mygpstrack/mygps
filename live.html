@@ -233,6 +233,10 @@ function hideEnd(){ qs('endOverlay').style.display='none'; }
 
 async function registerSessionOpen(){
   if(!sessionId) return;
+
+  const openKey = `live_open_registered_${sessionId}`;
+  if(sessionStorage.getItem(openKey) === '1') return;
+
   try{
     const statsRef = ref(db, `liveSessions/${sessionId}/viewStats`);
     await runTransaction(statsRef, current => {
@@ -244,6 +248,7 @@ async function registerSessionOpen(){
         lastOpenAt: now
       };
     });
+    sessionStorage.setItem(openKey, '1');
   }catch(e){
     console.warn('registerSessionOpen error', e);
   }
@@ -616,10 +621,16 @@ setInterval(() => {
 if(!sessionId){
   showEnd('Неверная ссылка (нет session).');
 }else{
-  registerSessionOpen();
   const sessionRef=ref(db, `liveSessions/${sessionId}`);
+  let openRegistered = false;
+
   onValue(sessionRef, snap => {
-    applySession(snap.val());
+    const data = snap.val();
+    if(data && !openRegistered){
+      openRegistered = true;
+      registerSessionOpen();
+    }
+    applySession(data);
   }, err => {
     console.error(err);
     showEnd('Не удалось загрузить live-сессию.');
