@@ -188,7 +188,6 @@ let displayPoint=null;
 let animationFrameId=null;
 let lastPausedState=null;
 let currentSessionMeta=null;
-let frozenLeftMs=null;
 
 function togglePanel(){
   open=!open;
@@ -349,15 +348,11 @@ function animateMarkerTo(target, meta){
 
 function updateUi(p, expiresAt, meta){
   const statusMeta=getStatusMeta(p, meta);
-  let leftMs=expiresAt ? Math.max(0, Number(expiresAt)-Date.now()) : 0;
-  if(meta?.paused){
-    if(frozenLeftMs==null){
-      frozenLeftMs = leftMs;
-    }
-    leftMs = frozenLeftMs;
-  }else{
-    frozenLeftMs = null;
+  let pausedMs=Number(meta?.totalPausedMs || 0);
+  if(meta?.paused && meta?.pauseStartedAt){
+    pausedMs += Math.max(0, Date.now() - Number(meta.pauseStartedAt));
   }
+  const leftMs=expiresAt ? Math.max(0, Number(expiresAt)-Date.now()+pausedMs) : 0;
   const leftText=expiresAt ? fmtCountdown(leftMs) : '—';
 
   qs('status').innerText=statusMeta.status;
@@ -375,15 +370,15 @@ function updateUi(p, expiresAt, meta){
   qs('d_follow').innerText=follow?'Вкл':'Выкл';
   qs('d_age').innerText=relTime(p.ts)+' назад';
 
-  if(!meta?.paused && leftMs<=5*60*1000 && !warnedFive && leftMs>60*1000){
+  if(leftMs<=5*60*1000 && !warnedFive && leftMs>60*1000){
     warnedFive=true;
     showAlert('Время действия ссылки заканчивается через '+leftText);
   }
-  if(!meta?.paused && leftMs<=60*1000 && !warnedOne && leftMs>0){
+  if(leftMs<=60*1000 && !warnedOne && leftMs>0){
     warnedOne=true;
     showAlert('Время действия ссылки заканчивается через '+leftText);
   }
-  if(!meta?.paused && leftMs<=0 && expiresAt){
+  if(leftMs<=0 && expiresAt){
     showEnd('Время действия ссылки истекло.');
   }
 }
@@ -409,7 +404,7 @@ function applySession(data){
   lastPausedState=!!meta.paused;
 
   if(meta.active===false){ showEnd('Эта трансляция была остановлена владельцем.'); return; }
-  if(!meta.paused && meta.expiresAt && Number(meta.expiresAt)<=Date.now()){ showEnd('Время действия ссылки истекло.'); return; }
+  if(meta.expiresAt && Number(meta.expiresAt)<=Date.now()){ showEnd('Время действия ссылки истекло.'); return; }
   hideEnd();
 
   const recent = Object.values(data.public?.recentPoints || {})
@@ -463,18 +458,14 @@ setInterval(() => {
   qs('d_status').innerText = statusMeta.status;
   qs('d_signal').innerText = statusMeta.signal;
   if(currentSessionMeta?.expiresAt){
-    let leftMs=Math.max(0, Number(currentSessionMeta.expiresAt)-Date.now());
-    if(currentSessionMeta?.paused){
-      if(frozenLeftMs==null){
-        frozenLeftMs = leftMs;
-      }
-      leftMs = frozenLeftMs;
-    }else{
-      frozenLeftMs = null;
+    let pausedMs=Number(currentSessionMeta?.totalPausedMs || 0);
+    if(currentSessionMeta?.paused && currentSessionMeta?.pauseStartedAt){
+      pausedMs += Math.max(0, Date.now() - Number(currentSessionMeta.pauseStartedAt));
     }
+    const leftMs=Math.max(0, Number(currentSessionMeta.expiresAt)-Date.now()+pausedMs);
     qs('time').innerText = fmtCountdown(leftMs);
     qs('d_time').innerText = fmtCountdown(leftMs);
-    if(!currentSessionMeta?.paused && leftMs<=0){
+    if(leftMs<=0){
       showEnd('Время действия ссылки истекло.');
     }
   }
