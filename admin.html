@@ -367,12 +367,13 @@
             </div>
           </div>
         </div>
-        <div class="row"><button id="createShareBtn" class="success">Создать live-ссылку</button><button id="shareCreatedShareBtn" class="secondary">Поделиться</button><button id="openCreatedShareBtn">Открыть</button><button id="clearShareResultBtn" class="secondary">Очистить</button></div>
+        <div class="row"><button id="createShareBtn" class="success">Создать live-ссылку</button><button id="shareCreatedShareBtn" class="secondary">Поделиться</button><button id="openCreatedShareTopBtn">Открыть</button><button id="clearShareResultBtn" class="secondary">Очистить</button></div>
+        <div id="activeSessionNotice" class="notice hidden"></div>
         <div id="shareResultBox" class="notice hidden">
           <div><strong>Ссылка создана</strong></div>
           <div style="margin-top:8px">Истекает: <span id="shareExpiresText">—</span></div>
           <div style="margin-top:8px" class="mono" id="shareLinkText">—</div>
-          <div class="row"><button id="copyCreatedShareBtn" class="secondary">Копировать</button><button id="shareCreatedShareBtn2" class="secondary">Поделиться</button><button id="openCreatedShareBtn">Открыть</button></div>
+          <div class="row"><button id="copyCreatedShareBtn" class="secondary">Копировать</button><button id="shareCreatedShareBtn2" class="secondary">Поделиться</button><button id="openCreatedShareResultBtn">Открыть</button></div>
         </div>
       </div>
 
@@ -583,6 +584,16 @@ const geocodeCache = JSON.parse(localStorage.getItem("geocodeCache") || "{}");
 let geocodeQueue = Promise.resolve();
 
 const fmtTime = v => v ? new Date(v).toLocaleString("ru-RU") : "—";
+const fmtRemainingCompact = ms => {
+  const total = Math.max(0, Math.floor(Number(ms||0)/1000));
+  const d = Math.floor(total / 86400);
+  const h = Math.floor((total % 86400) / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  if(d > 0) return `${d}д ${h}ч ${m}м`;
+  if(h > 0) return `${h}ч ${m}м`;
+  return `${m}м ${String(s).padStart(2,"0")}с`;
+};
 const errText = e => e?.message || e?.code || String(e);
 let nowWeatherCache = null;
 let nowWeatherFetchedAt = 0;
@@ -944,7 +955,7 @@ function renderHeaderTime(){
   const d = new Date(), days = ["воскресенье","понедельник","вторник","среда","четверг","пятница","суббота"];
   qs("pageDateTime").textContent = `${days[d.getDay()]}, ${d.toLocaleString("ru-RU")}`;
 }
-setInterval(renderHeaderTime, 1000); renderHeaderTime();
+setInterval(()=>{ renderHeaderTime(); updateActiveSessionNotice(); }, 1000); renderHeaderTime();
 
 function populateTimeSelects(){
   const hourOpts = Array.from({length:24}, (_,i)=>`<option value="${String(i).padStart(2,"0")}">${String(i).padStart(2,"0")}</option>`).join("");
@@ -1466,6 +1477,7 @@ function setupAutoRefresh(){
       try{
         await loadAllData();
         await loadSessions();
+    updateActiveSessionNotice();
       }catch(e){ recordError("autoRefresh", e); }
     }, sec*1000);
   }
@@ -1589,6 +1601,7 @@ async function createLiveSession(){
     qs("shareLinkText").textContent = createdShareUrl;
     qs("shareExpiresText").textContent = fmtTime(getSessionRoot(session).meta?.expiresAt);
     qs("shareResultBox").classList.remove("hidden");
+    updateActiveSessionNotice();
     return showToast("У пользователя уже есть активная live-ссылка","warn");
   }
 
@@ -1618,6 +1631,7 @@ async function createLiveSession(){
     qs("shareExpiresText").textContent = fmtTime(expiresAt);
     qs("shareResultBox").classList.remove("hidden");
     await loadSessions();
+    updateActiveSessionNotice();
     showToast("Live-ссылка создана","success");
   }catch(e){
     recordError("createLiveSession", e); showToast("Создание live-ссылки: "+errText(e),"error",3600);
@@ -1632,11 +1646,38 @@ function getSessionStatus(session){
 }
 function getSessionStatusLabel(status){ if(status==="active") return "активна"; if(status==="ended") return "завершена"; return "истекла"; }
 
+function updateActiveSessionNotice(){
+  const box = qs("activeSessionNotice");
+  if(!box) return;
+  const now = Date.now();
+  const activeEntry = Object.entries(allSessions || {}).find(([token, session])=>{
+    if(token === "_init") return false;
+    const root = getSessionRoot(session);
+    const meta = root.meta || {};
+    return (!selectedUid || meta.ownerUid === selectedUid) && !!meta.active && Number(meta.expiresAt || 0) > now;
+  });
+
+  if(!activeEntry){
+    box.classList.add("hidden");
+    box.innerHTML = "";
+    return;
+  }
+
+  const [token, session] = activeEntry;
+  const meta = getSessionRoot(session).meta || {};
+  const left = Math.max(0, Number(meta.expiresAt || 0) - now);
+  const url = buildShareUrl(token);
+  createdShareUrl = url;
+  box.classList.remove("hidden");
+  box.innerHTML = `<strong>Live-сессия активна</strong><div style="margin-top:6px">Осталось: <b>${fmtRemainingCompact(left)}</b></div><div style="margin-top:6px" class="mono">${url}</div>`;
+}
+
 async function loadSessions(){
   const snap = await get(ref(db, "liveSessions"));
   allSessions = snap.val() || {};
   updateUsage();
   renderSessions();
+  updateActiveSessionNotice();
   await updateNowFromAvailableSources();
 }
 
@@ -2133,7 +2174,8 @@ if (qs("createTabUserBtn")) qs("createTabUserBtn").onclick = ()=>createManagedUs
 if (qs("refreshUsersManageBtn")) qs("refreshUsersManageBtn").onclick = async()=>{ await loadUsers(); renderUsersManagement(); showToast("Список пользователей обновлён","success"); };
 if (qs("clearShareResultBtn")) qs("clearShareResultBtn").onclick = ()=>{ createdShareUrl=""; qs("shareResultBox").classList.add("hidden"); };
 if (qs("copyCreatedShareBtn")) qs("copyCreatedShareBtn").onclick = async()=>{ if(createdShareUrl){ await navigator.clipboard.writeText(createdShareUrl); showToast("Ссылка скопирована","success"); } };
-if (qs("openCreatedShareBtn")) qs("openCreatedShareBtn").onclick = ()=>{ if(createdShareUrl) window.open(createdShareUrl,"_blank","noopener,noreferrer"); };
+if (qs("openCreatedShareTopBtn")) qs("openCreatedShareTopBtn").onclick = ()=>{ if(createdShareUrl) window.open(createdShareUrl,"_blank","noopener,noreferrer"); else showToast("Нет активной ссылки","warn"); };
+if (qs("openCreatedShareResultBtn")) qs("openCreatedShareResultBtn").onclick = ()=>{ if(createdShareUrl) window.open(createdShareUrl,"_blank","noopener,noreferrer"); else showToast("Нет активной ссылки","warn"); };
 if (qs("shareCreatedShareBtn")) qs("shareCreatedShareBtn").onclick = async()=>{ if(!createdShareUrl) return; try{ if(navigator.share){ await navigator.share({title:"MyGps Live", text:"Live-ссылка", url:createdShareUrl}); } else { await navigator.clipboard.writeText(createdShareUrl); showToast("Ссылка скопирована для отправки","success"); } }catch(e){} };
 if (qs("shareCreatedShareBtn2")) qs("shareCreatedShareBtn2").onclick = async()=>{ if(!createdShareUrl) return; try{ if(navigator.share){ await navigator.share({title:"MyGps Live", text:"Live-ссылка", url:createdShareUrl}); } else { await navigator.clipboard.writeText(createdShareUrl); showToast("Ссылка скопирована для отправки","success"); } }catch(e){} };
 
