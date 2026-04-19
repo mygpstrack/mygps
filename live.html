@@ -271,8 +271,8 @@ function smoothPoint(prev, cur){
   };
 }
 
-function getStatusMeta(p, meta){
-  if(meta?.paused){
+function getStatusMeta(p, sessionMeta){
+  if(sessionMeta?.paused){
     return {status:'Приостановлено', signal:'—', type:'paused'};
   }
   const ageMs=(p.ts ? Date.now()-p.ts : 0);
@@ -284,23 +284,23 @@ function getStatusMeta(p, meta){
   return {status:'Стоит', signal:'Есть', type:'stop_short'};
 }
 
-function buildIconHtml(p, meta){
-  const statusMeta=getStatusMeta(p, meta);
-  if(statusMeta.type==='offline'){
+function buildIconHtml(p, sessionMeta){
+  const meta=getStatusMeta(p, sessionMeta);
+  if(meta.type==='offline'){
     return `<div class="marker-circle" style="background:#94a3b8"></div>`;
   }
-  if(statusMeta.type==='moving'){
+  if(meta.type==='moving'){
     return `<div class="marker-arrow" style="transform:rotate(${p.bearing||0}deg)"></div>`;
   }
-  if(statusMeta.type==='paused'){
+  if(meta.type==='paused'){
     return `<div class="marker-circle" style="background:#3b82f6"></div>`;
   }
-  const color=statusMeta.type==='stop_long' ? '#ef4444' : '#f59e0b';
+  const color=meta.type==='stop_long' ? '#ef4444' : '#f59e0b';
   return `<div class="marker-circle" style="background:${color}"></div>`;
 }
 
-function setMarkerIcon(p, meta){
-  const icon=L.divIcon({html:buildIconHtml(p, meta), className:''});
+function setMarkerIcon(p, sessionMeta){
+  const icon=L.divIcon({html:buildIconHtml(p, sessionMeta), className:''});
   if(!marker){
     marker=L.marker([p.lat,p.lng],{icon}).addTo(map);
   }else{
@@ -308,11 +308,11 @@ function setMarkerIcon(p, meta){
   }
 }
 
-function animateMarkerTo(target, meta){
+function animateMarkerTo(target, sessionMeta){
   if(!target) return;
   if(!marker){
-    setMarkerIcon(target, meta);
-    marker=L.marker([target.lat,target.lng],{icon:L.divIcon({html:buildIconHtml(target, meta), className:''})}).addTo(map);
+    setMarkerIcon(target, sessionMeta);
+    marker=L.marker([target.lat,target.lng],{icon:L.divIcon({html:buildIconHtml(target, sessionMeta), className:''})}).addTo(map);
     displayPoint = {...target};
     return;
   }
@@ -320,7 +320,7 @@ function animateMarkerTo(target, meta){
   if(!displayPoint){
     displayPoint = {...target};
     marker.setLatLng([target.lat, target.lng]);
-    marker.setIcon(L.divIcon({html:buildIconHtml(target, meta), className:''}));
+    marker.setIcon(L.divIcon({html:buildIconHtml(target, sessionMeta), className:''}));
     return;
   }
 
@@ -337,7 +337,7 @@ function animateMarkerTo(target, meta){
     const lat = start.lat + (end.lat - start.lat) * eased;
     const lng = start.lng + (end.lng - start.lng) * eased;
     marker.setLatLng([lat,lng]);
-    marker.setIcon(L.divIcon({html:buildIconHtml(target, meta), className:''}));
+    marker.setIcon(L.divIcon({html:buildIconHtml(target, sessionMeta), className:''}));
     displayPoint = {...target, lat, lng};
     if(t < 1){
       animationFrameId=requestAnimationFrame(step);
@@ -346,39 +346,37 @@ function animateMarkerTo(target, meta){
   animationFrameId=requestAnimationFrame(step);
 }
 
-function updateUi(p, expiresAt, meta){
-  const statusMeta=getStatusMeta(p, meta);
-  let pausedMs=Number(meta?.totalPausedMs || 0);
-  if(meta?.paused && meta?.pauseStartedAt){
-    pausedMs += Math.max(0, Date.now() - Number(meta.pauseStartedAt));
-  }
-  const leftMs=expiresAt ? Math.max(0, Number(expiresAt)-Date.now()+pausedMs) : 0;
-  const leftText=expiresAt ? fmtCountdown(leftMs) : '—';
+function updateUi(p, expiresAt, sessionMeta){
+  const meta=getStatusMeta(p, sessionMeta);
+  const leftMs = sessionMeta?.paused
+    ? Math.max(0, Number(sessionMeta?.remainingMs || 0))
+    : (expiresAt ? Math.max(0, Number(expiresAt)-Date.now()) : 0);
+  const leftText=expiresAt || sessionMeta?.paused ? fmtCountdown(leftMs) : '—';
 
-  qs('status').innerText=statusMeta.status;
+  qs('status').innerText=meta.status;
   qs('speed').innerText=(Number(p.speed||0)).toFixed(1)+' км/ч';
   qs('updated').innerText=relTime(p.ts);
   qs('time').innerText=leftText;
 
-  qs('d_status').innerText=statusMeta.status;
+  qs('d_status').innerText=meta.status;
   qs('d_speed').innerText=(Number(p.speed||0)).toFixed(1)+' км/ч';
   qs('d_updated').innerText=fmtClock(p.ts)+' ('+relTime(p.ts)+' назад)';
   qs('d_time').innerText=leftText;
   qs('d_bearing').innerText=Math.round(Number(p.bearing||0))+'°';
   qs('d_coords').innerText=Number(p.lat).toFixed(5)+', '+Number(p.lng).toFixed(5);
-  qs('d_signal').innerText=statusMeta.signal;
+  qs('d_signal').innerText=meta.signal;
   qs('d_follow').innerText=follow?'Вкл':'Выкл';
   qs('d_age').innerText=relTime(p.ts)+' назад';
 
-  if(leftMs<=5*60*1000 && !warnedFive && leftMs>60*1000){
+  if(!sessionMeta?.paused && leftMs<=5*60*1000 && !warnedFive && leftMs>60*1000){
     warnedFive=true;
     showAlert('Время действия ссылки заканчивается через '+leftText);
   }
-  if(leftMs<=60*1000 && !warnedOne && leftMs>0){
+  if(!sessionMeta?.paused && leftMs<=60*1000 && !warnedOne && leftMs>0){
     warnedOne=true;
     showAlert('Время действия ссылки заканчивается через '+leftText);
   }
-  if(leftMs<=0 && expiresAt){
+  if(!sessionMeta?.paused && leftMs<=0 && expiresAt){
     showEnd('Время действия ссылки истекло.');
   }
 }
@@ -398,13 +396,13 @@ function applySession(data){
   const meta=data.meta||{};
   currentSessionMeta=meta;
 
-  if(lastPausedState !== null && lastPausedState !== !!meta.paused){
+  if(lastPausedState!==null && lastPausedState!==!!meta.paused){
     showAlert(meta.paused ? '⏸ Трансляция приостановлена' : '▶️ Трансляция продолжена');
   }
   lastPausedState=!!meta.paused;
 
   if(meta.active===false){ showEnd('Эта трансляция была остановлена владельцем.'); return; }
-  if(meta.expiresAt && Number(meta.expiresAt)<=Date.now()){ showEnd('Время действия ссылки истекло.'); return; }
+  if(!meta.paused && meta.expiresAt && Number(meta.expiresAt)<=Date.now()){ showEnd('Время действия ссылки истекло.'); return; }
   hideEnd();
 
   const recent = Object.values(data.public?.recentPoints || {})
@@ -413,9 +411,16 @@ function applySession(data){
     .sort((a,b)=>a.ts-b.ts);
   const filtered = filterJumps(recent);
 
-  const rawPoint = data.public?.lastPoint || data.lastPoint || data.live || filtered[filtered.length-1];
-  const point = rawPoint ? normalizePoint(rawPoint) : null;
-  if(!point) return;
+  const fallbackPoint =
+    data.public?.lastPoint ||
+    data.lastPoint ||
+    data.live?.lastPoint ||
+    data.live ||
+    filtered[filtered.length-1] ||
+    null;
+
+  const point = fallbackPoint ? normalizePoint(fallbackPoint) : null;
+  if(!point || !Number.isFinite(point.lat) || !Number.isFinite(point.lng)) return;
 
   const smoothed = smoothPoint(lastPoint, point);
   lastPoint = {...point};
@@ -451,21 +456,22 @@ setFollowUi();
 
 setInterval(() => {
   if(!lastPoint) return;
-  const statusMeta = getStatusMeta(lastPoint, currentSessionMeta);
+  const meta = getStatusMeta(lastPoint, currentSessionMeta);
   qs('updated').innerText = relTime(lastPoint.ts);
   qs('d_updated').innerText = fmtClock(lastPoint.ts)+' ('+relTime(lastPoint.ts)+' назад)';
-  qs('status').innerText = statusMeta.status;
-  qs('d_status').innerText = statusMeta.status;
-  qs('d_signal').innerText = statusMeta.signal;
-  if(currentSessionMeta?.expiresAt){
-    let pausedMs=Number(currentSessionMeta?.totalPausedMs || 0);
-    if(currentSessionMeta?.paused && currentSessionMeta?.pauseStartedAt){
-      pausedMs += Math.max(0, Date.now() - Number(currentSessionMeta.pauseStartedAt));
-    }
-    const leftMs=Math.max(0, Number(currentSessionMeta.expiresAt)-Date.now()+pausedMs);
-    qs('time').innerText = fmtCountdown(leftMs);
-    qs('d_time').innerText = fmtCountdown(leftMs);
-    if(leftMs<=0){
+  qs('status').innerText = meta.status;
+  qs('d_status').innerText = meta.status;
+  qs('d_signal').innerText = meta.signal;
+
+  const leftMs = currentSessionMeta?.paused
+    ? Math.max(0, Number(currentSessionMeta?.remainingMs || 0))
+    : (currentSessionMeta?.expiresAt ? Math.max(0, Number(currentSessionMeta.expiresAt)-Date.now()) : null);
+
+  if(leftMs !== null){
+    const txt = fmtCountdown(leftMs);
+    qs('time').innerText = txt;
+    qs('d_time').innerText = txt;
+    if(!currentSessionMeta?.paused && leftMs<=0){
       showEnd('Время действия ссылки истекло.');
     }
   }
