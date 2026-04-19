@@ -177,7 +177,7 @@
           <div class="stat"><div class="label">Направление</div><div class="value" id="nowBearing">—</div></div>
           <div class="stat"><div class="label">Простой</div><div class="value" id="nowIdle">—</div></div>
           <div class="stat"><div class="label">Адрес</div><div class="value" id="nowAddress">—</div></div>
-          <div class="stat"><div class="label">Погода</div><div class="value" id="nowWeather">—</div></div>
+          
         </div>
         <div class="row">
           <button id="liveAutoCenterBtn">Автоцентр: вкл</button>
@@ -1262,12 +1262,12 @@ async function updateNowUI(point, sourceLabel){
     if(liveAutoCenter) liveMap.setView([lat,lon],16);
     qs("nowAddress").textContent = await reverseGeocode(lat,lon);
     window.currentPointForHeader = {lat, lon};
-    await updateNowWeather(lat, lon);
+    
     updateHeaderWeather();
     updateRigaWeather();
   } else {
     qs("nowAddress").textContent = "—";
-    if(qs("nowWeather")) qs("nowWeather").textContent = "—";
+    
   }
   const freshness = point?.timestamp ? Date.now() - Number(point.timestamp) : null;
   const isOnline = freshness != null && freshness <= 3*60*1000;
