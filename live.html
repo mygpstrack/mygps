@@ -186,10 +186,10 @@ let warnedOne=false;
 let lastPoint=null;
 let displayPoint=null;
 let animationFrameId=null;
-let pauseNotified=null;
-let currentPaused=false;
-let currentRemainingMs=0;
-let currentExpiresAt=0;
+let sessionPaused=false;
+let sessionRemainingMs=0;
+let sessionExpiresAt=0;
+let previousPauseState=null;
 
 function togglePanel(){
   open=!open;
@@ -213,9 +213,9 @@ function toggleFollow(){
 }
 window.toggleFollow=toggleFollow;
 
-function showAlert(text, small='Предупреждение по времени ссылки'){
+function showAlert(text, subtitle='Предупреждение по времени ссылки'){
   const el=qs('alert');
-  el.innerHTML=text+'<small>'+small+'</small>';
+  el.innerHTML=text+'<small>'+subtitle+'</small>';
   el.style.display='block';
   clearTimeout(el._t);
   el._t=setTimeout(()=>el.style.display='none',5000);
@@ -274,7 +274,6 @@ function smoothPoint(prev, cur){
 }
 
 function getStatusMeta(p){
-  if(currentPaused) return {status:'Пауза', signal:'Остановлена', type:'paused'};
   const ageMs=(p.ts ? Date.now()-p.ts : 0);
   const speed = Number(p.speed || 0);
 
@@ -292,7 +291,7 @@ function buildIconHtml(p){
   if(meta.type==='moving'){
     return `<div class="marker-arrow" style="transform:rotate(${p.bearing||0}deg)"></div>`;
   }
-  const color=meta.type==='stop_long' ? '#ef4444' : (meta.type==='paused' ? '#94a3b8' : '#f59e0b');
+  const color=meta.type==='stop_long' ? '#ef4444' : '#f59e0b';
   return `<div class="marker-circle" style="background:${color}"></div>`;
 }
 
@@ -341,10 +340,10 @@ function animateMarkerTo(target){
   animationFrameId=requestAnimationFrame(step);
 }
 
-function updateUi(p, expiresAt){
-  const meta=getStatusMeta(p);
-  const leftMs=currentPaused ? Math.max(0, Number(currentRemainingMs||0)) : (expiresAt ? Math.max(0, Number(expiresAt)-Date.now()) : 0);
-  const leftText=(currentPaused || expiresAt) ? fmtCountdown(leftMs) : '—';
+function updateUi(p, expiresAt, paused=false, remainingMs=0){
+  const meta=paused ? {status:'Пауза', signal:'Остановлена', type:'paused'} : getStatusMeta(p);
+  const leftMs=paused ? Math.max(0, Number(remainingMs||0)) : (expiresAt ? Math.max(0, Number(expiresAt)-Date.now()) : 0);
+  const leftText=(paused || expiresAt) ? fmtCountdown(leftMs) : '—';
 
   qs('status').innerText=meta.status;
   qs('speed').innerText=(Number(p.speed||0)).toFixed(1)+' км/ч';
@@ -361,7 +360,7 @@ function updateUi(p, expiresAt){
   qs('d_follow').innerText=follow?'Вкл':'Выкл';
   qs('d_age').innerText=relTime(p.ts)+' назад';
 
-  if(!currentPaused){
+  if(!paused){
     if(leftMs<=5*60*1000 && !warnedFive && leftMs>60*1000){
       warnedFive=true;
       showAlert('Время действия ссылки заканчивается через '+leftText);
@@ -387,35 +386,42 @@ function normalizePoint(p){
 }
 
 function applySession(data){
-  if(!data){ showEnd('Ссылка не найдена или была удалена.'); return; }
-  const meta=data.meta||{};
-  currentPaused = meta.paused === true;
-  currentRemainingMs = Number(meta.remainingMs || 0);
-  currentExpiresAt = Number(meta.expiresAt || 0);
+  if(!data){ return false; }
 
-  if(meta.active===false){ showEnd('Эта трансляция была остановлена владельцем.'); return; }
-  if(!currentPaused && meta.expiresAt && Number(meta.expiresAt)<=Date.now()){ showEnd('Время действия ссылки истекло.'); return; }
+  const meta = data.meta || {};
+  const publicData = data.public || data;
+
+  if(meta.active===false){ showEnd('Эта трансляция была остановлена владельцем.'); return true; }
+  if(!meta.paused && meta.expiresAt && Number(meta.expiresAt)<=Date.now()){
+    showEnd('Время действия ссылки истекло.');
+    return true;
+  }
   hideEnd();
 
-  if(pauseNotified === null){
-    pauseNotified = currentPaused;
-  }else if(pauseNotified !== currentPaused){
-    if(currentPaused){
+  sessionPaused = meta.paused === true;
+  sessionRemainingMs = Number(meta.remainingMs || 0);
+  sessionExpiresAt = Number(meta.expiresAt || 0);
+
+  if(previousPauseState === null){
+    previousPauseState = sessionPaused;
+  }else if(previousPauseState !== sessionPaused){
+    if(sessionPaused){
       showAlert('Трансляция приостановлена', 'Статус трансляции');
     }else{
       showAlert('Трансляция продолжилась', 'Статус трансляции');
     }
-    pauseNotified = currentPaused;
+    previousPauseState = sessionPaused;
   }
 
-  const recent = Object.values(data.public?.recentPoints || {})
+  const recent = Object.values(publicData.recentPoints || {})
     .filter(Boolean)
     .map(normalizePoint)
     .sort((a,b)=>a.ts-b.ts);
   const filtered = filterJumps(recent);
 
-  const point = data.public?.lastPoint ? normalizePoint(data.public.lastPoint) : filtered[filtered.length-1];
-  if(!point) return;
+  const rawPoint = publicData.lastPoint || filtered[filtered.length-1];
+  if(!rawPoint) return true;
+  const point = normalizePoint(rawPoint);
 
   const smoothed = smoothPoint(lastPoint, point);
   lastPoint = {...point};
@@ -431,9 +437,10 @@ function applySession(data){
   tailPoints = filtered.slice(-30).map(p=>[p.lat,p.lng]);
   tailLine.setLatLngs(tailPoints);
   qs('d_tail').innerText=String(tailPoints.length);
-  updateUi(smoothed, meta.expiresAt);
+  updateUi(smoothed, meta.expiresAt, sessionPaused, sessionRemainingMs);
 
   if(follow) map.panTo([smoothed.lat, smoothed.lng], {animate:true});
+  return true;
 }
 
 map.on('dragstart',()=>{
@@ -451,28 +458,64 @@ setFollowUi();
 
 setInterval(() => {
   if(!lastPoint) return;
-  const meta = getStatusMeta(lastPoint);
+  const meta = sessionPaused ? {status:'Пауза', signal:'Остановлена'} : getStatusMeta(lastPoint);
   qs('updated').innerText = relTime(lastPoint.ts);
   qs('d_updated').innerText = fmtClock(lastPoint.ts)+' ('+relTime(lastPoint.ts)+' назад)';
   qs('status').innerText = meta.status;
   qs('d_status').innerText = meta.status;
   qs('d_signal').innerText = meta.signal;
 
-  const leftMs = currentPaused ? Math.max(0, Number(currentRemainingMs||0)) : (currentExpiresAt ? Math.max(0, Number(currentExpiresAt) - Date.now()) : 0);
-  const leftText = (currentPaused || currentExpiresAt) ? fmtCountdown(leftMs) : '—';
+  const leftMs = sessionPaused
+    ? Math.max(0, Number(sessionRemainingMs || 0))
+    : (sessionExpiresAt ? Math.max(0, Number(sessionExpiresAt) - Date.now()) : 0);
+  const leftText = (sessionPaused || sessionExpiresAt) ? fmtCountdown(leftMs) : '—';
   qs('time').innerText = leftText;
   qs('d_time').innerText = leftText;
 }, 1000);
 
+let fallbackLiveSubscribed = false;
+function subscribeFallbackLive(){
+  if(fallbackLiveSubscribed) return;
+  fallbackLiveSubscribed = true;
+  const fallbackRef = ref(db, 'live/default');
+  onValue(fallbackRef, snap => {
+    const data = snap.val();
+    if(!data){
+      showEnd('Нет активных live-данных.');
+      return;
+    }
+    applySession({
+      meta: {
+        active: true,
+        paused: !!data.paused,
+        remainingMs: Number(data.remainingMs || 0),
+        expiresAt: Number(data.expiresAt || 0)
+      },
+      public: {
+        lastPoint: data.lastPoint || null,
+        recentPoints: data.recentPoints || {}
+      }
+    });
+  }, err => {
+    console.error(err);
+    showEnd('Не удалось загрузить live-данные.');
+  });
+}
+
 if(!sessionId){
-  showEnd('В ссылке отсутствует параметр session.');
+  subscribeFallbackLive();
 }else{
   const sessionRef=ref(db, `liveSessions/${sessionId}`);
   onValue(sessionRef, snap => {
-    applySession(snap.val());
+    const data = snap.val();
+    const applied = applySession(data);
+    const hasPublic = !!(data && ((data.public && (data.public.lastPoint || (data.public.recentPoints && Object.keys(data.public.recentPoints).length))) || data.lastPoint || (data.recentPoints && Object.keys(data.recentPoints).length)));
+    if(!applied || !hasPublic){
+      subscribeFallbackLive();
+    }
   }, err => {
     console.error(err);
-    showEnd('Не удалось загрузить live-сессию.');
+    subscribeFallbackLive();
   });
 }
 </script>
