@@ -368,8 +368,7 @@
           </div>
         </div>
         <div class="row"><button id="createShareBtn" class="success">Создать live-ссылку</button><button id="shareCreatedShareBtn" class="secondary">Поделиться</button><button id="openCreatedShareTopBtn">Открыть</button><button id="clearShareResultBtn" class="secondary">Очистить</button></div>
-        <div id="activeSessionNotice" class="notice hidden"></div>
-        <div id="shareResultBox" class="notice hidden">
+<div id="shareResultBox" class="notice hidden">
           <div><strong>Ссылка создана</strong></div>
           <div style="margin-top:8px">Истекает: <span id="shareExpiresText">—</span></div>
           <div style="margin-top:8px" class="mono" id="shareLinkText">—</div>
@@ -954,10 +953,12 @@ function formatRemainingMs(ms){
   const d = Math.floor(totalSec / 86400);
   const h = Math.floor((totalSec % 86400) / 3600);
   const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
   const parts = [];
   if(d > 0) parts.push(`${d}д`);
   if(h > 0) parts.push(`${h}ч`);
-  if(m > 0 || !parts.length) parts.push(`${m}м`);
+  parts.push(`${m}м`);
+  parts.push(`${String(s).padStart(2,"0")}с`);
   return parts.join(" ");
 }
 
@@ -991,6 +992,16 @@ function updateActiveSessionToast(){
   const [token, session] = entry;
   const meta = getSessionRoot(session)?.meta || {};
   const leftMs = Math.max(0, Number(meta.expiresAt||0) - Date.now());
+
+  if(leftMs <= 0){
+    if(el) el.remove();
+    const createBtn = qs("createShareBtn");
+    if(createBtn){
+      createBtn.disabled = false;
+      createBtn.textContent = "Создать live-ссылку";
+    }
+    return;
+  }
 
   if(!el){
     el = document.createElement("div");
