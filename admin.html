@@ -17,6 +17,28 @@
     h1,h2,h3,p{margin:0}
     .sub{color:var(--muted);margin-top:6px;line-height:1.6}
     .headerTime{margin-top:8px;color:var(--muted)}
+.weatherBar{margin-top:8px;display:flex;gap:10px;flex-wrap:wrap}
+.weatherChip{
+  display:inline-flex;align-items:center;gap:10px;
+  padding:8px 12px;border-radius:999px;
+  border:1px solid var(--border);
+  background:rgba(255,255,255,.04);
+  transition:transform .25s ease, box-shadow .25s ease, background .25s ease, opacity .25s ease;
+}
+.weatherChip.flash{
+  background:rgba(37,99,235,.16);
+  box-shadow:0 0 0 1px rgba(59,130,246,.25), 0 8px 24px rgba(37,99,235,.14);
+  transform:translateY(-1px);
+}
+.weatherIcon{
+  font-size:20px;line-height:1;display:inline-block;
+  transition:transform .35s ease, opacity .25s ease;
+}
+.weatherChip.flash .weatherIcon{transform:scale(1.12);opacity:.96}
+.weatherText{display:flex;gap:6px;align-items:baseline;flex-wrap:wrap}
+.weatherCity{color:var(--text);font-weight:700}
+.weatherMeta{color:var(--muted);font-size:13px}
+
     .grid2,.grid3,.grid4,.grid5,.grid6{display:grid;gap:12px;margin-top:12px}
     .grid2{grid-template-columns:repeat(2,minmax(0,1fr))}
     .grid3{grid-template-columns:repeat(3,minmax(0,1fr))}
@@ -86,9 +108,9 @@
   <div class="card">
     <h1>MyGps</h1>
     <div id="pageDateTime" class="headerTime">—</div>
-    <div class="headerTime" style="margin-top:6px;display:flex;gap:12px;flex-wrap:wrap">
-      <span id="headerWeatherStatic">Riga: —</span>
-      <span id="headerWeatherDynamic">—</span>
+    <div class="weatherBar">
+      <div id="headerWeatherStatic" class="weatherChip"><span class="weatherIcon">☁</span><span class="weatherText"><span class="weatherCity">Riga</span><span class="weatherMeta">—</span></span></div>
+      <div id="headerWeatherDynamic" class="weatherChip"><span class="weatherIcon">☁</span><span class="weatherText"><span class="weatherCity">По точке</span><span class="weatherMeta">—</span></span></div>
     </div>
     
   </div>
@@ -559,6 +581,22 @@ function weatherIcon(code){
   return "☁";
 }
 
+function setWeatherChip(id, city, icon, meta){
+  const el = qs(id);
+  if(!el) return;
+  const iconEl = el.querySelector(".weatherIcon");
+  const cityEl = el.querySelector(".weatherCity");
+  const metaEl = el.querySelector(".weatherMeta");
+  if(iconEl) iconEl.textContent = icon || "☁";
+  if(cityEl) cityEl.textContent = city || "—";
+  if(metaEl) metaEl.textContent = meta || "—";
+  el.classList.remove("flash");
+  void el.offsetWidth;
+  el.classList.add("flash");
+  clearTimeout(el._flashTimer);
+  el._flashTimer = setTimeout(()=>el.classList.remove("flash"), 900);
+}
+
 async function updateRigaWeather(){
   try{
     const lat=56.95, lon=24.10;
@@ -568,7 +606,7 @@ async function updateRigaWeather(){
     if(!w) return;
     const dirs=["С","СВ","В","ЮВ","Ю","ЮЗ","З","СЗ"];
     const d=dirs[Math.round(w.winddirection/45)%8];
-    qs("headerWeatherStatic").textContent = `Riga: ${weatherIcon(w.weathercode)} +${Math.round(w.temperature)}°C • ${d} ${Math.round(w.windspeed)} м/с`;
+    setWeatherChip("headerWeatherStatic", "Riga", weatherIcon(w.weathercode), `+${Math.round(w.temperature)}°C • ${d} ${Math.round(w.windspeed)} м/с`);
   }catch{}
 }
 
@@ -576,11 +614,20 @@ async function updateHeaderWeather(){
   if(!window.currentPointForHeader) return;
   const {lat, lon} = window.currentPointForHeader;
   try{
-    const cityRaw = await reverseGeocode(lat, lon);
-    let city = "Here";
-    if(cityRaw && cityRaw !== "Адрес не найден"){
-      city = cityRaw.split(",")[0].trim() || "Here";
-    }
+    let city = "По точке";
+    try{
+      const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&accept-language=en`);
+      const geo = await geoRes.json();
+      const a = geo?.address || {};
+      city =
+        a.city ||
+        a.town ||
+        a.village ||
+        a.municipality ||
+        a.suburb ||
+        a.county ||
+        "По точке";
+    }catch(e){}
 
     const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`);
     const j = await r.json();
@@ -588,7 +635,7 @@ async function updateHeaderWeather(){
     if(!w) return;
     const dirs=["С","СВ","В","ЮВ","Ю","ЮЗ","З","СЗ"];
     const d=dirs[Math.round(w.winddirection/45)%8];
-    qs("headerWeatherDynamic").textContent = `${city}: ${weatherIcon(w.weathercode)} +${Math.round(w.temperature)}°C • ${d} ${Math.round(w.windspeed)} м/с`;
+    setWeatherChip("headerWeatherDynamic", city, weatherIcon(w.weathercode), `+${Math.round(w.temperature)}°C • ${d} ${Math.round(w.windspeed)} м/с`);
   }catch{}
 }
 
