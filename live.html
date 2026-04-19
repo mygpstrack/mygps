@@ -172,6 +172,7 @@ const db=getDatabase(app);
 const qs=id=>document.getElementById(id);
 const params=new URLSearchParams(location.search);
 const sessionId=params.get("session");
+if(!sessionId){ showEnd("Неверная ссылка (нет session)"); }
 
 const map=L.map('map').setView([56.95,24.1],13);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{crossOrigin:true}).addTo(map);
@@ -186,9 +187,7 @@ let warnedOne=false;
 let lastPoint=null;
 let displayPoint=null;
 let animationFrameId=null;
-let sessionPaused = false;
-let sessionRemainingMs = 0;
-let previousPauseState = null;  
+let lastPausedState = null;
 
 function togglePanel(){
   open=!open;
@@ -272,11 +271,17 @@ function smoothPoint(prev, cur){
   };
 }
 
-function getStatusMeta(p){
+function getStatusMeta(p, meta){
+  if(meta?.paused){
+    return {status:'Приостановлено', signal:'—', type:'paused'};
+  }
   const ageMs=(p.ts ? Date.now()-p.ts : 0);
   const speed = Number(p.speed || 0);
-
   if(ageMs > 10 * 60 * 1000) return {status:'Нет сигнала', signal:'Потерян', type:'offline'};
+  if(speed > 2) return {status:'Движение', signal:'Хороший', type:'moving'};
+  if(ageMs >= 5 * 60 * 1000) return {status:'Стоянка', signal:'Есть', type:'stop_long'};
+  return {status:'Стоит', signal:'Есть', type:'stop_short'};
+};
   if(speed > 2) return {status:'Движение', signal:'Хороший', type:'moving'};
   if(ageMs >= 5 * 60 * 1000) return {status:'Стоянка', signal:'Есть', type:'stop_long'};
   return {status:'Стоит', signal:'Есть', type:'stop_short'};
@@ -339,11 +344,16 @@ function animateMarkerTo(target){
   animationFrameId=requestAnimationFrame(step);
 }
 
-function updateUi(p, expiresAt){
+function updateUi(p, expiresAt, meta){
+  let now = Date.now();
+  let pausedMs = Number(meta?.totalPausedMs || 0);
+  if(meta?.paused && meta?.pauseStartedAt){
+    pausedMs += (now - Number(meta.pauseStartedAt));
+  }
+  const leftMs = expiresAt ? Math.max(0, Number(expiresAt) - now + pausedMs) : 0;
+  const leftText = expiresAt ? fmtCountdown(leftMs) : '—';
   const meta=getStatusMeta(p);
-  const leftMs = sessionPaused
-  ? Math.max(0, sessionRemainingMs)
-  : (expiresAt ? Math.max(0, Number(expiresAt) - Date.now()) : 0);
+  const leftMs=expiresAt ? Math.max(0, Number(expiresAt)-Date.now()) : 0;
   const leftText=expiresAt ? fmtCountdown(leftMs) : '—';
 
   qs('status').innerText=meta.status;
@@ -369,7 +379,7 @@ function updateUi(p, expiresAt){
     warnedOne=true;
     showAlert('Время действия ссылки заканчивается через '+leftText);
   }
-  if(!sessionPaused && leftMs<=0 && expiresAt){
+  if(leftMs<=0 && expiresAt){
     showEnd('Время действия ссылки истекло.');
   }
 }
@@ -387,24 +397,18 @@ function normalizePoint(p){
 function applySession(data){
   if(!data){ showEnd('Ссылка не найдена или была удалена.'); return; }
   const meta=data.meta||{};
+
+if(lastPausedState !== meta.paused){
+  if(meta.paused){
+    showAlert('⏸ Трансляция приостановлена');
+  }else if(lastPausedState === true && meta.paused === false){
+    showAlert('▶️ Трансляция продолжена');
+  }
+  lastPausedState = meta.paused;
+}
   if(meta.active===false){ showEnd('Эта трансляция была остановлена владельцем.'); return; }
   if(meta.expiresAt && Number(meta.expiresAt)<=Date.now()){ showEnd('Время действия ссылки истекло.'); return; }
   hideEnd();
-  
-  // ===== PAUSE SYNC (чистый фикс) =====
-sessionPaused = meta.paused === true;
-sessionRemainingMs = Number(meta.remainingMs || 0);
-
-if (previousPauseState === null) {
-  previousPauseState = sessionPaused;
-} else if (previousPauseState !== sessionPaused) {
-  if (sessionPaused) {
-    showAlert('Трансляция приостановлена');
-  } else {
-    showAlert('Трансляция продолжилась');
-  }
-  previousPauseState = sessionPaused;
-}
 
   const recent = Object.values(data.public?.recentPoints || {})
     .filter(Boolean)
@@ -412,7 +416,15 @@ if (previousPauseState === null) {
     .sort((a,b)=>a.ts-b.ts);
   const filtered = filterJumps(recent);
 
-  const point = data.public?.lastPoint ? normalizePoint(data.public.lastPoint) : filtered[filtered.length-1];
+  const rawPoint =
+  data.public?.lastPoint ||
+  data.lastPoint ||
+  data.live ||
+  null;
+
+const point = rawPoint
+  ? normalizePoint(rawPoint)
+  : filtered[filtered.length-1];
   if(!point) return;
 
   const smoothed = smoothPoint(lastPoint, point);
