@@ -106,7 +106,21 @@
 <body>
 <div class="wrap">
   <div class="card">
-    <h1>MyGps</h1>
+    <div style="display:flex;align-items:center;min-height:40px"><svg width="180" height="44" viewBox="0 0 220 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="mygpsGrad" x1="6" y1="4" x2="214" y2="52" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#22C55E"/>
+      <stop offset="1" stop-color="#3B82F6"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(2,2)">
+    <path d="M24 2C14.06 2 6 10.06 6 20c0 12.32 18 28 18 28s18-15.68 18-28C42 10.06 33.94 2 24 2Z" fill="url(#mygpsGrad)"/>
+    <circle cx="24" cy="20" r="6.3" fill="white"/>
+    <path d="M5 46.5C11.5 41.2 18.5 40.2 26 43.8C32.5 46.9 38.1 46.4 44.5 42.8" stroke="url(#mygpsGrad)" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="3.8" cy="46.8" r="3.4" fill="url(#mygpsGrad)"/>
+  </g>
+  <text x="62" y="37" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="34" font-weight="800" fill="url(#mygpsGrad)">MyGps</text>
+</svg></div>
     <div id="pageDateTime" class="headerTime">—</div>
     <div class="weatherBar">
       <div id="headerWeatherStatic" class="weatherChip"><span class="weatherIcon">☁</span><span class="weatherText"><span class="weatherCity">Riga</span><span class="weatherMeta">—</span></span></div>
@@ -2026,6 +2040,136 @@ async function buildPdfBlob(){
   doc.autoTable({startY:52, head:[["Time","Coordinates","Speed km/h"]], body:rows, styles:{fontSize:9}});
   return doc.output("blob");
 }
+
+const PDF_LOGO_SVG = `<svg width="180" height="44" viewBox="0 0 220 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="mygpsGrad" x1="6" y1="4" x2="214" y2="52" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#22C55E"/>
+      <stop offset="1" stop-color="#3B82F6"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(2,2)">
+    <path d="M24 2C14.06 2 6 10.06 6 20c0 12.32 18 28 18 28s18-15.68 18-28C42 10.06 33.94 2 24 2Z" fill="url(#mygpsGrad)"/>
+    <circle cx="24" cy="20" r="6.3" fill="white"/>
+    <path d="M5 46.5C11.5 41.2 18.5 40.2 26 43.8C32.5 46.9 38.1 46.4 44.5 42.8" stroke="url(#mygpsGrad)" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="3.8" cy="46.8" r="3.4" fill="url(#mygpsGrad)"/>
+  </g>
+  <text x="62" y="37" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="34" font-weight="800" fill="url(#mygpsGrad)">MyGps</text>
+</svg>`;
+
+function svgToDataUri(svg){
+  return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+}
+
+function pointLabelsText(p){
+  const vals = [p.label, p.labels, p.tags].filter(Boolean);
+  if(!vals.length) return "—";
+  return vals.map(v => Array.isArray(v) ? v.join(", ") : String(v)).join(" | ");
+}
+
+function getPdfOptions(){
+  return {
+    summary: !!qs("pdfBlockSummary")?.checked,
+    map: !!qs("pdfBlockMap")?.checked,
+    speed: !!qs("pdfBlockSpeed")?.checked,
+    accuracy: !!qs("pdfBlockAccuracy")?.checked,
+    labels: !!qs("pdfBlockLabels")?.checked,
+    table: !!qs("pdfBlockTable")?.checked
+  };
+}
+
+async function exportPdfReport(){
+  const pts = getExportPoints();
+  if(!pts.length) return showToast("Нет данных для PDF","warn");
+
+  const options = getPdfOptions();
+  const {jsPDF} = window.jspdf;
+  const doc = new jsPDF();
+  const s = computeSummary(pts);
+  let y = 14;
+
+  try {
+    doc.addImage(svgToDataUri(PDF_LOGO_SVG), "SVG", 14, 8, 56, 14);
+  } catch(e) {
+    // fallback: nothing
+  }
+  y = 28;
+  doc.setFontSize(10);
+  doc.text(`Отчёт: ${userLabel(selectedUid) || "—"}`, 14, y);
+  y += 6;
+  doc.text(`Создан: ${new Date().toLocaleString("ru-RU")}`, 14, y);
+  y += 8;
+
+  if(options.summary){
+    doc.setFontSize(12);
+    doc.text("Общая информация", 14, y);
+    y += 6;
+    doc.setFontSize(10);
+    doc.text(`Точек: ${pts.length}`, 14, y); y += 5;
+    doc.text(`Пробег: ${s.km.toFixed(2)} км`, 14, y); y += 5;
+    doc.text(`Средняя скорость: ${s.avgSpeed.toFixed(1)} км/ч`, 14, y); y += 5;
+    doc.text(`Макс. скорость: ${s.maxSpeed.toFixed(1)} км/ч`, 14, y); y += 7;
+  }
+
+  if(options.map){
+    try {
+      const mapData = await exportMapPng();
+      if(mapData){
+        if(y > 190){ doc.addPage(); y = 16; }
+        doc.setFontSize(12);
+        doc.text("Карта маршрута", 14, y);
+        y += 5;
+        doc.addImage(mapData, "PNG", 14, y, 180, 70);
+        y += 78;
+      }
+    } catch(e) {}
+  }
+
+  if(options.speed || options.accuracy || options.labels){
+    if(y > 220){ doc.addPage(); y = 16; }
+    doc.setFontSize(12);
+    doc.text("Сводка по данным", 14, y);
+    y += 6;
+    doc.setFontSize(10);
+    if(options.speed){
+      const speeds = pts.map(p=>Number(p.speed||0)).filter(v=>Number.isFinite(v));
+      const minSp = speeds.length ? Math.min(...speeds) : 0;
+      const maxSp = speeds.length ? Math.max(...speeds) : 0;
+      doc.text(`Скорость: мин ${minSp.toFixed(1)} / макс ${maxSp.toFixed(1)} км/ч`, 14, y); y += 5;
+    }
+    if(options.accuracy){
+      const accs = pts.map(p=>Number(p.accuracy||0)).filter(v=>Number.isFinite(v) && v > 0);
+      const minA = accs.length ? Math.min(...accs) : 0;
+      const maxA = accs.length ? Math.max(...accs) : 0;
+      doc.text(`Точность: мин ${minA.toFixed(0)} / макс ${maxA.toFixed(0)} м`, 14, y); y += 5;
+    }
+    if(options.labels){
+      const labels = Array.from(new Set(pts.map(pointLabelsText).filter(v=>v && v !== "—")));
+      doc.text(`Метки: ${labels.length ? labels.join(", ").slice(0, 140) : "—"}`, 14, y, {maxWidth:180}); y += 8;
+    }
+  }
+
+  if(options.table){
+    const rows = pts.slice(0,250).map(p=>[
+      fmtTime(p.timestamp),
+      `${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}`,
+      p.speed != null ? Number(p.speed).toFixed(1) : "—",
+      p.accuracy != null ? Number(p.accuracy).toFixed(0) : "—",
+      pointLabelsText(p)
+    ]);
+    doc.autoTable({
+      startY: y,
+      head:[["Время","Координаты","Скорость","Точность","Метки"]],
+      body: rows,
+      styles: {fontSize:8},
+      headStyles: {fillColor:[37,99,235]},
+      margin: {left:14,right:14}
+    });
+  }
+
+  doc.save(`${exportBaseName()}.pdf`);
+  showToast("PDF экспортирован","success");
+}
 async function exportMapPngBlob(){
   const mapEl = qs("historyMap");
   if(!mapEl) throw new Error("historyMap not found");
@@ -2379,7 +2523,7 @@ function exportBaseName(suffix=""){
 if (qs("exportJsonBtn")) qs("exportJsonBtn").onclick = ()=>downloadText(`${exportBaseName()}.json`, JSON.stringify(getExportPoints(),null,2), "application/json");
 if (qs("exportCsvBtn")) qs("exportCsvBtn").onclick = ()=>{ const pts=getExportPoints(), lines=["timestamp,latitude,longitude,accuracy,speed"]; pts.forEach(p=>lines.push([p.timestamp??"",p.latitude??"",p.longitude??"",p.accuracy??"",p.speed??""].join(","))); downloadText(`${exportBaseName()}.csv`, lines.join("\n"), "text/csv"); showToast("CSV экспортирован","success"); };
 if (qs("exportGpxBtn")) qs("exportGpxBtn").onclick = ()=>{ const pts=getExportPoints(), lines=['<?xml version="1.0" encoding="UTF-8"?>','<gpx version="1.1" creator="MyGps Admin" xmlns="http://www.topografix.com/GPX/1/1">','<trk><name>History Export</name><trkseg>']; pts.forEach(p=>lines.push(`<trkpt lat="${p.latitude}" lon="${p.longitude}"><time>${new Date(Number(p.timestamp||0)).toISOString()}</time></trkpt>`)); lines.push('</trkseg></trk></gpx>'); downloadText(`${exportBaseName()}.gpx`, lines.join(""), "application/gpx+xml"); showToast("GPX экспортирован","success"); };
-if (qs("exportPdfBtn")) qs("exportPdfBtn").onclick = ()=>{ const pts=getExportPoints(), s=computeSummary(pts), {jsPDF}=window.jspdf, doc=new jsPDF(); doc.text("MyGps History Report",14,16); doc.text(`Distance: ${s.km.toFixed(2)} km`,14,28); doc.text(`Average speed: ${s.avgSpeed.toFixed(1)} km/h`,14,36); doc.text(`Max speed: ${s.maxSpeed.toFixed(1)} km/h`,14,44); const rows=pts.slice(0,250).map(p=>[fmtTime(p.timestamp), `${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}`, p.speed != null ? Number(p.speed).toFixed(1) : "—"]); doc.autoTable({startY:52, head:[["Time","Coordinates","Speed km/h"]], body:rows, styles:{fontSize:9}}); doc.save(`${exportBaseName()}.pdf`); showToast("PDF экспортирован","success"); };
+if (qs("exportPdfBtn")) qs("exportPdfBtn").onclick = ()=>exportPdfReport();
 if (qs("exportZipBtn")) qs("exportZipBtn").onclick = async()=>{ const pts=getExportPoints(); const zip=new JSZip(); zip.file(`${exportBaseName()}.json`, JSON.stringify(pts,null,2)); const lines=["timestamp,latitude,longitude,accuracy,speed"]; pts.forEach(p=>lines.push([p.timestamp??"",p.latitude??"",p.longitude??"",p.accuracy??"",p.speed??""].join(","))); zip.file(`${exportBaseName()}.csv`, lines.join("\n")); const blob=await zip.generateAsync({type:"blob"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=`${exportBaseName()}.zip`; a.click(); URL.revokeObjectURL(url); showToast("ZIP экспортирован","success"); };
 if (qs("exportPngBtn")) qs("exportPngBtn").onclick = async()=>{ const canvas=await html2canvas(qs("historyMap")); canvas.toBlob(blob=>{ const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=`${exportBaseName()}.png`; a.click(); URL.revokeObjectURL(url); showToast("PNG экспортирован","success"); }); };
 
