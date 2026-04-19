@@ -284,7 +284,7 @@ function getStatusMeta(p){
 }
 
 function buildIconHtml(p){
-  const meta=getStatusMeta(p);
+  const meta=paused ? {status:'Пауза', signal:'Остановлена'} : getStatusMeta(p);
   if(meta.type==='offline'){
     return `<div class="marker-circle" style="background:#94a3b8"></div>`;
   }
@@ -341,9 +341,9 @@ function animateMarkerTo(target){
 }
 
 function updateUi(p, expiresAt, paused=false, remainingMs=0){
-  const meta=paused ? {status:'Пауза', signal:'Остановлена', type:'paused'} : getStatusMeta(p);
+  const meta=paused ? {status:'Пауза', signal:'Остановлена'} : getStatusMeta(p);
   const leftMs=paused ? Math.max(0, Number(remainingMs||0)) : (expiresAt ? Math.max(0, Number(expiresAt)-Date.now()) : 0);
-  const leftText=(paused || expiresAt) ? fmtCountdown(leftMs) : '—';
+  const leftText=expiresAt ? fmtCountdown(leftMs) : '—';
 
   qs('status').innerText=meta.status;
   qs('speed').innerText=(Number(p.speed||0)).toFixed(1)+' км/ч';
@@ -360,18 +360,16 @@ function updateUi(p, expiresAt, paused=false, remainingMs=0){
   qs('d_follow').innerText=follow?'Вкл':'Выкл';
   qs('d_age').innerText=relTime(p.ts)+' назад';
 
-  if(!paused){
-    if(leftMs<=5*60*1000 && !warnedFive && leftMs>60*1000){
-      warnedFive=true;
-      showAlert('Время действия ссылки заканчивается через '+leftText);
-    }
-    if(leftMs<=60*1000 && !warnedOne && leftMs>0){
-      warnedOne=true;
-      showAlert('Время действия ссылки заканчивается через '+leftText);
-    }
-    if(leftMs<=0 && expiresAt){
-      showEnd('Время действия ссылки истекло.');
-    }
+  if(leftMs<=5*60*1000 && !warnedFive && leftMs>60*1000){
+    warnedFive=true;
+    showAlert('Время действия ссылки заканчивается через '+leftText);
+  }
+  if(leftMs<=60*1000 && !warnedOne && leftMs>0){
+    warnedOne=true;
+    showAlert('Время действия ссылки заканчивается через '+leftText);
+  }
+  if(leftMs<=0 && expiresAt){
+    showEnd('Время действия ссылки истекло.');
   }
 }
 
@@ -386,42 +384,34 @@ function normalizePoint(p){
 }
 
 function applySession(data){
-  if(!data){ return false; }
-
-  const meta = data.meta || {};
-  const publicData = data.public || data;
-
-  if(meta.active===false){ showEnd('Эта трансляция была остановлена владельцем.'); return true; }
-  if(!meta.paused && meta.expiresAt && Number(meta.expiresAt)<=Date.now()){
-    showEnd('Время действия ссылки истекло.');
-    return true;
-  }
+  if(!data){ showEnd('Ссылка не найдена или была удалена.'); return; }
+  const meta=data.meta||{};
+  if(meta.active===false){ showEnd('Эта трансляция была остановлена владельцем.'); return; }
+  if(!meta.paused && meta.expiresAt && Number(meta.expiresAt)<=Date.now()){ showEnd('Время действия ссылки истекло.'); return; }
   hideEnd();
+sessionPaused = meta.paused === true;
+sessionRemainingMs = Number(meta.remainingMs || 0);
+sessionExpiresAt = Number(meta.expiresAt || 0);
 
-  sessionPaused = meta.paused === true;
-  sessionRemainingMs = Number(meta.remainingMs || 0);
-  sessionExpiresAt = Number(meta.expiresAt || 0);
-
-  if(previousPauseState === null){
-    previousPauseState = sessionPaused;
-  }else if(previousPauseState !== sessionPaused){
-    if(sessionPaused){
-      showAlert('Трансляция приостановлена', 'Статус трансляции');
-    }else{
-      showAlert('Трансляция продолжилась', 'Статус трансляции');
-    }
-    previousPauseState = sessionPaused;
+if(previousPauseState === null){
+  previousPauseState = sessionPaused;
+}else if(previousPauseState !== sessionPaused){
+  if(sessionPaused){
+    showAlert('Трансляция приостановлена', 'Статус трансляции');
+  }else{
+    showAlert('Трансляция продолжилась', 'Статус трансляции');
   }
+  previousPauseState = sessionPaused;
+}
 
-  const recent = Object.values(publicData.recentPoints || {})
+  const recent = Object.values(data.public?.recentPoints || {})
     .filter(Boolean)
     .map(normalizePoint)
     .sort((a,b)=>a.ts-b.ts);
   const filtered = filterJumps(recent);
 
-  const rawPoint = publicData.lastPoint || filtered[filtered.length-1];
-  if(!rawPoint) return true;
-  const point = normalizePoint(rawPoint);
+  const point = data.public?.lastPoint ? normalizePoint(data.public.lastPoint) : filtered[filtered.length-1];
+  if(!point) return;
 
   const smoothed = smoothPoint(lastPoint, point);
   lastPoint = {...point};
@@ -440,7 +430,6 @@ function applySession(data){
   updateUi(smoothed, meta.expiresAt, sessionPaused, sessionRemainingMs);
 
   if(follow) map.panTo([smoothed.lat, smoothed.lng], {animate:true});
-  return true;
 }
 
 map.on('dragstart',()=>{
@@ -458,64 +447,48 @@ setFollowUi();
 
 setInterval(() => {
   if(!lastPoint) return;
-  const meta = sessionPaused ? {status:'Пауза', signal:'Остановлена'} : getStatusMeta(lastPoint);
+  const meta = getStatusMeta(lastPoint);
   qs('updated').innerText = relTime(lastPoint.ts);
   qs('d_updated').innerText = fmtClock(lastPoint.ts)+' ('+relTime(lastPoint.ts)+' назад)';
   qs('status').innerText = meta.status;
   qs('d_status').innerText = meta.status;
   qs('d_signal').innerText = meta.signal;
-
-  const leftMs = sessionPaused
-    ? Math.max(0, Number(sessionRemainingMs || 0))
-    : (sessionExpiresAt ? Math.max(0, Number(sessionExpiresAt) - Date.now()) : 0);
-  const leftText = (sessionPaused || sessionExpiresAt) ? fmtCountdown(leftMs) : '—';
-  qs('time').innerText = leftText;
-  qs('d_time').innerText = leftText;
 }, 1000);
 
-let fallbackLiveSubscribed = false;
-function subscribeFallbackLive(){
-  if(fallbackLiveSubscribed) return;
-  fallbackLiveSubscribed = true;
+
+function subscribeFallback(){
   const fallbackRef = ref(db, 'live/default');
-  onValue(fallbackRef, snap => {
-    const data = snap.val();
-    if(!data){
-      showEnd('Нет активных live-данных.');
-      return;
+  onValue(fallbackRef, snap=>{
+    const p = snap.val();
+    if(!p) return;
+    const point = normalizePoint(p);
+    const smoothed = smoothPoint(lastPoint, point);
+    lastPoint = {...point};
+    setMarkerIcon(point);
+    if(!marker){
+      marker=L.marker([smoothed.lat,smoothed.lng],{icon:L.divIcon({html:buildIconHtml(point), className:''})}).addTo(map);
+      displayPoint = {...smoothed};
+    }else{
+      animateMarkerTo(smoothed);
     }
-    applySession({
-      meta: {
-        active: true,
-        paused: !!data.paused,
-        remainingMs: Number(data.remainingMs || 0),
-        expiresAt: Number(data.expiresAt || 0)
-      },
-      public: {
-        lastPoint: data.lastPoint || null,
-        recentPoints: data.recentPoints || {}
-      }
-    });
-  }, err => {
-    console.error(err);
-    showEnd('Не удалось загрузить live-данные.');
+    updateUi(smoothed, null, false, 0);
   });
 }
 
 if(!sessionId){
-  subscribeFallbackLive();
+  showEnd('В ссылке отсутствует параметр session.');
 }else{
   const sessionRef=ref(db, `liveSessions/${sessionId}`);
   onValue(sessionRef, snap => {
     const data = snap.val();
-    const applied = applySession(data);
-    const hasPublic = !!(data && ((data.public && (data.public.lastPoint || (data.public.recentPoints && Object.keys(data.public.recentPoints).length))) || data.lastPoint || (data.recentPoints && Object.keys(data.recentPoints).length)));
-    if(!applied || !hasPublic){
-      subscribeFallbackLive();
-    }
+if(!data || !data.public){
+  subscribeFallback();
+  return;
+}
+applySession(data);
   }, err => {
     console.error(err);
-    subscribeFallbackLive();
+    showEnd('Не удалось загрузить live-сессию.');
   });
 }
 </script>
