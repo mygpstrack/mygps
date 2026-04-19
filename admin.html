@@ -122,25 +122,12 @@
         </div>
       </div>
 
-      <div class="card" style="margin-top:12px">
-        <h3>Создать пользователя</h3>
-        <div class="grid4">
-          <div><div class="label">Имя</div><input id="newUserNameInput" placeholder="Имя пользователя"></div>
-          <div><div class="label">Email</div><input id="newUserEmailInput" type="email" placeholder="user@example.com"></div>
-          <div><div class="label">Пароль</div><input id="newUserPasswordInput" type="password" placeholder="Минимум 6 символов"></div>
-        </div>
-        <div class="row">
-          <button id="createManagedUserBtn" class="success">Создать пользователя</button>
-        </div>
-      </div>
-
       <div class="row">
         <div>
           <div class="label">Пользователь</div>
           <select id="userSelect"></select>
         </div>
-        <button id="renameUserBtn" class="secondary">Переименовать</button>
-        <div>
+                <div>
           <div class="label">Режим</div>
           <select id="viewModeSelect">
             <option value="selected" selected>Выбранный пользователь</option>
@@ -159,6 +146,7 @@
         <button class="tab-btn" data-tab="reportsPanel">Отчёты</button>
         <button class="tab-btn" data-tab="usagePanel">Объём</button>
         <button class="tab-btn" data-tab="sessionsPanel">Live-сессии</button>
+        <button class="tab-btn" data-tab="usersPanel">Пользователи</button>
         <button class="tab-btn" data-tab="journalPanel">Журнал</button>
         <button class="tab-btn" data-tab="errorsPanel">Ошибки</button>
         <button class="tab-btn" data-tab="settingsPanel">Настройки</button>
@@ -349,6 +337,28 @@
           </table>
         </div>
         <div id="sessionMap"></div>
+      </div>
+    </div>
+
+
+    <div id="usersPanel" class="hidden">
+      <div class="card">
+        <h2>Пользователи</h2>
+        <div class="grid4">
+          <div><div class="label">Имя</div><input id="newUserNameInput" placeholder="Имя пользователя"></div>
+          <div><div class="label">Email</div><input id="newUserEmailInput" type="email" placeholder="user@example.com"></div>
+          <div><div class="label">Пароль</div><input id="newUserPasswordInput" type="password" placeholder="Минимум 6 символов"></div>
+        </div>
+        <div class="row">
+          <button id="createManagedUserBtn" class="success">Создать пользователя</button>
+          <button id="refreshUsersManageBtn" class="secondary">Обновить список</button>
+        </div>
+        <div style="overflow:auto">
+          <table>
+            <thead><tr><th>Имя</th><th>Email</th><th>UID</th><th>Действия</th></tr></thead>
+            <tbody id="usersManageTbody"></tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -681,7 +691,7 @@ function restoreUiState(){
 
     if(state.activeTab){
       document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
-      document.querySelectorAll("#nowPanel,#historyPanel,#reportsPanel,#usagePanel,#sessionsPanel,#journalPanel,#errorsPanel,#settingsPanel").forEach(p=>p.classList.add("hidden"));
+      document.querySelectorAll("#nowPanel,#historyPanel,#reportsPanel,#usagePanel,#sessionsPanel,#usersPanel,#journalPanel,#errorsPanel,#settingsPanel").forEach(p=>p.classList.add("hidden"));
       const btn = document.querySelector(`.tab-btn[data-tab="${state.activeTab}"]`);
       if(btn){
         btn.classList.add("active");
@@ -871,7 +881,7 @@ function setDefaultPeriodToday(){ const now=new Date(), start=new Date(); start.
 document.querySelectorAll(".tab-btn").forEach(btn=>{
   btn.onclick=()=>{
     document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
-    document.querySelectorAll("#nowPanel,#historyPanel,#reportsPanel,#usagePanel,#sessionsPanel,#journalPanel,#errorsPanel,#settingsPanel").forEach(p=>p.classList.add("hidden"));
+    document.querySelectorAll("#nowPanel,#historyPanel,#reportsPanel,#usagePanel,#sessionsPanel,#usersPanel,#journalPanel,#errorsPanel,#settingsPanel").forEach(p=>p.classList.add("hidden"));
     btn.classList.add("active");
     qs(btn.dataset.tab).classList.remove("hidden");
     setTimeout(()=>{ historyMap.invalidateSize(); liveMap.invalidateSize(); sessionMap.invalidateSize(); speedChart?.resize(); distanceChart?.resize(); },50);
@@ -1815,6 +1825,82 @@ if (qs("cleanupEndedSessionsBtn")) qs("cleanupEndedSessionsBtn").onclick = async
 };
 
 
+
+function renderUsersManagement(){
+  const tbody = qs("usersManageTbody");
+  if(!tbody) return;
+  const uids = Array.from(new Set([
+    ...Object.keys(usersMeta || {}),
+    ...Object.keys(historyByUid || {}),
+    ...Object.keys(liveByUid || {})
+  ])).sort((a,b)=>{
+    const an = getDisplayName(a).toLowerCase();
+    const bn = getDisplayName(b).toLowerCase();
+    return an.localeCompare(bn, "ru");
+  });
+
+  if(!uids.length){
+    tbody.innerHTML = `<tr><td colspan="4" class="smallMuted">Пользователей пока нет.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = uids.map(uid=>{
+    const name = usersMeta?.[uid]?.name || "—";
+    const email = usersMeta?.[uid]?.email || "—";
+    return `<tr>
+      <td>${name}</td>
+      <td>${email}</td>
+      <td class="mono">${uid}</td>
+      <td>
+        <div class="row">
+          <button class="secondary small" data-user-rename="${uid}">Переименовать</button>
+          <button class="danger small" data-user-delete="${uid}">Удалить</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join("");
+
+  tbody.querySelectorAll("[data-user-rename]").forEach(btn=>btn.onclick=async()=>{
+    const uid = btn.dataset.userRename;
+    const current = usersMeta?.[uid]?.name || "";
+    const name = prompt("Новое имя пользователя", current);
+    if(!name) return;
+    try{
+      await update(ref(db,`users/${uid}`), {name, updatedAt:Date.now()});
+      await logAction("user_rename", `Переименован ${uid} в ${name}`);
+      await loadUsers();
+      renderUsersManagement();
+      showToast("Имя сохранено","success");
+    }catch(e){
+      recordError("renameUser", e);
+      showToast("Ошибка сохранения имени","error");
+    }
+  });
+
+  tbody.querySelectorAll("[data-user-delete]").forEach(btn=>btn.onclick=async()=>{
+    const uid = btn.dataset.userDelete;
+    const label = getDisplayName(uid) || uid;
+    const ok = confirm(`Удалить пользователя ${label} из базы?\n\nБудут удалены профиль, history, live и привязка live-сессий. Auth-аккаунт Firebase при этом не удаляется.`);
+    if(!ok) return;
+    try{
+      await Promise.all([
+        remove(ref(db, `users/${uid}`)),
+        remove(ref(db, `history/${uid}`)),
+        remove(ref(db, `live/${uid}`)),
+        remove(ref(db, `liveOwners/${uid}`))
+      ]);
+      await logAction("user_delete", `Удалён пользователь ${uid} из базы`);
+      if(selectedUid === uid) selectedUid = "";
+      await loadUsers();
+      renderUsersManagement();
+      showToast("Пользователь удалён из базы","success");
+    }catch(e){
+      recordError("deleteUser", e);
+      showToast("Ошибка удаления пользователя","error");
+    }
+  });
+}
+
 async function createManagedUser(){
   const name = qs("newUserNameInput")?.value?.trim() || "Пользователь";
   const email = qs("newUserEmailInput")?.value?.trim();
@@ -1829,6 +1915,7 @@ async function createManagedUser(){
     qs("newUserEmailInput").value = "";
     qs("newUserPasswordInput").value = "";
     await loadUsers();
+    renderUsersManagement();
     showToast("Пользователь создан","success");
   }catch(e){
     recordError("createManagedUser", e);
@@ -1910,6 +1997,7 @@ if (qs("btnDiag")) qs("btnDiag").onclick = showDiag;
 
 if (qs("createShareBtn")) qs("createShareBtn").onclick = ()=>createLiveSession();
 if (qs("createManagedUserBtn")) qs("createManagedUserBtn").onclick = ()=>createManagedUser();
+if (qs("refreshUsersManageBtn")) qs("refreshUsersManageBtn").onclick = async()=>{ await loadUsers(); renderUsersManagement(); showToast("Список пользователей обновлён","success"); };
 if (qs("clearShareResultBtn")) qs("clearShareResultBtn").onclick = ()=>{ createdShareUrl=""; qs("shareResultBox").classList.add("hidden"); };
 if (qs("copyCreatedShareBtn")) qs("copyCreatedShareBtn").onclick = async()=>{ if(createdShareUrl){ await navigator.clipboard.writeText(createdShareUrl); showToast("Ссылка скопирована","success"); } };
 if (qs("openCreatedShareBtn")) qs("openCreatedShareBtn").onclick = ()=>{ if(createdShareUrl) window.open(createdShareUrl,"_blank","noopener,noreferrer"); };
