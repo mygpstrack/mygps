@@ -186,10 +186,6 @@ let warnedOne=false;
 let lastPoint=null;
 let displayPoint=null;
 let animationFrameId=null;
-let sessionPaused=false;
-let sessionRemainingMs=0;
-let sessionExpiresAt=0;
-let previousPauseState=null;
 
 function togglePanel(){
   open=!open;
@@ -213,9 +209,9 @@ function toggleFollow(){
 }
 window.toggleFollow=toggleFollow;
 
-function showAlert(text, subtitle='Предупреждение по времени ссылки'){
+function showAlert(text){
   const el=qs('alert');
-  el.innerHTML=text+'<small>'+subtitle+'</small>';
+  el.innerHTML=text+'<small>Предупреждение по времени ссылки</small>';
   el.style.display='block';
   clearTimeout(el._t);
   el._t=setTimeout(()=>el.style.display='none',5000);
@@ -284,7 +280,7 @@ function getStatusMeta(p){
 }
 
 function buildIconHtml(p){
-  const meta=paused ? {status:'Пауза', signal:'Остановлена'} : getStatusMeta(p);
+  const meta=getStatusMeta(p);
   if(meta.type==='offline'){
     return `<div class="marker-circle" style="background:#94a3b8"></div>`;
   }
@@ -340,9 +336,9 @@ function animateMarkerTo(target){
   animationFrameId=requestAnimationFrame(step);
 }
 
-function updateUi(p, expiresAt, paused=false, remainingMs=0){
-  const meta=paused ? {status:'Пауза', signal:'Остановлена'} : getStatusMeta(p);
-  const leftMs=paused ? Math.max(0, Number(remainingMs||0)) : (expiresAt ? Math.max(0, Number(expiresAt)-Date.now()) : 0);
+function updateUi(p, expiresAt){
+  const meta=getStatusMeta(p);
+  const leftMs=expiresAt ? Math.max(0, Number(expiresAt)-Date.now()) : 0;
   const leftText=expiresAt ? fmtCountdown(leftMs) : '—';
 
   qs('status').innerText=meta.status;
@@ -387,22 +383,8 @@ function applySession(data){
   if(!data){ showEnd('Ссылка не найдена или была удалена.'); return; }
   const meta=data.meta||{};
   if(meta.active===false){ showEnd('Эта трансляция была остановлена владельцем.'); return; }
-  if(!meta.paused && meta.expiresAt && Number(meta.expiresAt)<=Date.now()){ showEnd('Время действия ссылки истекло.'); return; }
+  if(meta.expiresAt && Number(meta.expiresAt)<=Date.now()){ showEnd('Время действия ссылки истекло.'); return; }
   hideEnd();
-sessionPaused = meta.paused === true;
-sessionRemainingMs = Number(meta.remainingMs || 0);
-sessionExpiresAt = Number(meta.expiresAt || 0);
-
-if(previousPauseState === null){
-  previousPauseState = sessionPaused;
-}else if(previousPauseState !== sessionPaused){
-  if(sessionPaused){
-    showAlert('Трансляция приостановлена', 'Статус трансляции');
-  }else{
-    showAlert('Трансляция продолжилась', 'Статус трансляции');
-  }
-  previousPauseState = sessionPaused;
-}
 
   const recent = Object.values(data.public?.recentPoints || {})
     .filter(Boolean)
@@ -427,7 +409,7 @@ if(previousPauseState === null){
   tailPoints = filtered.slice(-30).map(p=>[p.lat,p.lng]);
   tailLine.setLatLngs(tailPoints);
   qs('d_tail').innerText=String(tailPoints.length);
-  updateUi(smoothed, meta.expiresAt, sessionPaused, sessionRemainingMs);
+  updateUi(smoothed, meta.expiresAt);
 
   if(follow) map.panTo([smoothed.lat, smoothed.lng], {animate:true});
 }
@@ -455,37 +437,12 @@ setInterval(() => {
   qs('d_signal').innerText = meta.signal;
 }, 1000);
 
-
-function subscribeFallback(){
-  const fallbackRef = ref(db, 'live/default');
-  onValue(fallbackRef, snap=>{
-    const p = snap.val();
-    if(!p) return;
-    const point = normalizePoint(p);
-    const smoothed = smoothPoint(lastPoint, point);
-    lastPoint = {...point};
-    setMarkerIcon(point);
-    if(!marker){
-      marker=L.marker([smoothed.lat,smoothed.lng],{icon:L.divIcon({html:buildIconHtml(point), className:''})}).addTo(map);
-      displayPoint = {...smoothed};
-    }else{
-      animateMarkerTo(smoothed);
-    }
-    updateUi(smoothed, null, false, 0);
-  });
-}
-
 if(!sessionId){
   showEnd('В ссылке отсутствует параметр session.');
 }else{
   const sessionRef=ref(db, `liveSessions/${sessionId}`);
   onValue(sessionRef, snap => {
-    const data = snap.val();
-if(!data || !data.public){
-  subscribeFallback();
-  return;
-}
-applySession(data);
+    applySession(snap.val());
   }, err => {
     console.error(err);
     showEnd('Не удалось загрузить live-сессию.');
