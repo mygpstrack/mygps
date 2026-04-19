@@ -186,6 +186,8 @@ let warnedOne=false;
 let lastPoint=null;
 let displayPoint=null;
 let animationFrameId=null;
+let lastPausedState=null;
+let currentSessionMeta=null;
 
 function togglePanel(){
   open=!open;
@@ -269,7 +271,10 @@ function smoothPoint(prev, cur){
   };
 }
 
-function getStatusMeta(p){
+function getStatusMeta(p, meta){
+  if(meta?.paused){
+    return {status:'Приостановлено', signal:'—', type:'paused'};
+  }
   const ageMs=(p.ts ? Date.now()-p.ts : 0);
   const speed = Number(p.speed || 0);
 
@@ -279,20 +284,23 @@ function getStatusMeta(p){
   return {status:'Стоит', signal:'Есть', type:'stop_short'};
 }
 
-function buildIconHtml(p){
-  const meta=getStatusMeta(p);
-  if(meta.type==='offline'){
+function buildIconHtml(p, meta){
+  const statusMeta=getStatusMeta(p, meta);
+  if(statusMeta.type==='offline'){
     return `<div class="marker-circle" style="background:#94a3b8"></div>`;
   }
-  if(meta.type==='moving'){
+  if(statusMeta.type==='moving'){
     return `<div class="marker-arrow" style="transform:rotate(${p.bearing||0}deg)"></div>`;
   }
-  const color=meta.type==='stop_long' ? '#ef4444' : '#f59e0b';
+  if(statusMeta.type==='paused'){
+    return `<div class="marker-circle" style="background:#3b82f6"></div>`;
+  }
+  const color=statusMeta.type==='stop_long' ? '#ef4444' : '#f59e0b';
   return `<div class="marker-circle" style="background:${color}"></div>`;
 }
 
-function setMarkerIcon(p){
-  const icon=L.divIcon({html:buildIconHtml(p), className:''});
+function setMarkerIcon(p, meta){
+  const icon=L.divIcon({html:buildIconHtml(p, meta), className:''});
   if(!marker){
     marker=L.marker([p.lat,p.lng],{icon}).addTo(map);
   }else{
@@ -300,11 +308,11 @@ function setMarkerIcon(p){
   }
 }
 
-function animateMarkerTo(target){
+function animateMarkerTo(target, meta){
   if(!target) return;
   if(!marker){
-    setMarkerIcon(target);
-    marker=L.marker([target.lat,target.lng],{icon:L.divIcon({html:buildIconHtml(target), className:''})}).addTo(map);
+    setMarkerIcon(target, meta);
+    marker=L.marker([target.lat,target.lng],{icon:L.divIcon({html:buildIconHtml(target, meta), className:''})}).addTo(map);
     displayPoint = {...target};
     return;
   }
@@ -312,6 +320,7 @@ function animateMarkerTo(target){
   if(!displayPoint){
     displayPoint = {...target};
     marker.setLatLng([target.lat, target.lng]);
+    marker.setIcon(L.divIcon({html:buildIconHtml(target, meta), className:''}));
     return;
   }
 
@@ -328,6 +337,7 @@ function animateMarkerTo(target){
     const lat = start.lat + (end.lat - start.lat) * eased;
     const lng = start.lng + (end.lng - start.lng) * eased;
     marker.setLatLng([lat,lng]);
+    marker.setIcon(L.divIcon({html:buildIconHtml(target, meta), className:''}));
     displayPoint = {...target, lat, lng};
     if(t < 1){
       animationFrameId=requestAnimationFrame(step);
@@ -336,23 +346,27 @@ function animateMarkerTo(target){
   animationFrameId=requestAnimationFrame(step);
 }
 
-function updateUi(p, expiresAt){
-  const meta=getStatusMeta(p);
-  const leftMs=expiresAt ? Math.max(0, Number(expiresAt)-Date.now()) : 0;
+function updateUi(p, expiresAt, meta){
+  const statusMeta=getStatusMeta(p, meta);
+  let pausedMs=Number(meta?.totalPausedMs || 0);
+  if(meta?.paused && meta?.pauseStartedAt){
+    pausedMs += Math.max(0, Date.now() - Number(meta.pauseStartedAt));
+  }
+  const leftMs=expiresAt ? Math.max(0, Number(expiresAt)-Date.now()+pausedMs) : 0;
   const leftText=expiresAt ? fmtCountdown(leftMs) : '—';
 
-  qs('status').innerText=meta.status;
+  qs('status').innerText=statusMeta.status;
   qs('speed').innerText=(Number(p.speed||0)).toFixed(1)+' км/ч';
   qs('updated').innerText=relTime(p.ts);
   qs('time').innerText=leftText;
 
-  qs('d_status').innerText=meta.status;
+  qs('d_status').innerText=statusMeta.status;
   qs('d_speed').innerText=(Number(p.speed||0)).toFixed(1)+' км/ч';
   qs('d_updated').innerText=fmtClock(p.ts)+' ('+relTime(p.ts)+' назад)';
   qs('d_time').innerText=leftText;
   qs('d_bearing').innerText=Math.round(Number(p.bearing||0))+'°';
   qs('d_coords').innerText=Number(p.lat).toFixed(5)+', '+Number(p.lng).toFixed(5);
-  qs('d_signal').innerText=meta.signal;
+  qs('d_signal').innerText=statusMeta.signal;
   qs('d_follow').innerText=follow?'Вкл':'Выкл';
   qs('d_age').innerText=relTime(p.ts)+' назад';
 
@@ -382,6 +396,13 @@ function normalizePoint(p){
 function applySession(data){
   if(!data){ showEnd('Ссылка не найдена или была удалена.'); return; }
   const meta=data.meta||{};
+  currentSessionMeta=meta;
+
+  if(lastPausedState !== null && lastPausedState !== !!meta.paused){
+    showAlert(meta.paused ? '⏸ Трансляция приостановлена' : '▶️ Трансляция продолжена');
+  }
+  lastPausedState=!!meta.paused;
+
   if(meta.active===false){ showEnd('Эта трансляция была остановлена владельцем.'); return; }
   if(meta.expiresAt && Number(meta.expiresAt)<=Date.now()){ showEnd('Время действия ссылки истекло.'); return; }
   hideEnd();
@@ -392,24 +413,25 @@ function applySession(data){
     .sort((a,b)=>a.ts-b.ts);
   const filtered = filterJumps(recent);
 
-  const point = data.public?.lastPoint ? normalizePoint(data.public.lastPoint) : filtered[filtered.length-1];
+  const rawPoint = data.public?.lastPoint || data.lastPoint || data.live || filtered[filtered.length-1];
+  const point = rawPoint ? normalizePoint(rawPoint) : null;
   if(!point) return;
 
   const smoothed = smoothPoint(lastPoint, point);
   lastPoint = {...point};
 
-  setMarkerIcon(point);
+  setMarkerIcon(point, meta);
   if(!marker){
-    marker=L.marker([smoothed.lat,smoothed.lng],{icon:L.divIcon({html:buildIconHtml(point), className:''})}).addTo(map);
+    marker=L.marker([smoothed.lat,smoothed.lng],{icon:L.divIcon({html:buildIconHtml(point, meta), className:''})}).addTo(map);
     displayPoint = {...smoothed};
   }else{
-    animateMarkerTo(smoothed);
+    animateMarkerTo(smoothed, meta);
   }
 
   tailPoints = filtered.slice(-30).map(p=>[p.lat,p.lng]);
   tailLine.setLatLngs(tailPoints);
   qs('d_tail').innerText=String(tailPoints.length);
-  updateUi(smoothed, meta.expiresAt);
+  updateUi(smoothed, meta.expiresAt, meta);
 
   if(follow) map.panTo([smoothed.lat, smoothed.lng], {animate:true});
 }
@@ -429,16 +451,28 @@ setFollowUi();
 
 setInterval(() => {
   if(!lastPoint) return;
-  const meta = getStatusMeta(lastPoint);
+  const statusMeta = getStatusMeta(lastPoint, currentSessionMeta);
   qs('updated').innerText = relTime(lastPoint.ts);
   qs('d_updated').innerText = fmtClock(lastPoint.ts)+' ('+relTime(lastPoint.ts)+' назад)';
-  qs('status').innerText = meta.status;
-  qs('d_status').innerText = meta.status;
-  qs('d_signal').innerText = meta.signal;
+  qs('status').innerText = statusMeta.status;
+  qs('d_status').innerText = statusMeta.status;
+  qs('d_signal').innerText = statusMeta.signal;
+  if(currentSessionMeta?.expiresAt){
+    let pausedMs=Number(currentSessionMeta?.totalPausedMs || 0);
+    if(currentSessionMeta?.paused && currentSessionMeta?.pauseStartedAt){
+      pausedMs += Math.max(0, Date.now() - Number(currentSessionMeta.pauseStartedAt));
+    }
+    const leftMs=Math.max(0, Number(currentSessionMeta.expiresAt)-Date.now()+pausedMs);
+    qs('time').innerText = fmtCountdown(leftMs);
+    qs('d_time').innerText = fmtCountdown(leftMs);
+    if(leftMs<=0){
+      showEnd('Время действия ссылки истекло.');
+    }
+  }
 }, 1000);
 
 if(!sessionId){
-  showEnd('В ссылке отсутствует параметр session.');
+  showEnd('Неверная ссылка (нет session).');
 }else{
   const sessionRef=ref(db, `liveSessions/${sessionId}`);
   onValue(sessionRef, snap => {
