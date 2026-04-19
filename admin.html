@@ -234,6 +234,18 @@
           <button id="applyFiltersBtn" class="secondary">Применить</button>
           <button id="resetFiltersBtn" class="secondary">Сбросить</button>
         </div>
+        <div class="row">
+          <select id="historySortField">
+            <option value="timestamp">Время</option>
+            <option value="speed">Скорость</option>
+            <option value="accuracy">Точность</option>
+            <option value="label">Метки</option>
+          </select>
+          <select id="historySortDir">
+            <option value="desc">По убыванию</option>
+            <option value="asc">По возрастанию</option>
+          </select>
+        </div>
         <div class="toolbar">
           <button id="fitRouteBtn" class="secondary">Центрировать маршрут</button>
           <button id="lastRouteBtn" class="secondary">Последний маршрут</button>
@@ -1275,8 +1287,7 @@ async function loadAllData(){
   });
   updateUsage();
   updateTodaySummary();
-  if(qs("applyHistorySort")) qs("applyHistorySort").onclick = ()=>renderHistory();
-renderHistory();
+  renderHistory();
   await updateNowFromAvailableSources();
 }
 
@@ -1285,7 +1296,10 @@ function filteredHistory(){
   const from=parseDateTime(qs("fromDate").value, qs("fromHour").value, qs("fromMinute").value);
   const to=parseDateTime(qs("toDate").value, qs("toHour").value, qs("toMinute").value);
   const maxAcc=Number(qs("maxAccuracyFilter").value||0), minSp=Number(qs("minSpeedFilter").value||0), maxSp=Number(qs("maxSpeedFilter").value||0), hideJunk=qs("hideJunkToggle").checked;
-  return base.filter((p,idx,arr)=>{
+  const sortField = qs("historySortField")?.value || "timestamp";
+  const sortDir = (qs("historySortDir")?.value || "desc") === "asc" ? 1 : -1;
+
+  const filtered = base.filter((p,idx,arr)=>{
     const t=Number(p.timestamp||0), sp=Number(p.speed||0), acc=Number(p.accuracy||0);
     if(from&&t<from) return false;
     if(to&&t>to) return false;
@@ -1295,6 +1309,20 @@ function filteredHistory(){
     if(hideJunk&&looksJunk(arr[idx-1],p)) return false;
     return true;
   });
+
+  filtered.sort((a,b)=>{
+    if(sortField === "label"){
+      const va = String(a.label || a.tags || "");
+      const vb = String(b.label || b.tags || "");
+      return va.localeCompare(vb, "ru") * sortDir;
+    }
+    const mapField = sortField === "timestamp" ? "timestamp" : sortField;
+    const va = Number(a[mapField] || 0);
+    const vb = Number(b[mapField] || 0);
+    return (va - vb) * sortDir;
+  });
+
+  return filtered;
 }
 
 async function updateHistoryMap(points){
@@ -1352,20 +1380,7 @@ function updateCharts(points){
   });
 }
 
-async 
-function sortHistoryPoints(points){
-  const field = qs("historySortField")?.value;
-  const dir = qs("historySortDir")?.value === "asc" ? 1 : -1;
-  return points.sort((a,b)=>{
-    let va = a[field] ?? 0;
-    let vb = b[field] ?? 0;
-    if(field === "label"){ va = a.label || ""; vb = b.label || ""; }
-    if(typeof va === "string") return va.localeCompare(vb) * dir;
-    return (va - vb) * dir;
-  });
-}
-
-function renderHistory() {
+async function renderHistory() {
   const pts = filteredHistory();
   currentFiltered = pts;
 
@@ -2218,19 +2233,13 @@ if (qs("emailLoginBtn")) qs("emailLoginBtn").onclick = async()=>{ try{ await sig
 if (qs("emailRegisterBtn")) qs("emailRegisterBtn").onclick = async()=>{ try{ await createUserWithEmailAndPassword(auth,qs("emailInput").value.trim(),qs("passwordInput").value); }catch(e){ qs("errorBox").textContent="Ошибка регистрации: "+errText(e); qs("errorBox").classList.remove("hidden"); }};
 if (qs("logoutBtn")) qs("logoutBtn").onclick = async()=>{ await signOut(auth); };
 
-if (qs("todayBtn")) qs("todayBtn").onclick = ()=>{ const now=new Date(), start=new Date(); start.setHours(0,0,0,0); setDateTimeRange(start,now); if(qs("applyHistorySort")) qs("applyHistorySort").onclick = ()=>renderHistory();
-renderHistory(); };
-if (qs("yesterdayBtn")) qs("yesterdayBtn").onclick = ()=>{ const start=new Date(); start.setDate(start.getDate()-1); start.setHours(0,0,0,0); const end=new Date(start); end.setHours(23,59,0,0); setDateTimeRange(start,end); if(qs("applyHistorySort")) qs("applyHistorySort").onclick = ()=>renderHistory();
-renderHistory(); };
-if (qs("weekBtn")) qs("weekBtn").onclick = ()=>{ const now=new Date(), start=new Date(); start.setDate(start.getDate()-7); setDateTimeRange(start,now); if(qs("applyHistorySort")) qs("applyHistorySort").onclick = ()=>renderHistory();
-renderHistory(); };
-if (qs("range1hBtn")) qs("range1hBtn").onclick = ()=>{ const now=new Date(), start=new Date(Date.now()-60*60*1000); setDateTimeRange(start,now); if(qs("applyHistorySort")) qs("applyHistorySort").onclick = ()=>renderHistory();
-renderHistory(); };
-if (qs("range24hBtn")) qs("range24hBtn").onclick = ()=>{ const now=new Date(), start=new Date(Date.now()-24*60*60*1000); setDateTimeRange(start,now); if(qs("applyHistorySort")) qs("applyHistorySort").onclick = ()=>renderHistory();
-renderHistory(); };
+if (qs("todayBtn")) qs("todayBtn").onclick = ()=>{ const now=new Date(), start=new Date(); start.setHours(0,0,0,0); setDateTimeRange(start,now); renderHistory(); };
+if (qs("yesterdayBtn")) qs("yesterdayBtn").onclick = ()=>{ const start=new Date(); start.setDate(start.getDate()-1); start.setHours(0,0,0,0); const end=new Date(start); end.setHours(23,59,0,0); setDateTimeRange(start,end); renderHistory(); };
+if (qs("weekBtn")) qs("weekBtn").onclick = ()=>{ const now=new Date(), start=new Date(); start.setDate(start.getDate()-7); setDateTimeRange(start,now); renderHistory(); };
+if (qs("range1hBtn")) qs("range1hBtn").onclick = ()=>{ const now=new Date(), start=new Date(Date.now()-60*60*1000); setDateTimeRange(start,now); renderHistory(); };
+if (qs("range24hBtn")) qs("range24hBtn").onclick = ()=>{ const now=new Date(), start=new Date(Date.now()-24*60*60*1000); setDateTimeRange(start,now); renderHistory(); };
 if (qs("applyFiltersBtn")) qs("applyFiltersBtn").onclick = renderHistory;
-if (qs("resetFiltersBtn")) qs("resetFiltersBtn").onclick = ()=>{ qs("maxAccuracyFilter").value=""; qs("minSpeedFilter").value=""; qs("maxSpeedFilter").value=""; qs("hideJunkToggle").checked=false; if(qs("applyHistorySort")) qs("applyHistorySort").onclick = ()=>renderHistory();
-renderHistory(); };
+if (qs("resetFiltersBtn")) qs("resetFiltersBtn").onclick = ()=>{ qs("maxAccuracyFilter").value=""; qs("minSpeedFilter").value=""; qs("maxSpeedFilter").value=""; qs("hideJunkToggle").checked=false; renderHistory(); };
 if (qs("refreshHistoryBtn")) qs("refreshHistoryBtn").onclick = async()=>{ await loadAllData(); showToast("История обновлена","success"); };
 if (qs("fitRouteBtn")) qs("fitRouteBtn").onclick = ()=>{ const pts=currentFiltered.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]); if(pts.length) historyMap.fitBounds(L.latLngBounds(pts), {padding:[30,30]}); };
 qs("deleteRangeBtn").onclick=async()=>{
@@ -2310,10 +2319,8 @@ if (qs("cleanupSessionsBtn")) qs("cleanupSessionsBtn").onclick = ()=>cleanupExpi
 qs("sessionSearchInput").oninput=renderSessions;
 qs("sessionStatusFilter").onchange=renderSessions;
 
-qs("userSelect").onchange=()=>{ selectedUid=qs("userSelect").value; updateUsage(); updateTodaySummary(); if(qs("applyHistorySort")) qs("applyHistorySort").onclick = ()=>renderHistory();
-renderHistory(); updateNowFromAvailableSources(); renderSessions(); };
-qs("viewModeSelect").onchange=()=>{ updateUsage(); updateTodaySummary(); if(qs("applyHistorySort")) qs("applyHistorySort").onclick = ()=>renderHistory();
-renderHistory(); updateNowFromAvailableSources(); renderSessions(); };
+qs("userSelect").onchange=()=>{ selectedUid=qs("userSelect").value; updateUsage(); updateTodaySummary(); renderHistory(); updateNowFromAvailableSources(); renderSessions(); };
+qs("viewModeSelect").onchange=()=>{ updateUsage(); updateTodaySummary(); renderHistory(); updateNowFromAvailableSources(); renderSessions(); };
 if (qs("refreshUsersBtn")) qs("refreshUsersBtn").onclick = async()=>{ await loadUsers(); await loadAllData(); showToast("Пользователи обновлены","success"); };
 
 if (qs("deleteHistoryBtn")) qs("deleteHistoryBtn").onclick = async()=>{ const count = Object.values(historyByUid).flat().length; if(!confirm(`Очистить всю ветку history?\nТочек: ${count}`)) return; try{ await safeAction("Очистка history", async()=>{ await remove(ref(db,"history")); await logAction("delete_history","Очищена ветка history"); await loadAllData(); }, "History очищена"); }catch(e){} };
@@ -2348,14 +2355,10 @@ qs("restoreBackupFile").onchange=async()=>{ const file=qs("restoreBackupFile").f
 if (qs("importDataBtn")) qs("importDataBtn").onclick = ()=>safeAction("Импорт данных", importDataFile, "Импорт завершён");
 if (qs("copyNowCoordsBtn")) qs("copyNowCoordsBtn").onclick = async()=>{ const p=getSelectedLiveData()?.lastPoint || getSelectedHistoryPoints().slice(-1)[0]; if(!p) return showToast("Нет координат","warn"); await navigator.clipboard.writeText(`${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}`); showToast("Координаты скопированы","success"); };
 if (qs("openNowMapsBtn")) qs("openNowMapsBtn").onclick = ()=>{ const p=getSelectedLiveData()?.lastPoint || getSelectedHistoryPoints().slice(-1)[0]; if(!p) return showToast("Нет координат","warn"); window.open(`https://maps.google.com/?q=${encodeURIComponent(Number(p.latitude).toFixed(5)+","+Number(p.longitude).toFixed(5))}`,"_blank"); };
-if (qs("exportTodayBtn")) qs("exportTodayBtn").onclick = ()=>{ const now=new Date(), start=new Date(); start.setHours(0,0,0,0); setDateTimeRange(start, now); if(qs("applyHistorySort")) qs("applyHistorySort").onclick = ()=>renderHistory();
-renderHistory(); persistUiState(); };
-if (qs("exportYesterdayBtn")) qs("exportYesterdayBtn").onclick = ()=>{ const start=new Date(); start.setDate(start.getDate()-1); start.setHours(0,0,0,0); const end=new Date(start); end.setHours(23,59,59,999); setDateTimeRange(start,end); if(qs("applyHistorySort")) qs("applyHistorySort").onclick = ()=>renderHistory();
-renderHistory(); persistUiState(); };
-if (qs("exportWeekBtn")) qs("exportWeekBtn").onclick = ()=>{ const now=new Date(), start=new Date(); start.setDate(start.getDate()-7); setDateTimeRange(start,now); if(qs("applyHistorySort")) qs("applyHistorySort").onclick = ()=>renderHistory();
-renderHistory(); persistUiState(); };
-if (qs("lastRouteBtn")) qs("lastRouteBtn").onclick = ()=>{ const pts=getSelectedHistoryPoints(); if(!pts.length) return showToast("Нет истории","warn"); const last=pts[pts.length-1]; let i=pts.length-1; while(i>0 && (Number(pts[i].speed||0)>2 || Number(pts[i-1].speed||0)>2)) i--; const start=new Date(Number(pts[Math.max(0,i)].timestamp||Date.now())-5*60*1000); const end=new Date(Number(last.timestamp||Date.now())); setDateTimeRange(start,end); if(qs("applyHistorySort")) qs("applyHistorySort").onclick = ()=>renderHistory();
-renderHistory(); persistUiState(); showToast("Выбран последний маршрут","info"); };
+if (qs("exportTodayBtn")) qs("exportTodayBtn").onclick = ()=>{ const now=new Date(), start=new Date(); start.setHours(0,0,0,0); setDateTimeRange(start, now); renderHistory(); persistUiState(); };
+if (qs("exportYesterdayBtn")) qs("exportYesterdayBtn").onclick = ()=>{ const start=new Date(); start.setDate(start.getDate()-1); start.setHours(0,0,0,0); const end=new Date(start); end.setHours(23,59,59,999); setDateTimeRange(start,end); renderHistory(); persistUiState(); };
+if (qs("exportWeekBtn")) qs("exportWeekBtn").onclick = ()=>{ const now=new Date(), start=new Date(); start.setDate(start.getDate()-7); setDateTimeRange(start,now); renderHistory(); persistUiState(); };
+if (qs("lastRouteBtn")) qs("lastRouteBtn").onclick = ()=>{ const pts=getSelectedHistoryPoints(); if(!pts.length) return showToast("Нет истории","warn"); const last=pts[pts.length-1]; let i=pts.length-1; while(i>0 && (Number(pts[i].speed||0)>2 || Number(pts[i-1].speed||0)>2)) i--; const start=new Date(Number(pts[Math.max(0,i)].timestamp||Date.now())-5*60*1000); const end=new Date(Number(last.timestamp||Date.now())); setDateTimeRange(start,end); renderHistory(); persistUiState(); showToast("Выбран последний маршрут","info"); };
 
 function getExportPoints(){
   let pts = qs("expCurrentFilters")?.checked ? filteredHistory() : getVisibleHistoryPoints();
@@ -2410,8 +2413,7 @@ onAuthStateChanged(auth, async user => {
     Object.entries(raw).forEach(([uid,pointsObj])=>{
       historyByUid[uid]=Object.values(pointsObj||{}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
     });
-    updateUsage(); if(qs("applyHistorySort")) qs("applyHistorySort").onclick = ()=>renderHistory();
-renderHistory(); updateNowFromAvailableSources();
+    updateUsage(); renderHistory(); updateNowFromAvailableSources();
   });
   onValue(ref(db, "liveSessions"), snap => { allSessions=snap.val()||{}; updateUsage(); renderSessions(); updateActiveSessionToast(); updateNowFromAvailableSources(); });
   onValue(ref(db, "adminLogs/deletions"), snap => { deletionsLog=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0)); renderJournal(); });
