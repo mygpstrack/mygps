@@ -954,12 +954,9 @@ function formatRemainingMs(ms){
   const h = Math.floor((totalSec % 86400) / 3600);
   const m = Math.floor((totalSec % 3600) / 60);
   const s = totalSec % 60;
-  const parts = [];
-  if(d > 0) parts.push(`${d}д`);
-  if(h > 0) parts.push(`${h}ч`);
-  parts.push(`${m}м`);
-  parts.push(`${String(s).padStart(2,"0")}с`);
-  return parts.join(" ");
+  if(d > 0) return `${d}д ${h}ч ${m}м ${String(s).padStart(2,"0")}с`;
+  if(h > 0) return `${h}ч ${m}м ${String(s).padStart(2,"0")}с`;
+  return `${m}м ${String(s).padStart(2,"0")}с`;
 }
 
 function getSelectedActiveSessionEntry(){
@@ -982,7 +979,7 @@ function updateActiveSessionToast(){
   if(!entry){
     if(el) el.remove();
     const createBtn = qs("createShareBtn");
-    if(createBtn && createBtn.textContent === "Есть активная ссылка"){
+    if(createBtn){
       createBtn.disabled = false;
       createBtn.textContent = "Создать live-ссылку";
     }
@@ -992,6 +989,7 @@ function updateActiveSessionToast(){
   const [token, session] = entry;
   const meta = getSessionRoot(session)?.meta || {};
   const leftMs = Math.max(0, Number(meta.expiresAt||0) - Date.now());
+  const url = buildShareUrl(token);
 
   if(leftMs <= 0){
     if(el) el.remove();
@@ -1021,23 +1019,28 @@ function updateActiveSessionToast(){
     host.appendChild(el);
   }
 
-  const url = buildShareUrl(token);
   el.innerHTML = `
     <div style="font-weight:800">Live-сессия активна</div>
-    <div style="font-size:13px;opacity:.95">Осталось: ${formatRemainingMs(leftMs)}</div>
-    <div class="mono" style="font-size:12px;opacity:.92">${url}</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button id="activeSessionToastOpen" class="secondary small" style="background:rgba(255,255,255,.16)">Открыть</button>
-      <button id="activeSessionToastCopy" class="secondary small" style="background:rgba(255,255,255,.16)">Копировать</button>
-    </div>
+    <div id="activeSessionToastTime" style="font-size:13px;opacity:.95">Осталось: ${formatRemainingMs(leftMs)}</div>
   `;
-  el.querySelector("#activeSessionToastOpen").onclick = ()=>window.open(url,"_blank","noopener,noreferrer");
-  el.querySelector("#activeSessionToastCopy").onclick = async()=>{
-    try{
-      await navigator.clipboard.writeText(url);
-      showToast("Ссылка скопирована","success");
-    }catch(e){}
-  };
+
+  clearInterval(el._timer);
+  el._expiresAt = Number(meta.expiresAt||0);
+  el._timer = setInterval(()=>{
+    const left = Math.max(0, el._expiresAt - Date.now());
+    const timeEl = document.getElementById("activeSessionToastTime");
+    if(timeEl) timeEl.textContent = `Осталось: ${formatRemainingMs(left)}`;
+    if(left <= 0){
+      clearInterval(el._timer);
+      el.remove();
+      const createBtn = qs("createShareBtn");
+      if(createBtn){
+        createBtn.disabled = false;
+        createBtn.textContent = "Создать live-ссылку";
+      }
+      renderSessions();
+    }
+  }, 1000);
 }
 function parseDateTime(dateVal,hVal,mVal){ if(!dateVal) return null; return new Date(`${dateVal}T${hVal||"00"}:${mVal||"00"}:00`).getTime(); }
 function userLabel(uid){ return getDisplayName(uid); }
@@ -1906,7 +1909,7 @@ function renderSessions(){
   tbody.querySelectorAll("[data-delete]").forEach(btn=>btn.onclick=()=>deleteSession(btn.dataset.delete));
   const createBtn = qs("createShareBtn");
   if(createBtn){
-    const hasActiveForSelected = entries.some(([token,session,status]) => status==="active" && (!selectedUid || session?.meta?.ownerUid===selectedUid));
+    const hasActiveForSelected = entries.some(([token,session,status]) => status==="active" && (!selectedUid || session?.meta?.ownerUid===selectedUid) && Number(session?.meta?.expiresAt||0) > Date.now());
     createBtn.disabled = hasActiveForSelected;
     createBtn.textContent = hasActiveForSelected ? "Есть активная ссылка" : "Создать live-ссылку";
   }
