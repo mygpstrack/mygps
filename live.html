@@ -215,10 +215,12 @@ function toggleFollow(){
 }
 window.toggleFollow=toggleFollow;
 
-function showAlert(text){
+function showAlert(text, tone='default'){
   const el=qs('alert');
   el.innerHTML=text+'<small>Предупреждение по времени ссылки</small>';
   el.style.display='block';
+  el.style.background = tone === 'danger' ? 'rgba(127,29,29,.92)' : 'rgba(0,0,0,.78)';
+  el.style.borderColor = tone === 'danger' ? 'rgba(248,113,113,.55)' : 'rgba(255,255,255,.12)';
   clearTimeout(el._t);
   el._t=setTimeout(()=>el.style.display='none',5000);
 }
@@ -246,6 +248,18 @@ function fmtCountdown(ms){
   if(ms<=0) return '0:00';
   const sec=Math.floor(ms/1000), m=Math.floor(sec/60), s=sec%60;
   return m+':'+String(s).padStart(2,'0');
+}
+
+function checkTimeWarnings(leftMs, isPaused){
+  if(isPaused) return;
+  if(leftMs<=5*60*1000 && !warnedFive && leftMs>60*1000){
+    warnedFive=true;
+    showAlert('Время действия ссылки заканчивается через '+fmtCountdown(leftMs));
+  }
+  if(leftMs<=60*1000 && !warnedOne && leftMs>0){
+    warnedOne=true;
+    showAlert('Время действия ссылки заканчивается через '+fmtCountdown(leftMs), 'danger');
+  }
 }
 function distanceMeters(a,b){
   const toRad=v=>v*Math.PI/180,R=6371000;
@@ -397,14 +411,7 @@ function updateUi(p, expiresAt, sessionMeta){
   qs('d_age').innerText=relTime(p.ts)+' назад';
   qs('d_type').innerText = sessionMeta?.moveType || '—';
 
-  if(!sessionMeta?.paused && leftMs<=5*60*1000 && !warnedFive && leftMs>60*1000){
-    warnedFive=true;
-    showAlert('Время действия ссылки заканчивается через '+leftText);
-  }
-  if(!sessionMeta?.paused && leftMs<=60*1000 && !warnedOne && leftMs>0){
-    warnedOne=true;
-    showAlert('Время действия ссылки заканчивается через '+leftText);
-  }
+  checkTimeWarnings(leftMs, !!sessionMeta?.paused);
   if(!sessionMeta?.paused && leftMs<=0 && expiresAt){
     showEnd('Время действия ссылки истекло.');
   }
@@ -581,6 +588,7 @@ setInterval(() => {
     qs('time').innerText = txt;
     qs('d_time').innerText = txt;
     qs('time').className = leftMs <= 60000 ? 'time-danger' : (leftMs <= 300000 ? 'time-warn' : 'time-normal');
+    checkTimeWarnings(leftMs, !!currentSessionMeta?.paused);
     if(!currentSessionMeta?.paused && leftMs<=0){
       showEnd('Время действия ссылки истекло.');
     }
