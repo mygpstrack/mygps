@@ -158,7 +158,7 @@ button{
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
-import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
+import { getDatabase, ref, onValue, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
 
 const firebaseConfig={
   apiKey:"AIzaSyCXNCY-IpkhAXb8jNPhN8gf2UdOfPBc5gM",
@@ -230,6 +230,24 @@ function showEnd(message){
   qs('endOverlay').style.display='flex';
 }
 function hideEnd(){ qs('endOverlay').style.display='none'; }
+
+async function registerSessionOpen(){
+  if(!sessionId) return;
+  try{
+    const statsRef = ref(db, `liveSessions/${sessionId}/viewStats`);
+    await runTransaction(statsRef, current => {
+      const now = Date.now();
+      const next = current || {};
+      return {
+        openCount: Number(next.openCount || 0) + 1,
+        firstOpenAt: next.firstOpenAt || now,
+        lastOpenAt: now
+      };
+    });
+  }catch(e){
+    console.warn('registerSessionOpen error', e);
+  }
+}
 
 function relTime(ts){
   if(!ts) return '—';
@@ -598,6 +616,7 @@ setInterval(() => {
 if(!sessionId){
   showEnd('Неверная ссылка (нет session).');
 }else{
+  registerSessionOpen();
   const sessionRef=ref(db, `liveSessions/${sessionId}`);
   onValue(sessionRef, snap => {
     applySession(snap.val());
