@@ -948,6 +948,86 @@ function formatAccuracy(v){ return v != null ? `${Number(v).toFixed(2)} м` : "�
 function formatDuration(ms){ if(!ms||ms<0) return "—"; const s=Math.floor(ms/1000), h=Math.floor(s/3600), m=Math.floor((s%3600)/60); return h>0?`${h}ч ${m}м`:`${m}м`; }
 function formatIdle(ms){ if(!ms||ms<1000) return "—"; const s=Math.floor(ms/1000), h=Math.floor(s/3600), m=Math.floor((s%3600)/60), sec=s%60; return h>0?`${h}ч ${m}м ${sec}с`:`${m}м ${sec}с`; }
 function formatSize(bytes){ if(bytes<1024) return `${bytes} B`; if(bytes<1024*1024) return `${(bytes/1024).toFixed(1)} KB`; return `${(bytes/(1024*1024)).toFixed(2)} MB`; }
+
+function formatRemainingMs(ms){
+  const totalSec = Math.max(0, Math.floor((Number(ms)||0)/1000));
+  const d = Math.floor(totalSec / 86400);
+  const h = Math.floor((totalSec % 86400) / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const parts = [];
+  if(d > 0) parts.push(`${d}д`);
+  if(h > 0) parts.push(`${h}ч`);
+  if(m > 0 || !parts.length) parts.push(`${m}м`);
+  return parts.join(" ");
+}
+
+function getSelectedActiveSessionEntry(){
+  const now = Date.now();
+  return Object.entries(allSessions||{}).find(([token,session])=>{
+    if(token === "_init") return false;
+    const root = getSessionRoot(session), meta = root?.meta || {};
+    if(selectedUid && meta.ownerUid && meta.ownerUid !== selectedUid) return false;
+    return !!meta.active && Number(meta.expiresAt||0) > now;
+  }) || null;
+}
+
+function updateActiveSessionToast(){
+  const host = getToastHost();
+  applyToastPosition();
+
+  let el = document.getElementById("activeSessionToast");
+  const entry = getSelectedActiveSessionEntry();
+
+  if(!entry){
+    if(el) el.remove();
+    const createBtn = qs("createShareBtn");
+    if(createBtn && createBtn.textContent === "Есть активная ссылка"){
+      createBtn.disabled = false;
+      createBtn.textContent = "Создать live-ссылку";
+    }
+    return;
+  }
+
+  const [token, session] = entry;
+  const meta = getSessionRoot(session)?.meta || {};
+  const leftMs = Math.max(0, Number(meta.expiresAt||0) - Date.now());
+
+  if(!el){
+    el = document.createElement("div");
+    el.id = "activeSessionToast";
+    el.style.pointerEvents = "auto";
+    el.style.display = "flex";
+    el.style.flexDirection = "column";
+    el.style.gap = "8px";
+    el.style.padding = "12px 14px";
+    el.style.borderRadius = "14px";
+    el.style.background = "#2563eb";
+    el.style.color = "#fff";
+    el.style.boxShadow = "0 10px 28px rgba(0,0,0,.28)";
+    el.style.fontWeight = "600";
+    el.style.lineHeight = "1.35";
+    el.style.wordBreak = "break-word";
+    host.appendChild(el);
+  }
+
+  const url = buildShareUrl(token);
+  el.innerHTML = `
+    <div style="font-weight:800">Live-сессия активна</div>
+    <div style="font-size:13px;opacity:.95">Осталось: ${formatRemainingMs(leftMs)}</div>
+    <div class="mono" style="font-size:12px;opacity:.92">${url}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button id="activeSessionToastOpen" class="secondary small" style="background:rgba(255,255,255,.16)">Открыть</button>
+      <button id="activeSessionToastCopy" class="secondary small" style="background:rgba(255,255,255,.16)">Копировать</button>
+    </div>
+  `;
+  el.querySelector("#activeSessionToastOpen").onclick = ()=>window.open(url,"_blank","noopener,noreferrer");
+  el.querySelector("#activeSessionToastCopy").onclick = async()=>{
+    try{
+      await navigator.clipboard.writeText(url);
+      showToast("Ссылка скопирована","success");
+    }catch(e){}
+  };
+}
 function parseDateTime(dateVal,hVal,mVal){ if(!dateVal) return null; return new Date(`${dateVal}T${hVal||"00"}:${mVal||"00"}:00`).getTime(); }
 function userLabel(uid){ return getDisplayName(uid); }
 
@@ -1779,7 +1859,16 @@ function renderSessions(){
     if(selectedUid && session?.meta?.ownerUid && qs("viewModeSelect").value==="selected" && session.meta.ownerUid!==selectedUid) return false;
     return true;
   }).sort((a,b)=>Number((b[1]?.meta?.createdAt||0))-Number((a[1]?.meta?.createdAt||0)));
-  if(!entries.length){ tbody.innerHTML=`<tr><td colspan="6">Сессий нет</td></tr>`; return; }
+  if(!entries.length){
+    tbody.innerHTML=`<tr><td colspan="6">Сессий нет</td></tr>`;
+    const createBtn = qs("createShareBtn");
+    if(createBtn){
+      createBtn.disabled = false;
+      createBtn.textContent = "Создать live-ссылку";
+    }
+    updateActiveSessionToast();
+    return;
+  }
   for(const [token,session,status] of entries){
     const meta=session?.meta||{}, stats=session?.viewStats||{}, tr=document.createElement("tr");
     tr.innerHTML=`<td class="mono">${token}<br><span class="tag">${getDisplayName(meta.ownerUid)||meta.ownerUid||"—"}</span></td><td>${getSessionStatusLabel(status)}</td><td>${fmtTime(meta.expiresAt)}</td><td>${stats.openCount||0}</td><td>${fmtTime(stats.firstOpenAt)}<br>${fmtTime(stats.lastOpenAt)}</td><td><div class="row"><button class="secondary small" data-copy="${token}">Копировать</button><button class="secondary small" data-share="${token}">Поделиться</button><button class="secondary small" data-open="${token}">Карта</button><button class="secondary small" data-gmaps="${token}">Google Maps</button><button class="secondary small" data-center="${token}">Центр</button><button class="warn small" data-end="${token}">Завершить</button><button class="danger small" data-delete="${token}">Удалить</button></div></td>`;
@@ -1810,6 +1899,7 @@ function renderSessions(){
     createBtn.disabled = hasActiveForSelected;
     createBtn.textContent = hasActiveForSelected ? "Есть активная ссылка" : "Создать live-ссылку";
   }
+  updateActiveSessionToast();
 }
 
 
@@ -2282,7 +2372,7 @@ onAuthStateChanged(auth, async user => {
     });
     updateUsage(); renderHistory(); updateNowFromAvailableSources();
   });
-  onValue(ref(db, "liveSessions"), snap => { allSessions=snap.val()||{}; updateUsage(); renderSessions(); updateNowFromAvailableSources(); });
+  onValue(ref(db, "liveSessions"), snap => { allSessions=snap.val()||{}; updateUsage(); renderSessions(); updateActiveSessionToast(); updateNowFromAvailableSources(); });
   onValue(ref(db, "adminLogs/deletions"), snap => { deletionsLog=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0)); renderJournal(); });
   onValue(ref(db, "adminLogs/actions"), snap => { actionLogs=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0)); renderJournal(); });
 
