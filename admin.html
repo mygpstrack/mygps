@@ -1692,7 +1692,7 @@ function renderSessions(){
   if(!entries.length){ tbody.innerHTML=`<tr><td colspan="6">Сессий нет</td></tr>`; return; }
   for(const [token,session,status] of entries){
     const meta=session?.meta||{}, stats=session?.viewStats||{}, tr=document.createElement("tr");
-    tr.innerHTML=`<td class="mono">${token}<br><span class="tag">${getDisplayName(meta.ownerUid)||meta.ownerUid||"—"}</span></td><td>${getSessionStatusLabel(status)}</td><td>${fmtTime(meta.expiresAt)}</td><td>${stats.openCount||0}</td><td>${fmtTime(stats.firstOpenAt)}<br>${fmtTime(stats.lastOpenAt)}</td><td><div class="row"><button class="secondary small" data-copy="${token}">Копировать</button><button class="secondary small" data-share="${token}">Поделиться</button><button class="secondary small" data-open="${token}">Карта</button><button class="secondary small" data-center="${token}">Центр</button><button class="warn small" data-end="${token}">Завершить</button><button class="danger small" data-delete="${token}">Удалить</button></div></td>`;
+    tr.innerHTML=`<td class="mono">${token}<br><span class="tag">${getDisplayName(meta.ownerUid)||meta.ownerUid||"—"}</span></td><td>${getSessionStatusLabel(status)}</td><td>${fmtTime(meta.expiresAt)}</td><td>${stats.openCount||0}</td><td>${fmtTime(stats.firstOpenAt)}<br>${fmtTime(stats.lastOpenAt)}</td><td><div class="row"><button class="secondary small" data-copy="${token}">Копировать</button><button class="secondary small" data-share="${token}">Поделиться</button><button class="secondary small" data-open="${token}">Карта</button><button class="secondary small" data-gmaps="${token}">Google Maps</button><button class="secondary small" data-center="${token}">Центр</button><button class="warn small" data-end="${token}">Завершить</button><button class="danger small" data-delete="${token}">Удалить</button></div></td>`;
     tbody.appendChild(tr);
   }
   tbody.querySelectorAll("[data-copy]").forEach(btn=>btn.onclick=async()=>{ try{ await navigator.clipboard.writeText(buildShareUrl(btn.dataset.copy)); showToast("Ссылка скопирована","success"); }catch(e){ alert("Ошибка копирования: "+errText(e)); }});
@@ -1705,6 +1705,13 @@ function renderSessions(){
   });
   tbody.querySelectorAll("[data-open]").forEach(btn=>btn.onclick=()=>window.open(buildShareUrl(btn.dataset.open), "_blank", "noopener,noreferrer"));
   tbody.querySelectorAll("[data-center]").forEach(btn=>btn.onclick=()=>centerSessionOnPoint(btn.dataset.center));
+  tbody.querySelectorAll("[data-gmaps]").forEach(btn=>btn.onclick=()=>{
+    const session=getSessionRoot(allSessions[btn.dataset.gmaps])||{};
+    const p=session?.public?.lastPoint;
+    if(!p || p.latitude==null) return showToast("Нет точки","warn");
+    const url=`https://www.google.com/maps?q=${p.latitude},${p.longitude}`;
+    window.open(url,"_blank");
+  });
   tbody.querySelectorAll("[data-end]").forEach(btn=>btn.onclick=()=>endSession(btn.dataset.end));
   tbody.querySelectorAll("[data-delete]").forEach(btn=>btn.onclick=()=>deleteSession(btn.dataset.delete));
   const createBtn = qs("createShareBtn");
