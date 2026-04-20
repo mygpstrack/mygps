@@ -670,7 +670,7 @@ const db = getDatabase(app);
 const provider = new GoogleAuthProvider();
 const qs = (id) => document.getElementById(id);
 
-let historyByUid = {}, liveByUid = {}, allSessions = {}, selectedUid = "", allUsers = [];
+let historyByUid = {}, liveByUid = {}, allSessions = {}, liveOwners = {}, selectedUid = "", allUsers = [];
 let currentFiltered = [], deletionsLog = [], actionLogs = [];
 let liveAutoCenter = true, createdShareUrl = "", speedChart = null, distanceChart = null, currentNowSourceLabel = "—";
 let usersMeta = {};
@@ -2032,32 +2032,48 @@ function getSessionStatusLabel(status){ if(status==="active") return "актив
 function updateActiveSessionNotice(){
   const box = qs("activeSessionNotice");
   if(!box) return;
-  const now = Date.now();
-  const activeEntry = Object.entries(allSessions || {}).find(([token, session])=>{
-    if(token === "_init") return false;
-    const root = getSessionRoot(session);
-    const meta = root.meta || {};
-    return (!selectedUid || meta.ownerUid === selectedUid) && !!meta.active && Number(meta.expiresAt || 0) > now;
-  });
 
-  if(!activeEntry){
+  const uid = selectedUid;
+  if(!uid){
     box.classList.add("hidden");
     box.innerHTML = "";
     return;
   }
 
-  const [token, session] = activeEntry;
-  const meta = getSessionRoot(session).meta || {};
-  const left = Math.max(0, Number(meta.expiresAt || 0) - now);
-  const url = buildShareUrl(token);
+  const ownerMeta = liveOwners?.[uid] || {};
+  const activeSessionId = ownerMeta.activeSessionId;
+  if(!activeSessionId){
+    box.classList.add("hidden");
+    box.innerHTML = "";
+    return;
+  }
+
+  const session = allSessions?.[activeSessionId];
+  const root = session ? getSessionRoot(session) : null;
+  const meta = root?.meta || {};
+  const expiresAt = Number(meta.expiresAt || 0);
+  const isActive = !!meta.active && expiresAt > Date.now();
+
+  if(!isActive){
+    box.classList.add("hidden");
+    box.innerHTML = "";
+    return;
+  }
+
+  const left = Math.max(0, expiresAt - Date.now());
+  const url = buildShareUrl(activeSessionId);
   createdShareUrl = url;
   box.classList.remove("hidden");
   box.innerHTML = `<strong>Live-сессия активна</strong><div style="margin-top:6px">Осталось: <b>${fmtRemainingCompact(left)}</b></div><div style="margin-top:6px" class="mono">${url}</div>`;
 }
 
 async function loadSessions(){
-  const snap = await get(ref(db, "liveSessions"));
-  allSessions = snap.val() || {};
+  const [sessionsSnap, ownersSnap] = await Promise.all([
+    get(ref(db, "liveSessions")),
+    get(ref(db, "liveOwners"))
+  ]);
+  allSessions = sessionsSnap.val() || {};
+  liveOwners = ownersSnap.val() || {};
   updateUsage();
   renderSessions();
   updateActiveSessionNotice();
