@@ -2301,6 +2301,15 @@ async function buildPdfBlob(){
   doc.setFontSize(11);
   doc.text(`Report: ${userLabel(selectedUid) || "—"}`, 14, y); y += 7;
   doc.text(`Created: ${new Date().toLocaleString("en-GB")}`, 14, y); y += 8;
+  const pts = filteredHistory();
+let periodText = "Period: —";
+if (pts.length) {
+  const start = new Date(pts[0].timestamp);
+  const end = new Date(pts[pts.length - 1].timestamp);
+periodText = `Period: ${start.toLocaleString("en-GB")} → ${end.toLocaleString("en-GB")}`;
+}
+doc.text(periodText, 14, y);
+y += 8;
 
   doc.setFontSize(12);
   doc.text("Summary", 14, y); y += 7;
