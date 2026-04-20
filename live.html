@@ -95,9 +95,6 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-famil
 .bottom.collapsed .panelHeader{
   justify-content:flex-end;
 }
-.bottom.collapsed #hidePanelBtn{
-  display:none;
-}
 button{
   width:100%;padding:10px;border:none;
   border-radius:10px;background:#1f2937;color:#fff;
@@ -182,7 +179,6 @@ button{
 <div class="bottom" id="panel">
   <div class="panelHeader">
     <button onclick="togglePanel()" id="toggleBtn">Подробнее</button>
-    <button onclick="toggleBottomPanel()" id="hidePanelBtn">Скрыть блок</button>
   </div>
 
   <div class="details" id="details">
@@ -255,8 +251,10 @@ let topInfoHidden = localStorage.getItem('live_top_info_hidden') === '1';
 let bottomPanelCollapsed = localStorage.getItem('live_bottom_panel_collapsed') === '1';
 
 function applyTopInfoState(){
-  qs('topInfoGrid').classList.toggle('hidden', topInfoHidden);
-  qs('toggleTopInfoBtn').innerText = topInfoHidden ? 'Показать инфо' : 'Скрыть инфо';
+  const top = qs('topInfoGrid');
+  const btn = qs('toggleTopInfoBtn');
+  if(top) top.classList.toggle('hidden', !!topInfoHidden);
+  if(btn) btn.innerText = topInfoHidden ? 'Показать инфо' : 'Скрыть инфо';
 }
 function toggleTopInfo(){
   topInfoHidden = !topInfoHidden;
@@ -267,15 +265,9 @@ window.toggleTopInfo = toggleTopInfo;
 
 function applyBottomPanelState(){
   qs('panel').classList.toggle('collapsed', bottomPanelCollapsed);
-  qs('toggleBtn').innerText = bottomPanelCollapsed ? 'Показать подробнее' : (open ? 'Скрыть' : 'Подробнее');
-  if(bottomPanelCollapsed){
-    qs('details').style.display='none';
-    qs('panel').classList.remove('full');
-  }else{
-    qs('details').style.display=open?'block':'none';
-    qs('panel').classList.toggle('full',open);
-  }
-  qs('hidePanelBtn').innerText = bottomPanelCollapsed ? 'Показать блок' : 'Скрыть блок';
+  qs('toggleBtn').innerText = open ? 'Скрыть' : 'Подробнее';
+  qs('details').style.display=open?'block':'none';
+  qs('panel').classList.toggle('full',open);
 }
 function toggleBottomPanel(){
   bottomPanelCollapsed = !bottomPanelCollapsed;
@@ -285,10 +277,6 @@ function toggleBottomPanel(){
 window.toggleBottomPanel = toggleBottomPanel;
 
 function togglePanel(){
-  if(bottomPanelCollapsed){
-    bottomPanelCollapsed = false;
-    localStorage.setItem('live_bottom_panel_collapsed', '0');
-  }
   open=!open;
   applyBottomPanelState();
 }
@@ -303,7 +291,7 @@ function setFollowUi(){
 function toggleFollow(){
   follow=!follow;
   setFollowUi();
-qs('toggleTopInfoBtn').addEventListener('click', toggleTopInfo);
+qs('toggleTopInfoBtn').onclick = toggleTopInfo;
 applyTopInfoState();
 applyBottomPanelState();
   if(follow && displayPoint) map.panTo([displayPoint.lat,displayPoint.lng], {animate:true});
