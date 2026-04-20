@@ -1614,6 +1614,7 @@ function updateCharts(points){
 }
 
 async function renderHistory() {
+  updateHistorySortHeaders();
   const pts = filteredHistory();
   currentFiltered = pts;
 
