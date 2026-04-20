@@ -25,7 +25,37 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-famil
 .top{
   position:fixed;top:10px;left:10px;right:10px;
   display:grid;grid-template-columns:1fr 1fr;gap:8px;z-index:1000;
+  transition:opacity .2s ease, transform .2s ease;
 }
+.top.hidden{
+  opacity:0;
+  transform:translateY(-8px);
+  pointer-events:none;
+}
+.liveToolbar{
+  position:fixed;
+  right:10px;
+  top:10px;
+  z-index:1200;
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+}
+.miniBtn{
+  border:none;
+  border-radius:12px;
+  background:rgba(15,23,42,.88);
+  color:#fff;
+  font-size:12px;
+  font-weight:800;
+  padding:8px 12px;
+  width:auto;
+  min-height:38px;
+  box-shadow:0 8px 20px rgba(0,0,0,.24);
+  border:1px solid var(--line);
+}
+.miniBtn:hover{filter:brightness(1.05)}
 .time-normal{color:var(--text)}
 .time-warn{color:var(--yellow)}
 .time-danger{color:var(--red)}
@@ -45,8 +75,29 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-famil
   z-index:1000;border:1px solid var(--line);
   box-shadow:0 -10px 30px rgba(0,0,0,.32);
   backdrop-filter:blur(12px);
+  transition:transform .2s ease, opacity .2s ease;
 }
 .bottom.full{max-height:55vh;overflow:auto}
+.bottom.collapsed{
+  background:transparent;
+  border:none;
+  box-shadow:none;
+  backdrop-filter:none;
+  padding:0;
+}
+.panelHeader{
+  display:flex;
+  gap:8px;
+  align-items:center;
+}
+.panelHeader button{flex:1}
+.bottom.collapsed .details{display:none !important}
+.bottom.collapsed .panelHeader{
+  justify-content:flex-end;
+}
+.bottom.collapsed #hidePanelBtn{
+  display:none;
+}
 button{
   width:100%;padding:10px;border:none;
   border-radius:10px;background:#1f2937;color:#fff;
@@ -115,7 +166,11 @@ button{
 <body>
 <div id="map"></div>
 
-<div class="top">
+<div class="liveToolbar">
+  <button id="toggleTopInfoBtn" class="miniBtn">Скрыть инфо</button>
+</div>
+
+<div class="top" id="topInfoGrid">
   <div class="card">Погода<br><b id="weather">—</b></div>
   <div class="card">Локация<br><b id="location">—</b></div>
   <div class="card">Статус<br><b id="status">—</b></div>
@@ -125,7 +180,10 @@ button{
 </div>
 
 <div class="bottom" id="panel">
-  <button onclick="togglePanel()" id="toggleBtn">Подробнее</button>
+  <div class="panelHeader">
+    <button onclick="togglePanel()" id="toggleBtn">Подробнее</button>
+    <button onclick="toggleBottomPanel()" id="hidePanelBtn">Скрыть блок</button>
+  </div>
 
   <div class="details" id="details">
     <div class="grid">
@@ -193,12 +251,46 @@ let displayPoint=null;
 let animationFrameId=null;
 let lastPausedState=null;
 let currentSessionMeta=null;
+let topInfoHidden = localStorage.getItem('live_top_info_hidden') === '1';
+let bottomPanelCollapsed = localStorage.getItem('live_bottom_panel_collapsed') === '1';
+
+function applyTopInfoState(){
+  qs('topInfoGrid').classList.toggle('hidden', topInfoHidden);
+  qs('toggleTopInfoBtn').innerText = topInfoHidden ? 'Показать инфо' : 'Скрыть инфо';
+}
+function toggleTopInfo(){
+  topInfoHidden = !topInfoHidden;
+  localStorage.setItem('live_top_info_hidden', topInfoHidden ? '1' : '0');
+  applyTopInfoState();
+}
+window.toggleTopInfo = toggleTopInfo;
+
+function applyBottomPanelState(){
+  qs('panel').classList.toggle('collapsed', bottomPanelCollapsed);
+  qs('toggleBtn').innerText = bottomPanelCollapsed ? 'Показать подробнее' : (open ? 'Скрыть' : 'Подробнее');
+  if(bottomPanelCollapsed){
+    qs('details').style.display='none';
+    qs('panel').classList.remove('full');
+  }else{
+    qs('details').style.display=open?'block':'none';
+    qs('panel').classList.toggle('full',open);
+  }
+  qs('hidePanelBtn').innerText = bottomPanelCollapsed ? 'Показать блок' : 'Скрыть блок';
+}
+function toggleBottomPanel(){
+  bottomPanelCollapsed = !bottomPanelCollapsed;
+  localStorage.setItem('live_bottom_panel_collapsed', bottomPanelCollapsed ? '1' : '0');
+  applyBottomPanelState();
+}
+window.toggleBottomPanel = toggleBottomPanel;
 
 function togglePanel(){
+  if(bottomPanelCollapsed){
+    bottomPanelCollapsed = false;
+    localStorage.setItem('live_bottom_panel_collapsed', '0');
+  }
   open=!open;
-  qs('details').style.display=open?'block':'none';
-  qs('panel').classList.toggle('full',open);
-  qs('toggleBtn').innerText=open?'Скрыть':'Подробнее';
+  applyBottomPanelState();
 }
 window.togglePanel=togglePanel;
 
@@ -211,6 +303,9 @@ function setFollowUi(){
 function toggleFollow(){
   follow=!follow;
   setFollowUi();
+qs('toggleTopInfoBtn').addEventListener('click', toggleTopInfo);
+applyTopInfoState();
+applyBottomPanelState();
   if(follow && displayPoint) map.panTo([displayPoint.lat,displayPoint.lng], {animate:true});
 }
 window.toggleFollow=toggleFollow;
@@ -322,9 +417,10 @@ function getMoveType(points, currentPoint){
 
   const avg = sample.reduce((a,b)=>a+b,0) / sample.length;
 
-  if(avg < 2) return 'Стоит';
-  if(avg < 12) return 'Пешком';
-  return 'Авто/Мото';
+  if(avg < 2) return 'Стоянка';
+  if(avg < 7) return 'Пешком';
+  if(avg < 50) return 'Авто';
+  return 'Мото';
 }
 
 function getStatusMeta(p, sessionMeta){
@@ -402,7 +498,7 @@ function animateMarkerTo(target, sessionMeta){
   animationFrameId=requestAnimationFrame(step);
 }
 
-function updateUi(p, expiresAt, sessionMeta){
+function updateUi(p, expiresAt, sessionMeta, moveType){
   const meta=getStatusMeta(p, sessionMeta);
   const leftMs = sessionMeta?.paused
     ? Math.max(0, Number(sessionMeta?.remainingMs || 0))
@@ -432,7 +528,7 @@ function updateUi(p, expiresAt, sessionMeta){
   qs('d_signal').innerText=meta.signal;
   qs('d_tail').innerText=accuracy>0 ? Math.round(accuracy)+' м' : '—';
   qs('d_age').innerText=relTime(p.ts)+' назад';
-  qs('d_type').innerText = sessionMeta?.moveType || '—';
+  qs('d_type').innerText = moveType || '—';
 
   checkTimeWarnings(leftMs, !!sessionMeta?.paused);
   if(!sessionMeta?.paused && leftMs<=0 && expiresAt){
@@ -482,23 +578,30 @@ function applySession(data){
   const point = fallbackPoint ? normalizePoint(fallbackPoint) : null;
   if(!point || !Number.isFinite(point.lat) || !Number.isFinite(point.lng)) return;
 
-  const smoothed = smoothPoint(lastPoint, point);
-  lastPoint = {...point};
-
-  setMarkerIcon(point, meta);
-  if(!marker){
-    marker=L.marker([smoothed.lat,smoothed.lng],{icon:L.divIcon({html:buildIconHtml(point, meta), className:''})}).addTo(map);
-    displayPoint = {...smoothed};
-  }else{
-    animateMarkerTo(smoothed, meta);
+  const routePoints = [...filtered];
+  if(!routePoints.length || Number(routePoints[routePoints.length - 1].ts || 0) !== Number(point.ts || 0)){
+    routePoints.push(point);
   }
 
-  tailPoints = filtered.slice(-30).map(p=>[p.lat,p.lng]);
-  tailLine.setLatLngs(tailPoints);
-  updateUi(smoothed, meta.expiresAt, meta);
-  fetchWeather(smoothed.lat, smoothed.lng);
+  const livePoint = routePoints[routePoints.length - 1];
+  lastPoint = {...livePoint};
 
-  if(follow) map.panTo([smoothed.lat, smoothed.lng], {animate:true});
+  tailPoints = routePoints.slice(-30).map(p=>[p.lat,p.lng]);
+  tailLine.setLatLngs(tailPoints);
+
+  setMarkerIcon(livePoint, meta);
+  if(!marker){
+    marker=L.marker([livePoint.lat,livePoint.lng],{icon:L.divIcon({html:buildIconHtml(livePoint, meta), className:''})}).addTo(map);
+    displayPoint = {...livePoint};
+  }else{
+    animateMarkerTo(livePoint, meta);
+  }
+
+  const moveType = getMoveType(routePoints, livePoint);
+  updateUi(livePoint, meta.expiresAt, meta, moveType);
+  fetchWeather(livePoint.lat, livePoint.lng);
+
+  if(follow) map.panTo([livePoint.lat, livePoint.lng], {animate:true});
 }
 
 map.on('dragstart',()=>{
