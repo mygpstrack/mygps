@@ -239,7 +239,7 @@
       </div>
 
 
-      <div class="row">
+      <div class="row adminToolsRow">
         <div>
           <div class="label">Пользователь</div>
           <select id="userSelect"></select>
@@ -575,6 +575,23 @@
               <option value="weekly">Раз в неделю</option>
             </select>
           </div>
+          <div class="stat">
+            <div class="label">Сглаживание скорости</div>
+            <select id="speedSmoothingSelect">
+              <option value="off">Выкл</option>
+              <option value="low">Слабое</option>
+              <option value="medium">Среднее</option>
+              <option value="high">Сильное</option>
+            </select>
+          </div>
+          <div class="stat">
+            <div class="label">Скрывать точки хуже, м</div>
+            <input id="hideAccuracyAboveInput" type="number" min="0" step="1" value="20">
+          </div>
+          <div class="stat">
+            <div class="label">Лимит точек в PDF</div>
+            <input id="pdfPointLimitInput" type="number" min="100" step="100" value="1000">
+          </div>
         </div>
 
         <div class="card" style="margin-top:12px">
@@ -665,7 +682,10 @@ let adminSettings = {
   storageLimitGb: 1,
   trafficLimitGb: 10,
   gpsAccuracyMax: 100,
-  gpsImpossibleSpeed: 250
+  gpsImpossibleSpeed: 250,
+  speedSmoothing: "off",
+  hideAccuracyAbove: 20,
+  pdfPointLimit: 1000
 };
 let errorLogs = [];
 let autoRefreshTimer = null;
@@ -1810,6 +1830,9 @@ async function loadAdminSettings(){
   if(qs("trafficLimitGbInput")) qs("trafficLimitGbInput").value = adminSettings.trafficLimitGb;
   if(qs("gpsAccuracyMaxInput")) qs("gpsAccuracyMaxInput").value = adminSettings.gpsAccuracyMax;
   if(qs("gpsImpossibleSpeedInput")) qs("gpsImpossibleSpeedInput").value = adminSettings.gpsImpossibleSpeed;
+  if(qs("speedSmoothingSelect")) qs("speedSmoothingSelect").value = adminSettings.speedSmoothing || "off";
+  if(qs("hideAccuracyAboveInput")) qs("hideAccuracyAboveInput").value = Number(adminSettings.hideAccuracyAbove ?? 20);
+  if(qs("pdfPointLimitInput")) qs("pdfPointLimitInput").value = Number(adminSettings.pdfPointLimit ?? 1000);
   applyToastPosition();
   setupAutoRefresh();
 }
@@ -1822,6 +1845,9 @@ async function saveAdminSettings(){
   adminSettings.trafficLimitGb = Number(qs("trafficLimitGbInput").value||10);
   adminSettings.gpsAccuracyMax = Number(qs("gpsAccuracyMaxInput").value||100);
   adminSettings.gpsImpossibleSpeed = Number(qs("gpsImpossibleSpeedInput").value||250);
+  adminSettings.speedSmoothing = qs("speedSmoothingSelect")?.value || "off";
+  adminSettings.hideAccuracyAbove = Number(qs("hideAccuracyAboveInput")?.value || 20);
+  adminSettings.pdfPointLimit = Number(qs("pdfPointLimitInput")?.value || 1000);
   await set(ref(db,"adminSettings/config"), adminSettings);
   updateUsageBars();
   setupAutoRefresh();
