@@ -2325,22 +2325,6 @@ async function buildPdfBlob(){
   return doc.output("blob");
 }
 
-const PDF_LOGO_SVG = `<svg width="180" height="44" viewBox="0 0 220 56" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="mygpsGrad" x1="6" y1="4" x2="214" y2="52" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#22C55E"/>
-      <stop offset="1" stop-color="#3B82F6"/>
-    </linearGradient>
-  </defs>
-  <g transform="translate(2,2)">
-    <path d="M24 2C14.06 2 6 10.06 6 20c0 12.32 18 28 18 28s18-15.68 18-28C42 10.06 33.94 2 24 2Z" fill="url(#mygpsGrad)"/>
-    <circle cx="24" cy="20" r="6.3" fill="white"/>
-    <path d="M5 46.5C11.5 41.2 18.5 40.2 26 43.8C32.5 46.9 38.1 46.4 44.5 42.8" stroke="url(#mygpsGrad)" stroke-width="4" stroke-linecap="round"/>
-    <circle cx="3.8" cy="46.8" r="3.4" fill="url(#mygpsGrad)"/>
-  </g>
-  <text x="62" y="37" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="34" font-weight="800" fill="url(#mygpsGrad)">MyGps</text>
-</svg>`;
-
 function svgToDataUri(svg){
   return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
 }
