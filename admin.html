@@ -2288,10 +2288,9 @@ function getPdfOptions(){
 
 async function exportPdfReport(){
   const pts = getExportPoints();
-  if(!pts.length) return showToast("Нет данных для PDF","warn");
+  if(!pts.length) return showToast("No data for PDF","warn");
 
   const options = getPdfOptions();
-  const lang = "en";
   const T = {
     reportFor: "Report",
     created: "Created",
@@ -2328,39 +2327,58 @@ async function exportPdfReport(){
   const maxA = accs.length ? Math.max(...accs) : 0;
 
   let mapHtml = "";
-  if(options.map){
-    try{
+  try{
+    if(options.map){
       const mapData = await exportMapPng();
       if(mapData){
-        mapHtml = `<section class="block"><h2>${T.map}</h2><img class="map" src="${mapData}" alt="map"></section>`;
+        mapHtml = `
+          <section class="block">
+            <div class="sectionHead"><h2>${T.map}</h2></div>
+            <img class="map" src="${mapData}" alt="map">
+          </section>`;
       }
-    }catch(e){}
+    }
+  }catch(e){}
+
+  const statCard = (label, value, sub="") => `
+    <div class="statCard">
+      <div class="statLabel">${label}</div>
+      <div class="statValue">${value}</div>
+      ${sub ? `<div class="statSub">${sub}</div>` : ""}
+    </div>`;
+
+  let summaryHtml = "";
+  if(options.summary){
+    summaryHtml = `
+      <section class="block">
+        <div class="sectionHead"><h2>${T.summary}</h2></div>
+        <div class="statsGrid">
+          ${statCard(T.points, pts.length)}
+          ${statCard(T.distance, `${s.km.toFixed(2)} km`)}
+          ${statCard(T.avgSpeed, `${s.avgSpeed.toFixed(1)} km/h`)}
+          ${statCard(T.maxSpeed, `${s.maxSpeed.toFixed(1)} km/h`)}
+        </div>
+      </section>`;
   }
 
-  const summaryHtml = options.summary ? `
-    <section class="block">
-      <h2>${T.summary}</h2>
-      <div class="grid">
-        <div class="item"><b>${T.points}:</b> ${pts.length}</div>
-        <div class="item"><b>${T.distance}:</b> ${s.km.toFixed(2)} km</div>
-        <div class="item"><b>${T.avgSpeed}:</b> ${s.avgSpeed.toFixed(1)} km/h</div>
-        <div class="item"><b>${T.maxSpeed}:</b> ${s.maxSpeed.toFixed(1)} km/h</div>
-      </div>
-    </section>` : "";
-
-  let dataHtml = "";
+  let dataSummaryHtml = "";
   if(options.speed || options.accuracy || options.labels){
-    const rows = [];
-    if(options.speed) rows.push(`<div class="item"><b>${T.speed}:</b> ${T.min} ${minSp.toFixed(1)} / ${T.max} ${maxSp.toFixed(1)} km/h</div>`);
-    if(options.accuracy) rows.push(`<div class="item"><b>${T.accuracy}:</b> ${T.min} ${minA.toFixed(0)} / ${T.max} ${maxA.toFixed(0)} m</div>`);
-    if(options.labels) rows.push(`<div class="item"><b>${T.labels}:</b> ${labels.length ? labels.join(", ") : "—"}</div>`);
-    dataHtml = `<section class="block"><h2>${T.speedAccuracyLabels}</h2><div class="grid">${rows.join("")}</div></section>`;
+    const cards = [];
+    if(options.speed) cards.push(statCard(T.speed, `${maxSp.toFixed(1)} km/h`, `${T.min} ${minSp.toFixed(1)} km/h`));
+    if(options.accuracy) cards.push(statCard(T.accuracy, `${maxA.toFixed(0)} m`, `${T.min} ${minA.toFixed(0)} m`));
+    if(options.labels) cards.push(statCard(T.labels, labels.length || 0, labels.length ? labels.join(", ") : "—"));
+    dataSummaryHtml = `
+      <section class="block">
+        <div class="sectionHead"><h2>${T.dataSummary}</h2></div>
+        <div class="statsGrid">${cards.join("")}</div>
+      </section>`;
   }
 
   let tableHtml = "";
   if(options.table){
-    const rows = pts.slice(0, 250).map(p => `
+    const rows = pts.slice(0,250).map((p, idx)=>`
       <tr>
+        <td>${idx + 1}</td>
         <td>${fmtTime(p.timestamp)}</td>
         <td>${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}</td>
         <td>${p.speed != null ? Number(p.speed).toFixed(1) : "—"}</td>
@@ -2369,10 +2387,11 @@ async function exportPdfReport(){
       </tr>`).join("");
     tableHtml = `
       <section class="block">
-        <h2>${T.table}</h2>
+        <div class="sectionHead"><h2>${T.table}</h2></div>
         <table>
           <thead>
             <tr>
+              <th>#</th>
               <th>${T.time}</th>
               <th>${T.coords}</th>
               <th>${T.speedCol}</th>
@@ -2385,62 +2404,93 @@ async function exportPdfReport(){
       </section>`;
   }
 
-  const logoHtml = typeof PDF_LOGO_SVG !== "undefined" ? PDF_LOGO_SVG : "";
+  const logo = typeof PDF_LOGO_SVG !== "undefined" ? PDF_LOGO_SVG : "";
 
-  const reportWin = window.open("", "_blank", "noopener,noreferrer,width=1100,height=900");
-  if(!reportWin) return showToast("Разреши открытие окна для PDF","warn");
-
-  reportWin.document.write(`<!doctype html>
-<html lang="${lang}">
+  const reportHtml = `<!doctype html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<title>${T.title}</title>
+<title>${T.reportFor} ${reportFor}</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-  body{font-family:Arial,Helvetica,sans-serif;margin:0;background:#f5f7fb;color:#0f172a}
-  .wrap{max-width:980px;margin:0 auto;padding:24px}
-  .head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 22px;background:#fff;border-radius:18px;box-shadow:0 8px 24px rgba(15,23,42,.08)}
-  .logo svg{height:42px;width:auto;display:block}
-  .meta{font-size:14px;color:#475569;text-align:right}
-  .block{margin-top:18px;padding:18px 22px;background:#fff;border-radius:18px;box-shadow:0 8px 24px rgba(15,23,42,.06);break-inside:avoid}
-  h1{margin:0;font-size:24px}
-  h2{margin:0 0 12px 0;font-size:18px}
-  .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-  .item{padding:10px 12px;background:#f8fafc;border-radius:12px}
-  .map{width:100%;border-radius:14px;border:1px solid #e2e8f0}
-  table{width:100%;border-collapse:collapse;font-size:12px}
-  th,td{padding:8px 10px;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:top}
-  thead th{background:#eff6ff;color:#1d4ed8}
-  .actions{position:sticky;top:0;display:flex;justify-content:flex-end;padding:12px 0 0 0}
-  .printBtn{border:none;background:#2563eb;color:#fff;border-radius:12px;padding:10px 16px;font-weight:700;cursor:pointer}
+  :root{
+    --bg:#f3f7fb; --card:#ffffff; --text:#0f172a; --muted:#64748b; --line:#e2e8f0;
+    --blue:#2563eb; --blue-soft:#eff6ff; --shadow:0 12px 28px rgba(15,23,42,.08);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Inter,Arial,Helvetica,sans-serif;background:linear-gradient(180deg,#f8fbff 0%, var(--bg) 100%);color:var(--text)}
+  .wrap{max-width:1100px;margin:0 auto;padding:24px}
+  .actions{display:flex;justify-content:space-between;align-items:center;gap:12px;padding-bottom:12px}
+  .btns{display:flex;gap:10px;flex-wrap:wrap}
+  .btn{border:none;border-radius:14px;padding:11px 18px;font-weight:800;letter-spacing:.01em;cursor:pointer;box-shadow:0 10px 20px rgba(15,23,42,.10)}
+  .btnPrimary{background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff}
+  .btnSecondary{background:#fff;color:#0f172a;border:1px solid #dbe3ef}
+  .hint{font-size:12px;color:#64748b}
+  .hero{display:grid;grid-template-columns:1fr auto;gap:20px;align-items:center;padding:22px 24px;background:var(--card);border:1px solid rgba(255,255,255,.7);border-radius:28px;box-shadow:var(--shadow)}
+  .logo svg{width:180px;height:auto;display:block}
+  .heroMeta{text-align:right;color:var(--muted);font-size:14px;line-height:1.6}
+  .heroMeta strong{color:var(--text)}
+  .block{margin-top:18px;padding:20px 22px;background:var(--card);border-radius:24px;border:1px solid rgba(255,255,255,.7);box-shadow:var(--shadow);break-inside:avoid}
+  .sectionHead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+  h2{margin:0;font-size:18px;letter-spacing:.01em}
+  .statsGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+  .statCard{padding:16px;border-radius:18px;background:radial-gradient(circle at top right, rgba(37,99,235,.08), transparent 42%), linear-gradient(180deg,#ffffff 0%, #f8fbff 100%);border:1px solid var(--line)}
+  .statLabel{color:var(--muted);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em}
+  .statValue{margin-top:8px;font-size:24px;font-weight:800;color:var(--text)}
+  .statSub{margin-top:6px;font-size:13px;color:var(--muted);line-height:1.45}
+  .map{width:100%;display:block;border-radius:18px;border:1px solid var(--line)}
+  table{width:100%;border-collapse:separate;border-spacing:0;font-size:12px;overflow:hidden;border:1px solid var(--line);border-radius:16px}
+  thead th{background:var(--blue-soft);color:var(--blue);font-weight:800;text-align:left;padding:10px 12px;border-bottom:1px solid var(--line)}
+  tbody td{padding:9px 12px;border-bottom:1px solid #edf2f7;vertical-align:top}
+  tbody tr:nth-child(even) td{background:#fbfdff}
+  tbody tr:last-child td{border-bottom:none}
+  @media (max-width: 800px){
+    .wrap{padding:16px}.hero{grid-template-columns:1fr}.heroMeta{text-align:left}.statsGrid{grid-template-columns:1fr}
+    .actions{flex-direction:column;align-items:flex-start}
+  }
+  @page{margin:14mm}
   @media print{
     body{background:#fff}
     .wrap{max-width:none;padding:0}
     .actions{display:none}
-    .block,.head{box-shadow:none;border:1px solid #e5e7eb}
+    .hero,.block{box-shadow:none;border:1px solid #e5e7eb;break-inside:avoid}
   }
 </style>
 </head>
 <body>
   <div class="wrap">
-    <div class="actions"><button class="printBtn" onclick="window.print()">${T.print}</button></div>
-    <div class="head">
-      <div class="logo">${logoHtml}</div>
-      <div class="meta">
-        <div><b>${T.reportFor}:</b> ${reportFor}</div>
-        <div><b>${T.created}:</b> ${createdAt}</div>
+    <div class="actions">
+      <div class="btns">
+        <button class="btn btnPrimary" onclick="window.print()">Print / Save PDF</button>
+        <button class="btn btnSecondary" onclick="history.back()">Back</button>
       </div>
+      <div class="hint">Save as PDF from the browser print dialog</div>
     </div>
+    <section class="hero">
+      <div class="logo">${logo}</div>
+      <div class="heroMeta">
+        <div><strong>${T.reportFor}:</strong> ${reportFor}</div>
+        <div><strong>${T.created}:</strong> ${createdAt}</div>
+      </div>
+    </section>
     ${summaryHtml}
     ${mapHtml}
-    ${dataHtml}
+    ${dataSummaryHtml}
     ${tableHtml}
   </div>
 </body>
-</html>`);
-  reportWin.document.close();
-  showToast(T.exported, "success");
-}
+</html>`;
 
+  const blob = new Blob([reportHtml], {type: "text/html;charset=utf-8"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.target = "_self";
+  a.rel = "noopener";
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(url), 60000);
+  showToast(T.exported,"success");
+}
 async function exportMapPngBlob(){
   const mapEl = qs("historyMap");
   if(!mapEl) throw new Error("historyMap not found");
