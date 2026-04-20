@@ -1496,8 +1496,7 @@ async function loadAllData(){
   });
   updateUsage();
   updateTodaySummary();
-  setupPeriodButtonVisuals();
-renderHistory();
+  renderHistory();
   await updateNowFromAvailableSources();
 }
 
@@ -1614,50 +1613,8 @@ function updateCharts(points){
   });
 }
 
-async 
-let __periodVisualState = localStorage.getItem("mygps_period_visual_active") || "todayBtn";
-
-function applyPeriodVisualState(){
-  const ids = ["todayBtn","yesterdayBtn","weekBtn","range1hBtn","range24hBtn"];
-  ids.forEach(id=>{
-    const el = document.getElementById(id);
-    if(!el) return;
-    if(id === __periodVisualState){
-      el.style.background = "linear-gradient(135deg,#60a5fa,#3b82f6)";
-      el.style.color = "#fff";
-      el.style.boxShadow = "0 8px 20px rgba(59,130,246,.22)";
-      el.style.borderColor = "rgba(96,165,250,.45)";
-      el.style.opacity = "1";
-    }else{
-      el.style.background = "#6b7280";
-      el.style.color = "#fff";
-      el.style.boxShadow = "";
-      el.style.borderColor = "";
-      el.style.opacity = ".92";
-    }
-  });
-}
-
-function rememberPeriodVisualState(id){
-  __periodVisualState = id;
-  localStorage.setItem("mygps_period_visual_active", id);
-  applyPeriodVisualState();
-}
-
-function setupPeriodButtonVisuals(){
-  const ids = ["todayBtn","yesterdayBtn","weekBtn","range1hBtn","range24hBtn"];
-  ids.forEach(id=>{
-    const el = document.getElementById(id);
-    if(!el || el.dataset.periodVisualBound === "1") return;
-    el.dataset.periodVisualBound = "1";
-    el.addEventListener("click", ()=>rememberPeriodVisualState(id), true);
-  });
-  applyPeriodVisualState();
-}
-
-function renderHistory() {
+async function renderHistory() {
   updateHistorySortHeaders();
-  applyPeriodVisualState();
   const pts = filteredHistory();
   currentFiltered = pts;
 
