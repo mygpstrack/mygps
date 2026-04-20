@@ -2783,36 +2783,16 @@ qs("exportGpxBtn").onclick=()=>{
   downloadBlob(blob, `route_${toLocalDateInputValue(new Date())}.gpx`);
   showToast("GPX экспортирован","success");
 };
-qs("exportPdfBtn").onclick = async () => {
-  try {
+qs("exportPdfBtn").onclick=async()=>{
+  try{
     const pts = filteredHistory();
-    if (!pts.length) return showToast("Нет данных для PDF","warn");
-
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
-
-    let y = 20;
-
-    doc.setFontSize(18);
-    doc.text("MyGps Report", 14, y);
-    y += 10;
-
-    const rows = pts.slice(0,200).map(p => [
-      fmtTime(p.timestamp),
-      `${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}`,
-      p.speed != null ? Number(p.speed).toFixed(1) : "—"
-    ]);
-
-    doc.autoTable({
-      startY: y,
-      head: [["Time","Coordinates","Speed"]],
-      body: rows
-    });
-
-    doc.save("report.pdf");
-
-  } catch (err) {
-    console.error(err);
+    if(!pts.length) return showToast("Нет данных для PDF","warn");
+    const blob = await buildPdfBlob();
+    downloadBlob(blob, `${exportBaseName()}.pdf`);
+    showToast("PDF экспортирован","success");
+  }catch(err){
+    recordError("exportPdf", err);
+    showToast("Ошибка PDF: " + errText(err), "error", 3600);
   }
 };
 if(qs("exportPngBtn")) qs("exportPngBtn").onclick=()=>exportMapPng();
@@ -2902,7 +2882,6 @@ function exportBaseName(suffix=""){
 if (qs("exportJsonBtn")) qs("exportJsonBtn").onclick = ()=>downloadText(`${exportBaseName()}.json`, JSON.stringify(getExportPoints(),null,2), "application/json");
 if (qs("exportCsvBtn")) qs("exportCsvBtn").onclick = ()=>{ const pts=getExportPoints(), lines=["timestamp,latitude,longitude,accuracy,speed"]; pts.forEach(p=>lines.push([p.timestamp??"",p.latitude??"",p.longitude??"",p.accuracy??"",p.speed??""].join(","))); downloadText(`${exportBaseName()}.csv`, lines.join("\n"), "text/csv"); showToast("CSV экспортирован","success"); };
 if (qs("exportGpxBtn")) qs("exportGpxBtn").onclick = ()=>{ const pts=getExportPoints(), lines=['<?xml version="1.0" encoding="UTF-8"?>','<gpx version="1.1" creator="MyGps Admin" xmlns="http://www.topografix.com/GPX/1/1">','<trk><name>History Export</name><trkseg>']; pts.forEach(p=>lines.push(`<trkpt lat="${p.latitude}" lon="${p.longitude}"><time>${new Date(Number(p.timestamp||0)).toISOString()}</time></trkpt>`)); lines.push('</trkseg></trk></gpx>'); downloadText(`${exportBaseName()}.gpx`, lines.join(""), "application/gpx+xml"); showToast("GPX экспортирован","success"); };
-if (qs("exportPdfBtn")) qs("exportPdfBtn").onclick = ()=>exportPdfReport();
 if (qs("exportZipBtn")) qs("exportZipBtn").onclick = async()=>{ const pts=getExportPoints(); const zip=new JSZip(); zip.file(`${exportBaseName()}.json`, JSON.stringify(pts,null,2)); const lines=["timestamp,latitude,longitude,accuracy,speed"]; pts.forEach(p=>lines.push([p.timestamp??"",p.latitude??"",p.longitude??"",p.accuracy??"",p.speed??""].join(","))); zip.file(`${exportBaseName()}.csv`, lines.join("\n")); const blob=await zip.generateAsync({type:"blob"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=`${exportBaseName()}.zip`; a.click(); URL.revokeObjectURL(url); showToast("ZIP экспортирован","success"); };
 if (qs("exportPngBtn")) qs("exportPngBtn").onclick = async()=>{ const canvas=await html2canvas(qs("historyMap")); canvas.toBlob(blob=>{ const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=`${exportBaseName()}.png`; a.click(); URL.revokeObjectURL(url); showToast("PNG экспортирован","success"); }); };
 
