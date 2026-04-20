@@ -1496,7 +1496,9 @@ async function loadAllData(){
   });
   updateUsage();
   updateTodaySummary();
-  renderHistory();
+  setActiveGroupButton(".quickRangeBtn", qs("todayBtn"));
+setActiveGroupButton(".exportRangeBtn", qs("exportTodayBtn"));
+renderHistory();
   await updateNowFromAvailableSources();
 }
 
