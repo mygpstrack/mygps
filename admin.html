@@ -2472,21 +2472,12 @@ async function exportPdfReport(){
     ${dataSummaryHtml}
     ${tableHtml}
   </div>
-<script>
-  window.addEventListener('load', function(){
-    setTimeout(function(){ window.print(); }, 300);
-  });
-</script>
 </body>
 </html>`;
 
   const blob = new Blob([reportHtml], {type: "text/html;charset=utf-8"});
   const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.target = "_self";
-  a.rel = "noopener";
-  a.click();
+  window.location.assign(url);
   setTimeout(()=>URL.revokeObjectURL(url), 60000);
   showToast(T.exported,"success");
 }
