@@ -1515,16 +1515,18 @@ window.toggleHistorySort = function(field){
 
 function updateHistorySortHeaders(){
   const map = {
-    historyHeadTime: "timestamp",
-    historyHeadAccuracy: "accuracy",
-    historyHeadSpeed: "speed"
+    historyHeadTime: ["timestamp", "Время"],
+    historyHeadAccuracy: ["accuracy", "Точность"],
+    historyHeadSpeed: ["speed", "Скорость"]
   };
-  Object.entries(map).forEach(([id, field])=>{
+  Object.entries(map).forEach(([id, cfg])=>{
+    const [field, label] = cfg;
     const el = qs(id);
     if(!el) return;
     const active = historySortState.field === field;
+    const mark = active ? (historySortState.dir === "desc" ? "↓" : "↑") : "";
+    el.innerHTML = `${label}<span class="sortMark">${mark}</span>`;
     el.classList.toggle("active", active);
-    el.setAttribute("data-sort-indicator", active ? (historySortState.dir === "desc" ? "↓" : "↑") : "");
   });
 }
 
