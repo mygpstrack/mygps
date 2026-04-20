@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MyGps PDF Test</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+  <style>
+    :root{
+      --bg:#0f172a;
+      --card:#111827;
+      --muted:#94a3b8;
+      --text:#e5eefc;
+      --blue:#3b82f6;
+      --green:#22c55e;
+      --line:rgba(255,255,255,.08);
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:Inter,Arial,sans-serif;
+      background:linear-gradient(180deg,#0b1220,#111827);
+      color:var(--text);
+      min-height:100vh;
+      display:grid;
+      place-items:center;
+      padding:24px;
+    }
+    .card{
+      width:min(720px,100%);
+      background:rgba(17,24,39,.95);
+      border:1px solid var(--line);
+      border-radius:24px;
+      padding:24px;
+      box-shadow:0 20px 60px rgba(0,0,0,.35);
+    }
+    h1{margin:0 0 8px 0;font-size:24px}
+    p{margin:0;color:var(--muted);line-height:1.5}
+    .logo{
+      margin-bottom:18px;
+      display:flex;
+      align-items:center;
+      gap:14px;
+    }
+    .actions{
+      margin-top:20px;
+      display:flex;
+      gap:12px;
+      flex-wrap:wrap;
+    }
+    button{
+      border:none;
+      border-radius:14px;
+      padding:12px 18px;
+      font-weight:700;
+      cursor:pointer;
+    }
+    .primary{
+      background:linear-gradient(135deg,var(--green),var(--blue));
+      color:white;
+    }
+    .secondary{
+      background:#1f2937;
+      color:white;
+      border:1px solid var(--line);
+    }
+    .list{
+      margin-top:18px;
+      padding-left:18px;
+      color:var(--text);
+    }
+    code{
+      background:#0b1220;
+      border:1px solid var(--line);
+      border-radius:10px;
+      padding:2px 6px;
+      color:#bfdbfe;
+    }
+    .status{
+      margin-top:16px;
+      min-height:24px;
+      color:#bfdbfe;
+      font-weight:600;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">
+      <svg width="180" height="44" viewBox="0 0 220 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="mygpsGradPage" x1="6" y1="4" x2="214" y2="52" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#22C55E"/>
+            <stop offset="1" stop-color="#3B82F6"/>
+          </linearGradient>
+        </defs>
+        <g transform="translate(2,2)">
+          <path d="M24 2C14.06 2 6 10.06 6 20c0 12.32 18 28 18 28s18-15.68 18-28C42 10.06 33.94 2 24 2Z" fill="url(#mygpsGradPage)"/>
+          <circle cx="24" cy="20" r="6.3" fill="white"/>
+          <path d="M5 46.5C11.5 41.2 18.5 40.2 26 43.8C32.5 46.9 38.1 46.4 44.5 42.8" stroke="url(#mygpsGradPage)" stroke-width="4" stroke-linecap="round"/>
+          <circle cx="3.8" cy="46.8" r="3.4" fill="url(#mygpsGradPage)"/>
+        </g>
+        <text x="62" y="37" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="34" font-weight="800" fill="url(#mygpsGradPage)">MyGps</text>
+      </svg>
+    </div>
+
+    <h1>PDF test</h1>
+    <p>Это отдельный тестовый файл. Он не ломает админку и нужен только для проверки прямого скачивания PDF с логотипом.</p>
+
+    <ul class="list">
+      <li>без popup</li>
+      <li>без нового окна</li>
+      <li>сразу <code>doc.save(...)</code></li>
+      <li>логотип в PDF</li>
+    </ul>
+
+    <div class="actions">
+      <button class="primary" id="downloadBtn">Скачать тестовый PDF</button>
+      <button class="secondary" id="sampleBtn">Скачать другой пример</button>
+    </div>
+
+    <div class="status" id="status"></div>
+  </div>
+
+  <script>
+    const PDF_LOGO_SVG = `<svg width="220" height="56" viewBox="0 0 220 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="mygpsGrad" x1="6" y1="4" x2="214" y2="52" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#22C55E"/>
+          <stop offset="1" stop-color="#3B82F6"/>
+        </linearGradient>
+      </defs>
+      <g transform="translate(2,2)">
+        <path d="M24 2C14.06 2 6 10.06 6 20c0 12.32 18 28 18 28s18-15.68 18-28C42 10.06 33.94 2 24 2Z" fill="url(#mygpsGrad)"/>
+        <circle cx="24" cy="20" r="6.3" fill="white"/>
+        <path d="M5 46.5C11.5 41.2 18.5 40.2 26 43.8C32.5 46.9 38.1 46.4 44.5 42.8" stroke="url(#mygpsGrad)" stroke-width="4" stroke-linecap="round"/>
+        <circle cx="3.8" cy="46.8" r="3.4" fill="url(#mygpsGrad)"/>
+      </g>
+      <text x="62" y="37" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="34" font-weight="800" fill="url(#mygpsGrad)">MyGps</text>
+    </svg>`;
+
+    async function svgToPngDataUrl(svgText, width=440, height=112){
+      return await new Promise((resolve, reject)=>{
+        const svgBlob = new Blob([svgText], {type:"image/svg+xml;charset=utf-8"});
+        const url = URL.createObjectURL(svgBlob);
+        const img = new Image();
+        img.onload = () => {
+          try{
+            const canvas = document.createElement("canvas");
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext("2d");
+            ctx.clearRect(0,0,width,height);
+            ctx.drawImage(img,0,0,width,height);
+            URL.revokeObjectURL(url);
+            resolve(canvas.toDataURL("image/png"));
+          }catch(err){
+            URL.revokeObjectURL(url);
+            reject(err);
+          }
+        };
+        img.onerror = (err) => {
+          URL.revokeObjectURL(url);
+          reject(err);
+        };
+        img.src = url;
+      });
+    }
+
+    async function downloadPdf(kind="default"){
+      const status = document.getElementById("status");
+      status.textContent = "Генерирую PDF...";
+      try{
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        let y = 16;
+
+        try{
+          const logoPng = await svgToPngDataUrl(PDF_LOGO_SVG, 440, 112);
+          doc.addImage(logoPng, "PNG", 14, 8, 60, 15);
+          y = 30;
+        }catch(e){
+          doc.setFontSize(18);
+          doc.text("MyGps", 14, y);
+          y += 8;
+        }
+
+        doc.setFontSize(11);
+        doc.text("Report: test export", 14, y); y += 7;
+        doc.text(`Created: ${new Date().toLocaleString("en-GB")}`, 14, y); y += 8;
+
+        doc.setFontSize(12);
+        doc.text("Summary", 14, y); y += 7;
+        doc.setFontSize(10);
+        doc.text("Distance: 12.40 km", 14, y); y += 6;
+        doc.text("Average speed: 34.5 km/h", 14, y); y += 6;
+        doc.text("Max speed: 68.1 km/h", 14, y); y += 10;
+
+        const rows = kind === "default"
+          ? [
+              ["08:10:10","56.94965, 24.10519","12.4"],
+              ["08:10:11","56.94988, 24.10561","18.7"],
+              ["08:10:12","56.95020, 24.10602","23.1"]
+            ]
+          : [
+              ["09:14:22","52.52000, 13.40500","44.2"],
+              ["09:14:23","52.52018, 13.40524","45.0"],
+              ["09:14:24","52.52041, 13.40548","46.3"]
+            ];
+
+        doc.autoTable({
+          startY: y,
+          head: [["Time","Coordinates","Speed km/h"]],
+          body: rows,
+          styles: { fontSize: 9 },
+          headStyles: { fillColor: [37,99,235] }
+        });
+
+        doc.save(kind === "default" ? "mygps_test_report.pdf" : "mygps_test_report_alt.pdf");
+        status.textContent = "PDF скачан.";
+      }catch(err){
+        console.error(err);
+        status.textContent = "Ошибка PDF: " + (err?.message || String(err));
+      }
+    }
+
+    document.getElementById("downloadBtn").onclick = ()=>downloadPdf("default");
+    document.getElementById("sampleBtn").onclick = ()=>downloadPdf("alt");
+  </script>
+</body>
+</html>
