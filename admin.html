@@ -1496,7 +1496,8 @@ async function loadAllData(){
   });
   updateUsage();
   updateTodaySummary();
-  renderHistory();
+  updatePeriodButtonsUI();
+renderHistory();
   await updateNowFromAvailableSources();
 }
 
@@ -1613,7 +1614,37 @@ function updateCharts(points){
   });
 }
 
-async function renderHistory() {
+async 
+let activePeriodBtn = localStorage.getItem("mygps_activePeriodBtn") || "todayBtn";
+
+function updatePeriodButtonsUI(){
+  const ids = ["todayBtn","yesterdayBtn","weekBtn","range1hBtn","range24hBtn"];
+  ids.forEach(id=>{
+    const el = document.getElementById(id);
+    if(!el) return;
+    if(id === activePeriodBtn){
+      el.style.background = "linear-gradient(135deg,#60a5fa,#3b82f6)";
+      el.style.color = "#fff";
+      el.style.borderColor = "rgba(96,165,250,.45)";
+      el.style.boxShadow = "0 8px 20px rgba(59,130,246,.22)";
+      el.style.opacity = "1";
+    }else{
+      el.style.background = "#6b7280";
+      el.style.color = "#fff";
+      el.style.borderColor = "";
+      el.style.boxShadow = "";
+      el.style.opacity = ".92";
+    }
+  });
+}
+
+function setActivePeriodBtn(id){
+  activePeriodBtn = id;
+  localStorage.setItem("mygps_activePeriodBtn", id);
+  updatePeriodButtonsUI();
+}
+
+function renderHistory() {
   updateHistorySortHeaders();
   updatePeriodButtonsUI();
   const pts = filteredHistory();
@@ -2894,7 +2925,7 @@ qs("restoreBackupFile").onchange=async()=>{ const file=qs("restoreBackupFile").f
 if (qs("importDataBtn")) qs("importDataBtn").onclick = ()=>safeAction("Импорт данных", importDataFile, "Импорт завершён");
 if (qs("copyNowCoordsBtn")) qs("copyNowCoordsBtn").onclick = async()=>{ const p=getSelectedLiveData()?.lastPoint || getSelectedHistoryPoints().slice(-1)[0]; if(!p) return showToast("Нет координат","warn"); await navigator.clipboard.writeText(`${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}`); showToast("Координаты скопированы","success"); };
 if (qs("openNowMapsBtn")) qs("openNowMapsBtn").onclick = ()=>{ const p=getSelectedLiveData()?.lastPoint || getSelectedHistoryPoints().slice(-1)[0]; if(!p) return showToast("Нет координат","warn"); window.open(`https://maps.google.com/?q=${encodeURIComponent(Number(p.latitude).toFixed(5)+","+Number(p.longitude).toFixed(5))}`,"_blank"); };
-if (qs("exportTodayBtn")) qs("exportTodayBtn").onclick = ()=>{ setActiveExportBtn("exportTodayBtn"); const now=new Date(), start=new Date(); start.setHours(0,0,0,0); setDateTimeRange(start, now); renderHistory(); persistUiState(); };
+if (qs("exportTodayBtn")) qs("exportTodayBtn").onclick = ()=>{ const now=new Date(), start=new Date(); start.setHours(0,0,0,0); setDateTimeRange(start, now); renderHistory(); persistUiState(); };
 if (qs("exportYesterdayBtn")) qs("exportYesterdayBtn").onclick = ()=>{ const start=new Date(); start.setDate(start.getDate()-1); start.setHours(0,0,0,0); const end=new Date(start); end.setHours(23,59,59,999); setDateTimeRange(start,end); renderHistory(); persistUiState(); };
 if (qs("exportWeekBtn")) qs("exportWeekBtn").onclick = ()=>{ const now=new Date(), start=new Date(); start.setDate(start.getDate()-7); setDateTimeRange(start,now); renderHistory(); persistUiState(); };
 if (qs("lastRouteBtn")) qs("lastRouteBtn").onclick = ()=>{ const pts=getSelectedHistoryPoints(); if(!pts.length) return showToast("Нет истории","warn"); const last=pts[pts.length-1]; let i=pts.length-1; while(i>0 && (Number(pts[i].speed||0)>2 || Number(pts[i-1].speed||0)>2)) i--; const start=new Date(Number(pts[Math.max(0,i)].timestamp||Date.now())-5*60*1000); const end=new Date(Number(last.timestamp||Date.now())); setDateTimeRange(start,end); renderHistory(); persistUiState(); showToast("Выбран последний маршрут","info"); };
