@@ -2328,11 +2328,14 @@ async function buildPdfBlob(){
   doc.text(`Average speed: ${s.avgSpeed.toFixed(1)} km/h`, 14, y); y += 6;
   doc.text(`Max speed: ${s.maxSpeed.toFixed(1)} km/h`, 14, y); y += 10;
 
-  const rows = pts.slice(0,250).map(p=>[
-    fmtTime(p.timestamp),
-    `${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}`,
-    p.speed != null ? Number(p.speed).toFixed(1) : "—"
-  ]);
+  const rows = [...pts]
+    .sort((a, b) => Number(a?.timestamp || 0) - Number(b?.timestamp || 0))
+    .slice(0,250)
+    .map(p=>[
+      fmtTime(p.timestamp),
+      `${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}`,
+      p.speed != null ? Number(p.speed).toFixed(1) : "—"
+    ]);
 
   doc.autoTable({
     startY: y,
