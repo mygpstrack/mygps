@@ -17,27 +17,167 @@
     h1,h2,h3,p{margin:0}
     .sub{color:var(--muted);margin-top:6px;line-height:1.6}
     .headerTime{margin-top:8px;color:var(--muted)}
-.weatherBar{margin-top:8px;display:flex;gap:10px;flex-wrap:wrap}
-.weatherChip{
-  display:inline-flex;align-items:center;gap:10px;
-  padding:8px 12px;border-radius:999px;
-  border:1px solid var(--border);
+.topBar{
+  display:grid;
+  grid-template-columns:auto 1fr auto;
+  align-items:center;
+  gap:18px;
+  width:100%;
+}
+.topLogoWrap{display:flex;align-items:center;min-height:44px}
+.topCenterWrap{
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+  gap:8px;
+  min-width:0;
+}
+.topDateTime{
+  font-size:14px;
+  color:var(--muted);
+  font-weight:600;
+  letter-spacing:.01em;
+}
+.topUserWrap{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  justify-self:end;
+  white-space:nowrap;
+}
+.userPill{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:10px 14px;
+  border-radius:999px;
   background:rgba(255,255,255,.04);
-  transition:transform .25s ease, box-shadow .25s ease, background .25s ease, opacity .25s ease;
+  border:1px solid rgba(255,255,255,.08);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.04);
+}
+.userDot{
+  width:8px;height:8px;border-radius:50%;
+  background:#22c55e;
+  box-shadow:0 0 0 4px rgba(34,197,94,.12);
+  flex:0 0 auto;
+}
+.userEmailText{
+  color:#e5eefc;
+  font-size:13px;
+  font-weight:700;
+  max-width:260px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.logoutBtnTop{
+  border:none;
+  padding:10px 14px;
+  border-radius:12px;
+  color:#fff;
+  background:linear-gradient(135deg,#334155,#1f2937);
+  box-shadow:0 8px 20px rgba(0,0,0,.18);
+  font-weight:700;
+  cursor:pointer;
+}
+.logoutBtnTop:hover{filter:brightness(1.06)}
+@media (max-width:900px){
+  .topBar{grid-template-columns:1fr;align-items:flex-start}
+  .topUserWrap{justify-self:start}
+}
+
+.weatherBar{
+  margin-top:10px;
+  display:grid;
+  grid-template-columns:repeat(2,minmax(260px,1fr));
+  gap:12px;
+}
+.weatherChip{
+  position:relative;
+  display:flex;
+  align-items:center;
+  gap:14px;
+  min-height:68px;
+  padding:12px 16px;
+  border-radius:20px;
+  border:1px solid rgba(255,255,255,.08);
+  background:
+    radial-gradient(circle at top left, rgba(255,255,255,.09), transparent 42%),
+    linear-gradient(135deg, rgba(34,197,94,.12), rgba(59,130,246,.12)),
+    rgba(255,255,255,.035);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.05),
+    0 10px 28px rgba(0,0,0,.18);
+  overflow:hidden;
+  transition:transform .28s ease, box-shadow .28s ease, background .28s ease, opacity .28s ease, border-color .28s ease;
+}
+.weatherChip::after{
+  content:"";
+  position:absolute;
+  inset:auto -30px -30px auto;
+  width:110px;
+  height:110px;
+  background:radial-gradient(circle, rgba(255,255,255,.09), transparent 65%);
+  pointer-events:none;
 }
 .weatherChip.flash{
-  background:rgba(37,99,235,.16);
-  box-shadow:0 0 0 1px rgba(59,130,246,.25), 0 8px 24px rgba(37,99,235,.14);
-  transform:translateY(-1px);
+  transform:translateY(-2px) scale(1.01);
+  border-color:rgba(59,130,246,.25);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.08),
+    0 14px 34px rgba(37,99,235,.18),
+    0 0 0 1px rgba(59,130,246,.08);
 }
 .weatherIcon{
-  font-size:20px;line-height:1;display:inline-block;
-  transition:transform .35s ease, opacity .25s ease;
+  flex:0 0 auto;
+  width:42px;
+  height:42px;
+  display:grid;
+  place-items:center;
+  font-size:28px;
+  line-height:1;
+  border-radius:14px;
+  background:rgba(255,255,255,.08);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.08);
+  transition:transform .38s ease, opacity .25s ease, filter .25s ease;
 }
-.weatherChip.flash .weatherIcon{transform:scale(1.12);opacity:.96}
-.weatherText{display:flex;gap:6px;align-items:baseline;flex-wrap:wrap}
-.weatherCity{color:var(--text);font-weight:700}
-.weatherMeta{color:var(--muted);font-size:13px}
+.weatherChip.flash .weatherIcon{
+  transform:scale(1.1) rotate(-4deg);
+  opacity:.98;
+  filter:drop-shadow(0 4px 10px rgba(0,0,0,.18));
+}
+
+.weatherSvg{
+  width:30px;
+  height:30px;
+  display:grid;
+  place-items:center;
+}
+.weatherSvg svg{
+  width:30px;
+  height:30px;
+  display:block;
+}
+.weatherText{
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+}
+.weatherCity{
+  color:#fff;
+  font-weight:800;
+  font-size:14px;
+  letter-spacing:.01em;
+}
+.weatherMeta{
+  color:#dbe7ff;
+  font-size:14px;
+  font-weight:600;
+  letter-spacing:.01em;
+}
+@media (max-width:900px){
+  .weatherBar{grid-template-columns:1fr}
+}
 
     .grid2,.grid3,.grid4,.grid5,.grid6{display:grid;gap:12px;margin-top:12px}
     .grid2{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -106,12 +246,38 @@
 <body>
 <div class="wrap">
   <div class="card">
-    <h1>MyGps</h1>
-    <div id="pageDateTime" class="headerTime">—</div>
-    <div class="weatherBar">
-      <div id="headerWeatherStatic" class="weatherChip"><span class="weatherIcon">☁</span><span class="weatherText"><span class="weatherCity">Riga</span><span class="weatherMeta">—</span></span></div>
-      <div id="headerWeatherDynamic" class="weatherChip"><span class="weatherIcon">☁</span><span class="weatherText"><span class="weatherCity">По точке</span><span class="weatherMeta">—</span></span></div>
+  <div class="topBar">
+    <div class="topLogoWrap"><svg width="180" height="44" viewBox="0 0 220 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="mygpsGrad" x1="6" y1="4" x2="214" y2="52" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#22C55E"/>
+      <stop offset="1" stop-color="#3B82F6"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(2,2)">
+    <path d="M24 2C14.06 2 6 10.06 6 20c0 12.32 18 28 18 28s18-15.68 18-28C42 10.06 33.94 2 24 2Z" fill="url(#mygpsGrad)"/>
+    <circle cx="24" cy="20" r="6.3" fill="white"/>
+    <path d="M5 46.5C11.5 41.2 18.5 40.2 26 43.8C32.5 46.9 38.1 46.4 44.5 42.8" stroke="url(#mygpsGrad)" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="3.8" cy="46.8" r="3.4" fill="url(#mygpsGrad)"/>
+  </g>
+  <text x="62" y="37" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="34" font-weight="800" fill="url(#mygpsGrad)">MyGps</text>
+</svg></div>
+    <div class="topCenterWrap">
+      <div id="pageDateTime" class="topDateTime">—</div>
+      <div class="weatherBar">
+        <div id="headerWeatherStatic" class="weatherChip"><span class="weatherIcon">☁</span><span class="weatherText"><span class="weatherCity">Riga</span><span class="weatherMeta">Загрузка погоды…</span></span></div>
+        <div id="headerWeatherDynamic" class="weatherChip"><span class="weatherIcon">☁</span><span class="weatherText"><span class="weatherCity">По точке</span><span class="weatherMeta">Ожидание координат…</span></span></div>
+      </div>
     </div>
+    <div class="topUserWrap">
+      <div class="userPill">
+        <span class="userDot"></span>
+        <span id="topUserEmail" class="userEmailText">—</span>
+      </div>
+      <button id="logoutBtnTop" class="logoutBtnTop">Выйти</button>
+    </div>
+  </div>
+</div>
     
   </div>
 
@@ -132,7 +298,7 @@
 
   <div id="adminPanel" class="hidden">
     <div class="card">
-      <div class="row">
+      <div class="row" style="display:none">
         <div class="pill"><span class="dot ok"></span><span id="userInfo">Вы вошли</span></div>
         <button id="logoutBtn" class="secondary">Выйти</button>
       </div>
@@ -624,15 +790,146 @@ function distKmSimple(a,b){
 
 
 function weatherIcon(code){
-  if(code===0) return "☀";
-  if([1,2].includes(code)) return "⛅";
-  if(code===3) return "☁";
-  if(code>=45 && code<=48) return "🌫";
-  if(code>=51 && code<=67) return "🌧";
-  if(code>=71 && code<=77) return "❄";
-  if(code>=80 && code<=82) return "🌧";
-  if(code>=95) return "⛈";
-  return "☁";
+  const wrap = (svg) => `<span class="weatherSvg">${svg}</span>`;
+
+  const sun = wrap(`
+    <svg viewBox="0 0 48 48" width="30" height="30" aria-hidden="true">
+      <defs>
+        <linearGradient id="sunGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#fde68a"/>
+          <stop offset="100%" stop-color="#f59e0b"/>
+        </linearGradient>
+      </defs>
+      <g fill="none" stroke="#fbbf24" stroke-width="3" stroke-linecap="round">
+        <path d="M24 4v7"/><path d="M24 37v7"/><path d="M4 24h7"/><path d="M37 24h7"/>
+        <path d="M10 10l5 5"/><path d="M33 33l5 5"/><path d="M38 10l-5 5"/><path d="M15 33l-5 5"/>
+      </g>
+      <circle cx="24" cy="24" r="10" fill="url(#sunGrad)"/>
+    </svg>`);
+
+  const cloudSun = wrap(`
+    <svg viewBox="0 0 48 48" width="30" height="30" aria-hidden="true">
+      <defs>
+        <linearGradient id="csSun" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#fde68a"/>
+          <stop offset="100%" stop-color="#f59e0b"/>
+        </linearGradient>
+        <linearGradient id="csCloud" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#dbeafe"/>
+          <stop offset="100%" stop-color="#60a5fa"/>
+        </linearGradient>
+      </defs>
+      <circle cx="17" cy="17" r="8" fill="url(#csSun)"/>
+      <g fill="url(#csCloud)">
+        <circle cx="19" cy="29" r="7"/>
+        <circle cx="28" cy="25" r="9"/>
+        <circle cx="36" cy="29" r="7"/>
+        <rect x="15" y="29" width="26" height="8" rx="4"/>
+      </g>
+    </svg>`);
+
+  const cloud = wrap(`
+    <svg viewBox="0 0 48 48" width="30" height="30" aria-hidden="true">
+      <defs>
+        <linearGradient id="cloudGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#e2e8f0"/>
+          <stop offset="100%" stop-color="#94a3b8"/>
+        </linearGradient>
+      </defs>
+      <g fill="url(#cloudGrad)">
+        <circle cx="18" cy="27" r="8"/>
+        <circle cx="28" cy="22" r="10"/>
+        <circle cx="37" cy="27" r="8"/>
+        <rect x="14" y="27" width="29" height="9" rx="4.5"/>
+      </g>
+    </svg>`);
+
+  const rain = wrap(`
+    <svg viewBox="0 0 48 48" width="30" height="30" aria-hidden="true">
+      <defs>
+        <linearGradient id="rainCloud" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#cbd5e1"/>
+          <stop offset="100%" stop-color="#64748b"/>
+        </linearGradient>
+      </defs>
+      <g fill="url(#rainCloud)">
+        <circle cx="18" cy="22" r="8"/>
+        <circle cx="28" cy="18" r="10"/>
+        <circle cx="37" cy="22" r="8"/>
+        <rect x="14" y="22" width="29" height="9" rx="4.5"/>
+      </g>
+      <g fill="#38bdf8">
+        <path d="M17 35c0 2 2 4 2 4s2-2 2-4a2 2 0 1 0-4 0z"/>
+        <path d="M25 37c0 2 2 4 2 4s2-2 2-4a2 2 0 1 0-4 0z"/>
+        <path d="M33 35c0 2 2 4 2 4s2-2 2-4a2 2 0 1 0-4 0z"/>
+      </g>
+    </svg>`);
+
+  const snow = wrap(`
+    <svg viewBox="0 0 48 48" width="30" height="30" aria-hidden="true">
+      <defs>
+        <linearGradient id="snowCloud" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#e2e8f0"/>
+          <stop offset="100%" stop-color="#94a3b8"/>
+        </linearGradient>
+      </defs>
+      <g fill="url(#snowCloud)">
+        <circle cx="18" cy="22" r="8"/>
+        <circle cx="28" cy="18" r="10"/>
+        <circle cx="37" cy="22" r="8"/>
+        <rect x="14" y="22" width="29" height="9" rx="4.5"/>
+      </g>
+      <g stroke="#60a5fa" stroke-width="2" stroke-linecap="round">
+        <path d="M18 36h6"/><path d="M21 33v6"/><path d="M19 34l4 4"/><path d="M23 34l-4 4"/>
+        <path d="M30 36h6"/><path d="M33 33v6"/><path d="M31 34l4 4"/><path d="M35 34l-4 4"/>
+      </g>
+    </svg>`);
+
+  const storm = wrap(`
+    <svg viewBox="0 0 48 48" width="30" height="30" aria-hidden="true">
+      <defs>
+        <linearGradient id="stormCloud" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#94a3b8"/>
+          <stop offset="100%" stop-color="#475569"/>
+        </linearGradient>
+      </defs>
+      <g fill="url(#stormCloud)">
+        <circle cx="18" cy="22" r="8"/>
+        <circle cx="28" cy="18" r="10"/>
+        <circle cx="37" cy="22" r="8"/>
+        <rect x="14" y="22" width="29" height="9" rx="4.5"/>
+      </g>
+      <path d="M25 31l-5 9h5l-2 6 9-11h-5l3-4z" fill="#facc15"/>
+    </svg>`);
+
+  const fog = wrap(`
+    <svg viewBox="0 0 48 48" width="30" height="30" aria-hidden="true">
+      <defs>
+        <linearGradient id="fogCloud" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#e2e8f0"/>
+          <stop offset="100%" stop-color="#94a3b8"/>
+        </linearGradient>
+      </defs>
+      <g fill="url(#fogCloud)">
+        <circle cx="18" cy="22" r="8"/>
+        <circle cx="28" cy="18" r="10"/>
+        <circle cx="37" cy="22" r="8"/>
+        <rect x="14" y="22" width="29" height="9" rx="4.5"/>
+      </g>
+      <g stroke="#cbd5e1" stroke-width="3" stroke-linecap="round" opacity=".95">
+        <path d="M10 36h28"/><path d="M14 41h22"/>
+      </g>
+    </svg>`);
+
+  if(code === 0) return sun;
+  if([1,2].includes(code)) return cloudSun;
+  if(code === 3) return cloud;
+  if(code >= 45 && code <= 48) return fog;
+  if(code >= 51 && code <= 67) return rain;
+  if(code >= 71 && code <= 77) return snow;
+  if(code >= 80 && code <= 82) return rain;
+  if(code >= 95) return storm;
+  return cloud;
 }
 
 function setWeatherChip(id, city, icon, meta){
@@ -641,7 +938,7 @@ function setWeatherChip(id, city, icon, meta){
   const iconEl = el.querySelector(".weatherIcon");
   const cityEl = el.querySelector(".weatherCity");
   const metaEl = el.querySelector(".weatherMeta");
-  if(iconEl) iconEl.textContent = icon || "☁";
+  if(iconEl) iconEl.innerHTML = icon || weatherIcon(3);
   if(cityEl) cityEl.textContent = city || "—";
   if(metaEl) metaEl.textContent = meta || "—";
   el.classList.remove("flash");
@@ -2043,11 +2340,11 @@ async function svgToPngDataUrl(svgText, width=440, height=112){
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext("2d");
-        ctx.clearRect(0, 0, width, height);
+        ctx.clearRect(0,0,width,height);
         ctx.drawImage(img, 0, 0, width, height);
         URL.revokeObjectURL(url);
         resolve(canvas.toDataURL("image/png"));
-      } catch (e) {
+      } catch(e) {
         URL.revokeObjectURL(url);
         reject(e);
       }
@@ -2061,7 +2358,10 @@ async function svgToPngDataUrl(svgText, width=440, height=112){
 }
 
 async function buildPdfBlob(){
-  const pts = filteredHistory(), s = computeSummary(pts), {jsPDF} = window.jspdf, doc = new jsPDF();
+  const pts = filteredHistory();
+  const s = computeSummary(pts);
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
   let y = 16;
 
   try{
@@ -2085,7 +2385,7 @@ async function buildPdfBlob(){
   doc.text(`Average speed: ${s.avgSpeed.toFixed(1)} km/h`, 14, y); y += 6;
   doc.text(`Max speed: ${s.maxSpeed.toFixed(1)} km/h`, 14, y); y += 10;
 
-  const rows = pts.slice(0, 250).map(p => [
+  const rows = pts.slice(0,250).map(p=>[
     fmtTime(p.timestamp),
     `${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}`,
     p.speed != null ? Number(p.speed).toFixed(1) : "—",
@@ -2096,12 +2396,232 @@ async function buildPdfBlob(){
     startY: y,
     head: [["Time","Coordinates","Speed km/h","Accuracy m"]],
     body: rows,
-    styles: {fontSize: 9},
-    headStyles: {fillColor:[37,99,235]}
+    styles: { fontSize: 9 },
+    headStyles: { fillColor: [37,99,235] }
   });
 
   return doc.output("blob");
 }
+
+const PDF_LOGO_SVG = `<svg width="180" height="44" viewBox="0 0 220 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="mygpsGrad" x1="6" y1="4" x2="214" y2="52" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#22C55E"/>
+      <stop offset="1" stop-color="#3B82F6"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(2,2)">
+    <path d="M24 2C14.06 2 6 10.06 6 20c0 12.32 18 28 18 28s18-15.68 18-28C42 10.06 33.94 2 24 2Z" fill="url(#mygpsGrad)"/>
+    <circle cx="24" cy="20" r="6.3" fill="white"/>
+    <path d="M5 46.5C11.5 41.2 18.5 40.2 26 43.8C32.5 46.9 38.1 46.4 44.5 42.8" stroke="url(#mygpsGrad)" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="3.8" cy="46.8" r="3.4" fill="url(#mygpsGrad)"/>
+  </g>
+  <text x="62" y="37" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="34" font-weight="800" fill="url(#mygpsGrad)">MyGps</text>
+</svg>`;
+
+function svgToDataUri(svg){
+  return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+}
+
+function pointLabelsText(p){
+  const vals = [p.label, p.labels, p.tags].filter(Boolean);
+  if(!vals.length) return "—";
+  return vals.map(v => Array.isArray(v) ? v.join(", ") : String(v)).join(" | ");
+}
+
+function getPdfOptions(){
+  return {
+    summary: !!qs("pdfBlockSummary")?.checked,
+    map: !!qs("pdfBlockMap")?.checked,
+    speed: !!qs("pdfBlockSpeed")?.checked,
+    accuracy: !!qs("pdfBlockAccuracy")?.checked,
+    labels: !!qs("pdfBlockLabels")?.checked,
+    table: !!qs("pdfBlockTable")?.checked
+  };
+}
+
+
+async function exportPdfReport(){
+  const pts = getExportPoints();
+  if(!pts.length) return showToast("Нет данных для PDF","warn");
+
+  const options = getPdfOptions();
+  const lang = qs("pdfLangSelect")?.value || "ru";
+  const T = lang === "en" ? {
+    title: "GPS Report",
+    reportFor: "Report for",
+    created: "Created",
+    summary: "Summary",
+    points: "Points",
+    distance: "Distance",
+    avgSpeed: "Average speed",
+    maxSpeed: "Max speed",
+    map: "Route map",
+    speedAccuracyLabels: "Data summary",
+    speed: "Speed",
+    accuracy: "Accuracy",
+    labels: "Labels",
+    min: "min",
+    max: "max",
+    table: "Points table",
+    time: "Time",
+    coords: "Coordinates",
+    speedCol: "Speed",
+    accuracyCol: "Accuracy",
+    labelsCol: "Labels",
+    print: "Print / Save PDF",
+    exported: "PDF report opened"
+  } : {
+    title: "Отчёт GPS",
+    reportFor: "Отчёт для",
+    created: "Создан",
+    summary: "Общая информация",
+    points: "Точек",
+    distance: "Пробег",
+    avgSpeed: "Средняя скорость",
+    maxSpeed: "Макс. скорость",
+    map: "Карта маршрута",
+    speedAccuracyLabels: "Сводка по данным",
+    speed: "Скорость",
+    accuracy: "Точность",
+    labels: "Метки",
+    min: "мин",
+    max: "макс",
+    table: "Таблица точек",
+    time: "Время",
+    coords: "Координаты",
+    speedCol: "Скорость",
+    accuracyCol: "Точность",
+    labelsCol: "Метки",
+    print: "Печать / Сохранить PDF",
+    exported: "PDF отчёт открыт"
+  };
+
+  const reportFor = userLabel(selectedUid) || "—";
+  const createdAt = new Date().toLocaleString(lang === "en" ? "en-GB" : "ru-RU");
+  const s = computeSummary(pts);
+  const labels = Array.from(new Set(pts.map(pointLabelsText).filter(v=>v && v !== "—")));
+  const speeds = pts.map(p=>Number(p.speed||0)).filter(v=>Number.isFinite(v));
+  const accs = pts.map(p=>Number(p.accuracy||0)).filter(v=>Number.isFinite(v) && v > 0);
+  const minSp = speeds.length ? Math.min(...speeds) : 0;
+  const maxSp = speeds.length ? Math.max(...speeds) : 0;
+  const minA = accs.length ? Math.min(...accs) : 0;
+  const maxA = accs.length ? Math.max(...accs) : 0;
+
+  let mapHtml = "";
+  if(options.map){
+    try{
+      const mapData = await exportMapPng();
+      if(mapData){
+        mapHtml = `<section class="block"><h2>${T.map}</h2><img class="map" src="${mapData}" alt="map"></section>`;
+      }
+    }catch(e){}
+  }
+
+  const summaryHtml = options.summary ? `
+    <section class="block">
+      <h2>${T.summary}</h2>
+      <div class="grid">
+        <div class="item"><b>${T.points}:</b> ${pts.length}</div>
+        <div class="item"><b>${T.distance}:</b> ${s.km.toFixed(2)} km</div>
+        <div class="item"><b>${T.avgSpeed}:</b> ${s.avgSpeed.toFixed(1)} km/h</div>
+        <div class="item"><b>${T.maxSpeed}:</b> ${s.maxSpeed.toFixed(1)} km/h</div>
+      </div>
+    </section>` : "";
+
+  let dataHtml = "";
+  if(options.speed || options.accuracy || options.labels){
+    const rows = [];
+    if(options.speed) rows.push(`<div class="item"><b>${T.speed}:</b> ${T.min} ${minSp.toFixed(1)} / ${T.max} ${maxSp.toFixed(1)} km/h</div>`);
+    if(options.accuracy) rows.push(`<div class="item"><b>${T.accuracy}:</b> ${T.min} ${minA.toFixed(0)} / ${T.max} ${maxA.toFixed(0)} m</div>`);
+    if(options.labels) rows.push(`<div class="item"><b>${T.labels}:</b> ${labels.length ? labels.join(", ") : "—"}</div>`);
+    dataHtml = `<section class="block"><h2>${T.speedAccuracyLabels}</h2><div class="grid">${rows.join("")}</div></section>`;
+  }
+
+  let tableHtml = "";
+  if(options.table){
+    const rows = pts.slice(0, 250).map(p => `
+      <tr>
+        <td>${fmtTime(p.timestamp)}</td>
+        <td>${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}</td>
+        <td>${p.speed != null ? Number(p.speed).toFixed(1) : "—"}</td>
+        <td>${p.accuracy != null ? Number(p.accuracy).toFixed(0) : "—"}</td>
+        <td>${pointLabelsText(p)}</td>
+      </tr>`).join("");
+    tableHtml = `
+      <section class="block">
+        <h2>${T.table}</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>${T.time}</th>
+              <th>${T.coords}</th>
+              <th>${T.speedCol}</th>
+              <th>${T.accuracyCol}</th>
+              <th>${T.labelsCol}</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </section>`;
+  }
+
+  const logoHtml = typeof PDF_LOGO_SVG !== "undefined" ? PDF_LOGO_SVG : "";
+
+  const reportWin = window.open("", "_blank", "noopener,noreferrer,width=1100,height=900");
+  if(!reportWin) return showToast("Разреши открытие окна для PDF","warn");
+
+  reportWin.document.write(`<!doctype html>
+<html lang="${lang}">
+<head>
+<meta charset="utf-8">
+<title>${T.title}</title>
+<style>
+  body{font-family:Arial,Helvetica,sans-serif;margin:0;background:#f5f7fb;color:#0f172a}
+  .wrap{max-width:980px;margin:0 auto;padding:24px}
+  .head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 22px;background:#fff;border-radius:18px;box-shadow:0 8px 24px rgba(15,23,42,.08)}
+  .logo svg{height:42px;width:auto;display:block}
+  .meta{font-size:14px;color:#475569;text-align:right}
+  .block{margin-top:18px;padding:18px 22px;background:#fff;border-radius:18px;box-shadow:0 8px 24px rgba(15,23,42,.06);break-inside:avoid}
+  h1{margin:0;font-size:24px}
+  h2{margin:0 0 12px 0;font-size:18px}
+  .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .item{padding:10px 12px;background:#f8fafc;border-radius:12px}
+  .map{width:100%;border-radius:14px;border:1px solid #e2e8f0}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th,td{padding:8px 10px;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:top}
+  thead th{background:#eff6ff;color:#1d4ed8}
+  .actions{position:sticky;top:0;display:flex;justify-content:flex-end;padding:12px 0 0 0}
+  .printBtn{border:none;background:#2563eb;color:#fff;border-radius:12px;padding:10px 16px;font-weight:700;cursor:pointer}
+  @media print{
+    body{background:#fff}
+    .wrap{max-width:none;padding:0}
+    .actions{display:none}
+    .block,.head{box-shadow:none;border:1px solid #e5e7eb}
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="actions"><button class="printBtn" onclick="window.print()">${T.print}</button></div>
+    <div class="head">
+      <div class="logo">${logoHtml}</div>
+      <div class="meta">
+        <div><b>${T.reportFor}:</b> ${reportFor}</div>
+        <div><b>${T.created}:</b> ${createdAt}</div>
+      </div>
+    </div>
+    ${summaryHtml}
+    ${mapHtml}
+    ${dataHtml}
+    ${tableHtml}
+  </div>
+</body>
+</html>`);
+  reportWin.document.close();
+  showToast(T.exported, "success");
+}
+
 async function exportMapPngBlob(){
   const mapEl = qs("historyMap");
   if(!mapEl) throw new Error("historyMap not found");
@@ -2308,6 +2828,7 @@ qs("googleBtn").onclick = async()=>{ try{ await signInWithPopup(auth,provider); 
 if (qs("emailLoginBtn")) qs("emailLoginBtn").onclick = async()=>{ try{ await signInWithEmailAndPassword(auth,qs("emailInput").value.trim(),qs("passwordInput").value); }catch(e){ qs("errorBox").textContent="Ошибка входа: "+errText(e); qs("errorBox").classList.remove("hidden"); }};
 if (qs("emailRegisterBtn")) qs("emailRegisterBtn").onclick = async()=>{ try{ await createUserWithEmailAndPassword(auth,qs("emailInput").value.trim(),qs("passwordInput").value); }catch(e){ qs("errorBox").textContent="Ошибка регистрации: "+errText(e); qs("errorBox").classList.remove("hidden"); }};
 if (qs("logoutBtn")) qs("logoutBtn").onclick = async()=>{ await signOut(auth); };
+if (qs("logoutTopBtn")) qs("logoutTopBtn").onclick = async()=>{ await signOut(auth); };
 
 if (qs("todayBtn")) qs("todayBtn").onclick = ()=>{ const now=new Date(), start=new Date(); start.setHours(0,0,0,0); setDateTimeRange(start,now); renderHistory(); };
 if (qs("yesterdayBtn")) qs("yesterdayBtn").onclick = ()=>{ const start=new Date(); start.setDate(start.getDate()-1); start.setHours(0,0,0,0); const end=new Date(start); end.setHours(23,59,0,0); setDateTimeRange(start,end); renderHistory(); };
@@ -2361,8 +2882,8 @@ qs("exportPdfBtn").onclick=async()=>{
     const pts = filteredHistory();
     if(!pts.length) return showToast("Нет данных для PDF","warn");
     const blob = await buildPdfBlob();
-    downloadBlob(blob, `report_${toLocalDateInputValue(new Date())}.pdf`);
-    showToast("PDF exported","success");
+    downloadBlob(blob, `${exportBaseName()}.pdf`);
+    showToast("PDF экспортирован","success");
   }catch(err){
     recordError("exportPdf", err);
     showToast("Ошибка PDF: " + errText(err), "error", 3600);
@@ -2455,7 +2976,7 @@ function exportBaseName(suffix=""){
 if (qs("exportJsonBtn")) qs("exportJsonBtn").onclick = ()=>downloadText(`${exportBaseName()}.json`, JSON.stringify(getExportPoints(),null,2), "application/json");
 if (qs("exportCsvBtn")) qs("exportCsvBtn").onclick = ()=>{ const pts=getExportPoints(), lines=["timestamp,latitude,longitude,accuracy,speed"]; pts.forEach(p=>lines.push([p.timestamp??"",p.latitude??"",p.longitude??"",p.accuracy??"",p.speed??""].join(","))); downloadText(`${exportBaseName()}.csv`, lines.join("\n"), "text/csv"); showToast("CSV экспортирован","success"); };
 if (qs("exportGpxBtn")) qs("exportGpxBtn").onclick = ()=>{ const pts=getExportPoints(), lines=['<?xml version="1.0" encoding="UTF-8"?>','<gpx version="1.1" creator="MyGps Admin" xmlns="http://www.topografix.com/GPX/1/1">','<trk><name>History Export</name><trkseg>']; pts.forEach(p=>lines.push(`<trkpt lat="${p.latitude}" lon="${p.longitude}"><time>${new Date(Number(p.timestamp||0)).toISOString()}</time></trkpt>`)); lines.push('</trkseg></trk></gpx>'); downloadText(`${exportBaseName()}.gpx`, lines.join(""), "application/gpx+xml"); showToast("GPX экспортирован","success"); };
-if (qs("exportPdfBtn")) qs("exportPdfBtn").onclick = ()=>{ const pts=getExportPoints(), s=computeSummary(pts), {jsPDF}=window.jspdf, doc=new jsPDF(); doc.text("MyGps History Report",14,16); doc.text(`Distance: ${s.km.toFixed(2)} km`,14,28); doc.text(`Average speed: ${s.avgSpeed.toFixed(1)} km/h`,14,36); doc.text(`Max speed: ${s.maxSpeed.toFixed(1)} km/h`,14,44); const rows=pts.slice(0,250).map(p=>[fmtTime(p.timestamp), `${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}`, p.speed != null ? Number(p.speed).toFixed(1) : "—"]); doc.autoTable({startY:52, head:[["Time","Coordinates","Speed km/h"]], body:rows, styles:{fontSize:9}}); doc.save(`${exportBaseName()}.pdf`); showToast("PDF экспортирован","success"); };
+if (qs("exportPdfBtn")) qs("exportPdfBtn").onclick = ()=>exportPdfReport();
 if (qs("exportZipBtn")) qs("exportZipBtn").onclick = async()=>{ const pts=getExportPoints(); const zip=new JSZip(); zip.file(`${exportBaseName()}.json`, JSON.stringify(pts,null,2)); const lines=["timestamp,latitude,longitude,accuracy,speed"]; pts.forEach(p=>lines.push([p.timestamp??"",p.latitude??"",p.longitude??"",p.accuracy??"",p.speed??""].join(","))); zip.file(`${exportBaseName()}.csv`, lines.join("\n")); const blob=await zip.generateAsync({type:"blob"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=`${exportBaseName()}.zip`; a.click(); URL.revokeObjectURL(url); showToast("ZIP экспортирован","success"); };
 if (qs("exportPngBtn")) qs("exportPngBtn").onclick = async()=>{ const canvas=await html2canvas(qs("historyMap")); canvas.toBlob(blob=>{ const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=`${exportBaseName()}.png`; a.click(); URL.revokeObjectURL(url); showToast("PNG экспортирован","success"); }); };
 
@@ -2464,6 +2985,7 @@ onAuthStateChanged(auth, async user => {
   if(!user){
     qs("authCard").classList.remove("hidden");
     qs("adminPanel").classList.add("hidden");
+    if(qs("topUserBar")) qs("topUserBar").classList.add("hidden");
     return;
   }
   const adminSnap = await get(ref(db, `admins/${user.uid}`));
@@ -2471,13 +2993,16 @@ onAuthStateChanged(auth, async user => {
   if(!allowed){
     qs("authCard").classList.remove("hidden");
     qs("adminPanel").classList.add("hidden");
+    if(qs("topUserBar")) qs("topUserBar").classList.add("hidden");
     qs("authMessage").innerHTML = `Ты вошёл, но ещё не добавлен как админ.<br><br><span class="mono">admins/${user.uid} = true</span>`;
     return;
   }
 
   qs("authCard").classList.add("hidden");
   qs("adminPanel").classList.remove("hidden");
+  if(qs("topUserBar")) qs("topUserBar").classList.remove("hidden");
   qs("userInfo").textContent = user.email || "Google user";
+  if(qs("userInfoTop")) qs("userInfoTop").textContent = user.email || "Google user";
   if(qs("userUidText")) qs("userUidText").closest(".pill")?.remove();
   setDefaultPeriodToday();
   await ensureUserMeta(user);
