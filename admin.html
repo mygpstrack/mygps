@@ -1500,13 +1500,42 @@ async function loadAllData(){
   await updateNowFromAvailableSources();
 }
 
+
+var historySortState = window.historySortState || { field: "timestamp", dir: "desc" };
+window.historySortState = historySortState;
+
+function toggleHistorySort(field){
+  if(historySortState.field === field){
+    historySortState.dir = historySortState.dir === "desc" ? "asc" : "desc";
+  }else{
+    historySortState.field = field;
+    historySortState.dir = "desc";
+  }
+  renderHistory();
+}
+
+function updateHistorySortHeaders(){
+  const map = {
+    historyHeadTime: "timestamp",
+    historyHeadAccuracy: "accuracy",
+    historyHeadSpeed: "speed"
+  };
+  Object.entries(map).forEach(([id, field])=>{
+    const el = qs(id);
+    if(!el) return;
+    const active = historySortState.field === field;
+    el.classList.toggle("active", active);
+    el.setAttribute("data-sort-indicator", active ? (historySortState.dir === "desc" ? "↓" : "↑") : "");
+  });
+}
+
 function filteredHistory(){
   const base = getVisibleHistoryPoints();
   const from=parseDateTime(qs("fromDate").value, qs("fromHour").value, qs("fromMinute").value);
   const to=parseDateTime(qs("toDate").value, qs("toHour").value, qs("toMinute").value);
   const maxAcc=Number(qs("maxAccuracyFilter").value||0), minSp=Number(qs("minSpeedFilter").value||0), maxSp=Number(qs("maxSpeedFilter").value||0), hideJunk=qs("hideJunkToggle").checked;
-  const sortField = historySortState.field || "timestamp";
-  const sortDir = (historySortState.dir || "desc") === "asc" ? 1 : -1;
+  const sortField = (window.historySortState && window.historySortState.field) || "timestamp";
+  const sortDir = (((window.historySortState && window.historySortState.dir) || "desc") === "asc") ? 1 : -1;
 
   const filtered = base.filter((p,idx,arr)=>{
     const t=Number(p.timestamp||0), sp=Number(p.speed||0), acc=Number(p.accuracy||0);
