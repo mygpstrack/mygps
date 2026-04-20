@@ -324,18 +324,6 @@
           <button id="applyFiltersBtn" class="secondary">Применить</button>
           <button id="resetFiltersBtn" class="secondary">Сбросить</button>
         </div>
-        <div class="row">
-          <select id="historySortField">
-            <option value="timestamp">Время</option>
-            <option value="speed">Скорость</option>
-            <option value="accuracy">Точность</option>
-            <option value="label">Метки</option>
-          </select>
-          <select id="historySortDir">
-            <option value="desc">По убыванию</option>
-            <option value="asc">По возрастанию</option>
-          </select>
-        </div>
         <div class="toolbar">
           <button id="fitRouteBtn" class="secondary">Центрировать маршрут</button>
           <button id="lastRouteBtn" class="secondary">Последний маршрут</button>
@@ -394,7 +382,7 @@
         <h2>История точек</h2>
         <div style="overflow:auto">
           <table>
-            <thead><tr><th>Время</th><th>Координаты</th><th>Точность</th><th>Скорость</th><th>Метки</th><th>Действие</th></tr></thead>
+            <thead><tr><th id="historyHeadTime" class="sortableHead" onclick="toggleHistorySort('timestamp')">Время</th><th>Координаты</th><th id="historyHeadAccuracy" class="sortableHead" onclick="toggleHistorySort('accuracy')">Точность</th><th id="historyHeadSpeed" class="sortableHead" onclick="toggleHistorySort('speed')">Скорость</th><th>Метки</th><th>Действие</th></tr></thead>
             <tbody id="historyTbody"></tbody>
           </table>
         </div>
@@ -1517,8 +1505,8 @@ function filteredHistory(){
   const from=parseDateTime(qs("fromDate").value, qs("fromHour").value, qs("fromMinute").value);
   const to=parseDateTime(qs("toDate").value, qs("toHour").value, qs("toMinute").value);
   const maxAcc=Number(qs("maxAccuracyFilter").value||0), minSp=Number(qs("minSpeedFilter").value||0), maxSp=Number(qs("maxSpeedFilter").value||0), hideJunk=qs("hideJunkToggle").checked;
-  const sortField = qs("historySortField")?.value || "timestamp";
-  const sortDir = (qs("historySortDir")?.value || "desc") === "asc" ? 1 : -1;
+  const sortField = historySortState?.field || "timestamp";
+  const sortDir = (historySortState?.dir || "asc") === "asc" ? 1 : -1;
 
   const filtered = base.filter((p,idx,arr)=>{
     const t=Number(p.timestamp||0), sp=Number(p.speed||0), acc=Number(p.accuracy||0);
@@ -1532,14 +1520,8 @@ function filteredHistory(){
   });
 
   filtered.sort((a,b)=>{
-    if(sortField === "label"){
-      const va = String(a.label || a.tags || "");
-      const vb = String(b.label || b.tags || "");
-      return va.localeCompare(vb, "ru") * sortDir;
-    }
-    const mapField = sortField === "timestamp" ? "timestamp" : sortField;
-    const va = Number(a[mapField] || 0);
-    const vb = Number(b[mapField] || 0);
+    const va = Number(a?.[sortField] || 0);
+    const vb = Number(b?.[sortField] || 0);
     return (va - vb) * sortDir;
   });
 
@@ -1603,6 +1585,7 @@ function updateCharts(points){
 
 async function renderHistory() {
   const pts = filteredHistory();
+  updateHistorySortHeaders();
   currentFiltered = pts;
 
   console.log("renderHistory points:", pts.length);
