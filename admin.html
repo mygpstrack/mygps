@@ -2317,7 +2317,6 @@ async function buildPdfBlob(){
       periodText = `Period: ${start.toLocaleString("en-GB")} - ${end.toLocaleString("en-GB")}`;
     }
   }
-  doc.setFont("helvetica", "normal");
   doc.text(periodText, 14, y); y += 8;
 
   doc.setFont("helvetica", "bold");
