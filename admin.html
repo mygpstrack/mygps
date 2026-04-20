@@ -1524,8 +1524,8 @@ function updateHistorySortHeaders(){
     const el = qs(id);
     if(!el) return;
     const active = historySortState.field === field;
-    const mark = active ? (historySortState.dir === "desc" ? "↓" : "↑") : "";
-    el.innerHTML = `${label}<span class="sortMark">${mark}</span>`;
+    const mark = active ? (historySortState.dir === "desc" ? " ↓" : " ↑") : "";
+    el.textContent = label + mark;
     el.classList.toggle("active", active);
   });
 }
