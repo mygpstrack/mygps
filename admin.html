@@ -1615,6 +1615,7 @@ function updateCharts(points){
 
 async function renderHistory() {
   updateHistorySortHeaders();
+  updatePeriodButtonsUI();
   const pts = filteredHistory();
   currentFiltered = pts;
 
@@ -2771,21 +2772,11 @@ if (qs("emailRegisterBtn")) qs("emailRegisterBtn").onclick = async()=>{ try{ awa
 if (qs("logoutBtn")) qs("logoutBtn").onclick = async()=>{ await signOut(auth); };
 if (qs("logoutTopBtn")) qs("logoutTopBtn").onclick = async()=>{ await signOut(auth); };
 
-
-function setPeriodButtonsActive(activeId, ids){
-  ids.forEach(id=>{
-    const btn = qs(id);
-    if(!btn) return;
-    btn.classList.remove("periodBtnActive","periodBtnInactive");
-    btn.classList.add(id === activeId ? "periodBtnActive" : "periodBtnInactive");
-  });
-}
-
-if (qs("todayBtn")) qs("todayBtn").onclick = ()=>{ setPeriodButtonsActive("todayBtn", ["todayBtn","yesterdayBtn","weekBtn","range1hBtn","range24hBtn"]); const now=new Date(), start=new Date(); start.setHours(0,0,0,0); setDateTimeRange(start,now); renderHistory(); };
-if (qs("yesterdayBtn")) qs("yesterdayBtn").onclick = ()=>{ setPeriodButtonsActive("yesterdayBtn", ["todayBtn","yesterdayBtn","weekBtn","range1hBtn","range24hBtn"]); const start=new Date(); start.setDate(start.getDate()-1); start.setHours(0,0,0,0); const end=new Date(start); end.setHours(23,59,0,0); setDateTimeRange(start,end); renderHistory(); };
-if (qs("weekBtn")) qs("weekBtn").onclick = ()=>{ setPeriodButtonsActive("weekBtn", ["todayBtn","yesterdayBtn","weekBtn","range1hBtn","range24hBtn"]); const now=new Date(), start=new Date(); start.setDate(start.getDate()-7); setDateTimeRange(start,now); renderHistory(); };
-if (qs("range1hBtn")) qs("range1hBtn").onclick = ()=>{ setPeriodButtonsActive("range1hBtn", ["todayBtn","yesterdayBtn","weekBtn","range1hBtn","range24hBtn"]); const now=new Date(), start=new Date(Date.now()-60*60*1000); setDateTimeRange(start,now); renderHistory(); };
-if (qs("range24hBtn")) qs("range24hBtn").onclick = ()=>{ setPeriodButtonsActive("range24hBtn", ["todayBtn","yesterdayBtn","weekBtn","range1hBtn","range24hBtn"]); const now=new Date(), start=new Date(Date.now()-24*60*60*1000); setDateTimeRange(start,now); renderHistory(); };
+if (qs("todayBtn")) qs("todayBtn").onclick = ()=>{ setActivePeriodBtn("todayBtn"); const now=new Date(), start=new Date(); start.setHours(0,0,0,0); setDateTimeRange(start,now); renderHistory(); };
+if (qs("yesterdayBtn")) qs("yesterdayBtn").onclick = ()=>{ setActivePeriodBtn("yesterdayBtn"); const start=new Date(); start.setDate(start.getDate()-1); start.setHours(0,0,0,0); const end=new Date(start); end.setHours(23,59,0,0); setDateTimeRange(start,end); renderHistory(); };
+if (qs("weekBtn")) qs("weekBtn").onclick = ()=>{ setActivePeriodBtn("weekBtn"); const now=new Date(), start=new Date(); start.setDate(start.getDate()-7); setDateTimeRange(start,now); renderHistory(); };
+if (qs("range1hBtn")) qs("range1hBtn").onclick = ()=>{ setActivePeriodBtn("range1hBtn"); const now=new Date(), start=new Date(Date.now()-60*60*1000); setDateTimeRange(start,now); renderHistory(); };
+if (qs("range24hBtn")) qs("range24hBtn").onclick = ()=>{ setActivePeriodBtn("range24hBtn"); const now=new Date(), start=new Date(Date.now()-24*60*60*1000); setDateTimeRange(start,now); renderHistory(); };
 if (qs("applyFiltersBtn")) qs("applyFiltersBtn").onclick = renderHistory;
 if (qs("resetFiltersBtn")) qs("resetFiltersBtn").onclick = ()=>{ qs("maxAccuracyFilter").value=""; qs("minSpeedFilter").value=""; qs("maxSpeedFilter").value=""; qs("hideJunkToggle").checked=false; renderHistory(); };
 if (qs("refreshHistoryBtn")) qs("refreshHistoryBtn").onclick = async()=>{ await loadAllData(); showToast("История обновлена","success"); };
@@ -2903,7 +2894,7 @@ qs("restoreBackupFile").onchange=async()=>{ const file=qs("restoreBackupFile").f
 if (qs("importDataBtn")) qs("importDataBtn").onclick = ()=>safeAction("Импорт данных", importDataFile, "Импорт завершён");
 if (qs("copyNowCoordsBtn")) qs("copyNowCoordsBtn").onclick = async()=>{ const p=getSelectedLiveData()?.lastPoint || getSelectedHistoryPoints().slice(-1)[0]; if(!p) return showToast("Нет координат","warn"); await navigator.clipboard.writeText(`${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}`); showToast("Координаты скопированы","success"); };
 if (qs("openNowMapsBtn")) qs("openNowMapsBtn").onclick = ()=>{ const p=getSelectedLiveData()?.lastPoint || getSelectedHistoryPoints().slice(-1)[0]; if(!p) return showToast("Нет координат","warn"); window.open(`https://maps.google.com/?q=${encodeURIComponent(Number(p.latitude).toFixed(5)+","+Number(p.longitude).toFixed(5))}`,"_blank"); };
-if (qs("exportTodayBtn")) qs("exportTodayBtn").onclick = ()=>{ setPeriodButtonsActive("exportTodayBtn", ["exportTodayBtn","exportYesterdayBtn","exportWeekBtn"]); const now=new Date(), start=new Date(); start.setHours(0,0,0,0); setDateTimeRange(start, now); renderHistory(); persistUiState(); };
+if (qs("exportTodayBtn")) qs("exportTodayBtn").onclick = ()=>{ setActiveExportBtn("exportTodayBtn"); const now=new Date(), start=new Date(); start.setHours(0,0,0,0); setDateTimeRange(start, now); renderHistory(); persistUiState(); };
 if (qs("exportYesterdayBtn")) qs("exportYesterdayBtn").onclick = ()=>{ const start=new Date(); start.setDate(start.getDate()-1); start.setHours(0,0,0,0); const end=new Date(start); end.setHours(23,59,59,999); setDateTimeRange(start,end); renderHistory(); persistUiState(); };
 if (qs("exportWeekBtn")) qs("exportWeekBtn").onclick = ()=>{ const now=new Date(), start=new Date(); start.setDate(start.getDate()-7); setDateTimeRange(start,now); renderHistory(); persistUiState(); };
 if (qs("lastRouteBtn")) qs("lastRouteBtn").onclick = ()=>{ const pts=getSelectedHistoryPoints(); if(!pts.length) return showToast("Нет истории","warn"); const last=pts[pts.length-1]; let i=pts.length-1; while(i>0 && (Number(pts[i].speed||0)>2 || Number(pts[i-1].speed||0)>2)) i--; const start=new Date(Number(pts[Math.max(0,i)].timestamp||Date.now())-5*60*1000); const end=new Date(Number(last.timestamp||Date.now())); setDateTimeRange(start,end); renderHistory(); persistUiState(); showToast("Выбран последний маршрут","info"); };
