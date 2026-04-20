@@ -1496,7 +1496,7 @@ async function loadAllData(){
   });
   updateUsage();
   updateTodaySummary();
-  updatePeriodButtonsUI();
+  setupPeriodButtonVisuals();
 renderHistory();
   await updateNowFromAvailableSources();
 }
@@ -1615,38 +1615,49 @@ function updateCharts(points){
 }
 
 async 
-let activePeriodBtn = localStorage.getItem("mygps_activePeriodBtn") || "todayBtn";
+let __periodVisualState = localStorage.getItem("mygps_period_visual_active") || "todayBtn";
 
-function updatePeriodButtonsUI(){
+function applyPeriodVisualState(){
   const ids = ["todayBtn","yesterdayBtn","weekBtn","range1hBtn","range24hBtn"];
   ids.forEach(id=>{
     const el = document.getElementById(id);
     if(!el) return;
-    if(id === activePeriodBtn){
+    if(id === __periodVisualState){
       el.style.background = "linear-gradient(135deg,#60a5fa,#3b82f6)";
       el.style.color = "#fff";
-      el.style.borderColor = "rgba(96,165,250,.45)";
       el.style.boxShadow = "0 8px 20px rgba(59,130,246,.22)";
+      el.style.borderColor = "rgba(96,165,250,.45)";
       el.style.opacity = "1";
     }else{
       el.style.background = "#6b7280";
       el.style.color = "#fff";
-      el.style.borderColor = "";
       el.style.boxShadow = "";
+      el.style.borderColor = "";
       el.style.opacity = ".92";
     }
   });
 }
 
-function setActivePeriodBtn(id){
-  activePeriodBtn = id;
-  localStorage.setItem("mygps_activePeriodBtn", id);
-  updatePeriodButtonsUI();
+function rememberPeriodVisualState(id){
+  __periodVisualState = id;
+  localStorage.setItem("mygps_period_visual_active", id);
+  applyPeriodVisualState();
+}
+
+function setupPeriodButtonVisuals(){
+  const ids = ["todayBtn","yesterdayBtn","weekBtn","range1hBtn","range24hBtn"];
+  ids.forEach(id=>{
+    const el = document.getElementById(id);
+    if(!el || el.dataset.periodVisualBound === "1") return;
+    el.dataset.periodVisualBound = "1";
+    el.addEventListener("click", ()=>rememberPeriodVisualState(id), true);
+  });
+  applyPeriodVisualState();
 }
 
 function renderHistory() {
   updateHistorySortHeaders();
-  updatePeriodButtonsUI();
+  applyPeriodVisualState();
   const pts = filteredHistory();
   currentFiltered = pts;
 
@@ -2803,11 +2814,11 @@ if (qs("emailRegisterBtn")) qs("emailRegisterBtn").onclick = async()=>{ try{ awa
 if (qs("logoutBtn")) qs("logoutBtn").onclick = async()=>{ await signOut(auth); };
 if (qs("logoutTopBtn")) qs("logoutTopBtn").onclick = async()=>{ await signOut(auth); };
 
-if (qs("todayBtn")) qs("todayBtn").onclick = ()=>{ setActivePeriodBtn("todayBtn"); const now=new Date(), start=new Date(); start.setHours(0,0,0,0); setDateTimeRange(start,now); renderHistory(); };
-if (qs("yesterdayBtn")) qs("yesterdayBtn").onclick = ()=>{ setActivePeriodBtn("yesterdayBtn"); const start=new Date(); start.setDate(start.getDate()-1); start.setHours(0,0,0,0); const end=new Date(start); end.setHours(23,59,0,0); setDateTimeRange(start,end); renderHistory(); };
-if (qs("weekBtn")) qs("weekBtn").onclick = ()=>{ setActivePeriodBtn("weekBtn"); const now=new Date(), start=new Date(); start.setDate(start.getDate()-7); setDateTimeRange(start,now); renderHistory(); };
-if (qs("range1hBtn")) qs("range1hBtn").onclick = ()=>{ setActivePeriodBtn("range1hBtn"); const now=new Date(), start=new Date(Date.now()-60*60*1000); setDateTimeRange(start,now); renderHistory(); };
-if (qs("range24hBtn")) qs("range24hBtn").onclick = ()=>{ setActivePeriodBtn("range24hBtn"); const now=new Date(), start=new Date(Date.now()-24*60*60*1000); setDateTimeRange(start,now); renderHistory(); };
+if (qs("todayBtn")) qs("todayBtn").onclick = ()=>{ const now=new Date(), start=new Date(); start.setHours(0,0,0,0); setDateTimeRange(start,now); renderHistory(); };
+if (qs("yesterdayBtn")) qs("yesterdayBtn").onclick = ()=>{ const start=new Date(); start.setDate(start.getDate()-1); start.setHours(0,0,0,0); const end=new Date(start); end.setHours(23,59,0,0); setDateTimeRange(start,end); renderHistory(); };
+if (qs("weekBtn")) qs("weekBtn").onclick = ()=>{ const now=new Date(), start=new Date(); start.setDate(start.getDate()-7); setDateTimeRange(start,now); renderHistory(); };
+if (qs("range1hBtn")) qs("range1hBtn").onclick = ()=>{ const now=new Date(), start=new Date(Date.now()-60*60*1000); setDateTimeRange(start,now); renderHistory(); };
+if (qs("range24hBtn")) qs("range24hBtn").onclick = ()=>{ const now=new Date(), start=new Date(Date.now()-24*60*60*1000); setDateTimeRange(start,now); renderHistory(); };
 if (qs("applyFiltersBtn")) qs("applyFiltersBtn").onclick = renderHistory;
 if (qs("resetFiltersBtn")) qs("resetFiltersBtn").onclick = ()=>{ qs("maxAccuracyFilter").value=""; qs("minSpeedFilter").value=""; qs("maxSpeedFilter").value=""; qs("hideJunkToggle").checked=false; renderHistory(); };
 if (qs("refreshHistoryBtn")) qs("refreshHistoryBtn").onclick = async()=>{ await loadAllData(); showToast("История обновлена","success"); };
