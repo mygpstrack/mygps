@@ -77,6 +77,18 @@
   opacity:.98;
   filter:drop-shadow(0 4px 10px rgba(0,0,0,.18));
 }
+
+.weatherSvg{
+  width:30px;
+  height:30px;
+  display:grid;
+  place-items:center;
+}
+.weatherSvg svg{
+  width:30px;
+  height:30px;
+  display:block;
+}
 .weatherText{
   min-width:0;
   display:flex;
@@ -698,15 +710,146 @@ function distKmSimple(a,b){
 
 
 function weatherIcon(code){
-  if(code===0) return "☀";
-  if([1,2].includes(code)) return "⛅";
-  if(code===3) return "☁";
-  if(code>=45 && code<=48) return "🌫";
-  if(code>=51 && code<=67) return "🌧";
-  if(code>=71 && code<=77) return "❄";
-  if(code>=80 && code<=82) return "🌧";
-  if(code>=95) return "⛈";
-  return "☁";
+  const wrap = (svg) => `<span class="weatherSvg">${svg}</span>`;
+
+  const sun = wrap(`
+    <svg viewBox="0 0 48 48" width="30" height="30" aria-hidden="true">
+      <defs>
+        <linearGradient id="sunGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#fde68a"/>
+          <stop offset="100%" stop-color="#f59e0b"/>
+        </linearGradient>
+      </defs>
+      <g fill="none" stroke="#fbbf24" stroke-width="3" stroke-linecap="round">
+        <path d="M24 4v7"/><path d="M24 37v7"/><path d="M4 24h7"/><path d="M37 24h7"/>
+        <path d="M10 10l5 5"/><path d="M33 33l5 5"/><path d="M38 10l-5 5"/><path d="M15 33l-5 5"/>
+      </g>
+      <circle cx="24" cy="24" r="10" fill="url(#sunGrad)"/>
+    </svg>`);
+
+  const cloudSun = wrap(`
+    <svg viewBox="0 0 48 48" width="30" height="30" aria-hidden="true">
+      <defs>
+        <linearGradient id="csSun" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#fde68a"/>
+          <stop offset="100%" stop-color="#f59e0b"/>
+        </linearGradient>
+        <linearGradient id="csCloud" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#dbeafe"/>
+          <stop offset="100%" stop-color="#60a5fa"/>
+        </linearGradient>
+      </defs>
+      <circle cx="17" cy="17" r="8" fill="url(#csSun)"/>
+      <g fill="url(#csCloud)">
+        <circle cx="19" cy="29" r="7"/>
+        <circle cx="28" cy="25" r="9"/>
+        <circle cx="36" cy="29" r="7"/>
+        <rect x="15" y="29" width="26" height="8" rx="4"/>
+      </g>
+    </svg>`);
+
+  const cloud = wrap(`
+    <svg viewBox="0 0 48 48" width="30" height="30" aria-hidden="true">
+      <defs>
+        <linearGradient id="cloudGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#e2e8f0"/>
+          <stop offset="100%" stop-color="#94a3b8"/>
+        </linearGradient>
+      </defs>
+      <g fill="url(#cloudGrad)">
+        <circle cx="18" cy="27" r="8"/>
+        <circle cx="28" cy="22" r="10"/>
+        <circle cx="37" cy="27" r="8"/>
+        <rect x="14" y="27" width="29" height="9" rx="4.5"/>
+      </g>
+    </svg>`);
+
+  const rain = wrap(`
+    <svg viewBox="0 0 48 48" width="30" height="30" aria-hidden="true">
+      <defs>
+        <linearGradient id="rainCloud" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#cbd5e1"/>
+          <stop offset="100%" stop-color="#64748b"/>
+        </linearGradient>
+      </defs>
+      <g fill="url(#rainCloud)">
+        <circle cx="18" cy="22" r="8"/>
+        <circle cx="28" cy="18" r="10"/>
+        <circle cx="37" cy="22" r="8"/>
+        <rect x="14" y="22" width="29" height="9" rx="4.5"/>
+      </g>
+      <g fill="#38bdf8">
+        <path d="M17 35c0 2 2 4 2 4s2-2 2-4a2 2 0 1 0-4 0z"/>
+        <path d="M25 37c0 2 2 4 2 4s2-2 2-4a2 2 0 1 0-4 0z"/>
+        <path d="M33 35c0 2 2 4 2 4s2-2 2-4a2 2 0 1 0-4 0z"/>
+      </g>
+    </svg>`);
+
+  const snow = wrap(`
+    <svg viewBox="0 0 48 48" width="30" height="30" aria-hidden="true">
+      <defs>
+        <linearGradient id="snowCloud" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#e2e8f0"/>
+          <stop offset="100%" stop-color="#94a3b8"/>
+        </linearGradient>
+      </defs>
+      <g fill="url(#snowCloud)">
+        <circle cx="18" cy="22" r="8"/>
+        <circle cx="28" cy="18" r="10"/>
+        <circle cx="37" cy="22" r="8"/>
+        <rect x="14" y="22" width="29" height="9" rx="4.5"/>
+      </g>
+      <g stroke="#60a5fa" stroke-width="2" stroke-linecap="round">
+        <path d="M18 36h6"/><path d="M21 33v6"/><path d="M19 34l4 4"/><path d="M23 34l-4 4"/>
+        <path d="M30 36h6"/><path d="M33 33v6"/><path d="M31 34l4 4"/><path d="M35 34l-4 4"/>
+      </g>
+    </svg>`);
+
+  const storm = wrap(`
+    <svg viewBox="0 0 48 48" width="30" height="30" aria-hidden="true">
+      <defs>
+        <linearGradient id="stormCloud" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#94a3b8"/>
+          <stop offset="100%" stop-color="#475569"/>
+        </linearGradient>
+      </defs>
+      <g fill="url(#stormCloud)">
+        <circle cx="18" cy="22" r="8"/>
+        <circle cx="28" cy="18" r="10"/>
+        <circle cx="37" cy="22" r="8"/>
+        <rect x="14" y="22" width="29" height="9" rx="4.5"/>
+      </g>
+      <path d="M25 31l-5 9h5l-2 6 9-11h-5l3-4z" fill="#facc15"/>
+    </svg>`);
+
+  const fog = wrap(`
+    <svg viewBox="0 0 48 48" width="30" height="30" aria-hidden="true">
+      <defs>
+        <linearGradient id="fogCloud" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#e2e8f0"/>
+          <stop offset="100%" stop-color="#94a3b8"/>
+        </linearGradient>
+      </defs>
+      <g fill="url(#fogCloud)">
+        <circle cx="18" cy="22" r="8"/>
+        <circle cx="28" cy="18" r="10"/>
+        <circle cx="37" cy="22" r="8"/>
+        <rect x="14" y="22" width="29" height="9" rx="4.5"/>
+      </g>
+      <g stroke="#cbd5e1" stroke-width="3" stroke-linecap="round" opacity=".95">
+        <path d="M10 36h28"/><path d="M14 41h22"/>
+      </g>
+    </svg>`);
+
+  if(code === 0) return sun;
+  if([1,2].includes(code)) return cloudSun;
+  if(code === 3) return cloud;
+  if(code >= 45 && code <= 48) return fog;
+  if(code >= 51 && code <= 67) return rain;
+  if(code >= 71 && code <= 77) return snow;
+  if(code >= 80 && code <= 82) return rain;
+  if(code >= 95) return storm;
+  return cloud;
 }
 
 function setWeatherChip(id, city, icon, meta){
@@ -715,7 +858,7 @@ function setWeatherChip(id, city, icon, meta){
   const iconEl = el.querySelector(".weatherIcon");
   const cityEl = el.querySelector(".weatherCity");
   const metaEl = el.querySelector(".weatherMeta");
-  if(iconEl) iconEl.textContent = icon || "☁";
+  if(iconEl) iconEl.innerHTML = icon || weatherIcon(3);
   if(cityEl) cityEl.textContent = city || "—";
   if(metaEl) metaEl.textContent = meta || "—";
   el.classList.remove("flash");
