@@ -164,7 +164,7 @@ button{
 <div id="map"></div>
 
 <div class="liveToolbar">
-  <button id="toggleTopInfoBtn" class="miniBtn">Скрыть инфо</button>
+  <button id="toggleTopInfoBtn" class="miniBtn" onclick="toggleTopInfo()">Скрыть инфо</button>
 </div>
 
 <div class="top" id="topInfoGrid">
@@ -251,10 +251,17 @@ let topInfoHidden = localStorage.getItem('live_top_info_hidden') === '1';
 let bottomPanelCollapsed = localStorage.getItem('live_bottom_panel_collapsed') === '1';
 
 function applyTopInfoState(){
-  const top = qs('topInfoGrid');
-  const btn = qs('toggleTopInfoBtn');
-  if(top) top.classList.toggle('hidden', !!topInfoHidden);
-  if(btn) btn.innerText = topInfoHidden ? 'Показать инфо' : 'Скрыть инфо';
+  const top = document.getElementById('topInfoGrid');
+  const btn = document.getElementById('toggleTopInfoBtn');
+  if(!top || !btn) return;
+
+  if(topInfoHidden){
+    top.style.display = 'none';
+    btn.innerText = 'Показать инфо';
+  }else{
+    top.style.display = 'grid';
+    btn.innerText = 'Скрыть инфо';
+  }
 }
 function toggleTopInfo(){
   topInfoHidden = !topInfoHidden;
@@ -273,6 +280,9 @@ function toggleBottomPanel(){
   bottomPanelCollapsed = !bottomPanelCollapsed;
   localStorage.setItem('live_bottom_panel_collapsed', bottomPanelCollapsed ? '1' : '0');
   applyBottomPanelState();
+window.addEventListener('load', () => {
+  applyTopInfoState();
+});
 }
 window.toggleBottomPanel = toggleBottomPanel;
 
@@ -291,7 +301,6 @@ function setFollowUi(){
 function toggleFollow(){
   follow=!follow;
   setFollowUi();
-qs('toggleTopInfoBtn').onclick = toggleTopInfo;
 applyTopInfoState();
 applyBottomPanelState();
   if(follow && displayPoint) map.panTo([displayPoint.lat,displayPoint.lng], {animate:true});
