@@ -2420,7 +2420,7 @@ async function exportPdfReport(){
   *{box-sizing:border-box}
   body{margin:0;font-family:Inter,Arial,Helvetica,sans-serif;background:linear-gradient(180deg,#f8fbff 0%, var(--bg) 100%);color:var(--text)}
   .wrap{max-width:1100px;margin:0 auto;padding:24px}
-  .actions{display:flex;justify-content:space-between;align-items:center;gap:12px;padding-bottom:12px}
+  .actions{display:none}
   .btns{display:flex;gap:10px;flex-wrap:wrap}
   .btn{border:none;border-radius:14px;padding:11px 18px;font-weight:800;letter-spacing:.01em;cursor:pointer;box-shadow:0 10px 20px rgba(15,23,42,.10)}
   .btnPrimary{background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff}
@@ -2459,13 +2459,7 @@ async function exportPdfReport(){
 </head>
 <body>
   <div class="wrap">
-    <div class="actions">
-      <div class="btns">
-        <button class="btn btnPrimary" onclick="window.print()">Print / Save PDF</button>
-        <button class="btn btnSecondary" onclick="history.back()">Back</button>
-      </div>
-      <div class="hint">Save as PDF from the browser print dialog</div>
-    </div>
+
     <section class="hero">
       <div class="logo">${logo}</div>
       <div class="heroMeta">
@@ -2478,6 +2472,11 @@ async function exportPdfReport(){
     ${dataSummaryHtml}
     ${tableHtml}
   </div>
+<script>
+  window.addEventListener('load', function(){
+    setTimeout(function(){ window.print(); }, 300);
+  });
+</script>
 </body>
 </html>`;
 
