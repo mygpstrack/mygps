@@ -32,16 +32,6 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-famil
   transform:translateY(-8px);
   pointer-events:none;
 }
-.liveToolbar{
-  position:fixed;
-  right:10px;
-  top:10px;
-  z-index:1200;
-  display:flex;
-  gap:8px;
-  flex-wrap:wrap;
-  justify-content:flex-end;
-}
 .miniBtn{
   border:none;
   border-radius:12px;
@@ -56,6 +46,11 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-famil
   border:1px solid var(--line);
 }
 .miniBtn:hover{filter:brightness(1.05)}
+.panelMiniBtn{
+  flex:0 0 auto;
+  width:auto;
+  min-width:120px;
+}
 .time-normal{color:var(--text)}
 .time-warn{color:var(--yellow)}
 .time-danger{color:var(--red)}
@@ -134,12 +129,19 @@ button{
 .end-icon{font-size:52px;line-height:1}
 .end-title{font-size:28px;font-weight:900;margin-top:12px}
 .end-text{font-size:15px;color:var(--muted);margin-top:10px;line-height:1.5}
+.marker-wrap{
+  width:24px;
+  height:24px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
 .marker-arrow{
   width:0;height:0;
   border-left:10px solid transparent;
   border-right:10px solid transparent;
   border-bottom:22px solid var(--green);
-  transform-origin:50% 80%;
+  transform-origin:50% 50%;
 }
 .marker-circle{
   width:16px;height:16px;border-radius:50%;
@@ -163,10 +165,6 @@ button{
 <body>
 <div id="map"></div>
 
-<div class="liveToolbar">
-  <button id="toggleTopInfoBtn" class="miniBtn" onclick="toggleTopInfo()">Скрыть инфо</button>
-</div>
-
 <div class="top" id="topInfoGrid">
   <div class="card">Погода<br><b id="weather">—</b></div>
   <div class="card">Локация<br><b id="location">—</b></div>
@@ -179,6 +177,7 @@ button{
 <div class="bottom" id="panel">
   <div class="panelHeader">
     <button onclick="togglePanel()" id="toggleBtn">Подробнее</button>
+    <button onclick="toggleTopInfo()" id="toggleTopInfoBtn" class="miniBtn panelMiniBtn">Скрыть инфо</button>
   </div>
 
   <div class="details" id="details">
@@ -436,20 +435,25 @@ function getStatusMeta(p, sessionMeta){
 function buildIconHtml(p, sessionMeta){
   const meta=getStatusMeta(p, sessionMeta);
   if(meta.type==='offline'){
-    return `<div class="marker-circle" style="background:#94a3b8"></div>`;
+    return `<div class="marker-wrap"><div class="marker-circle" style="background:#94a3b8"></div></div>`;
   }
   if(meta.type==='moving'){
-    return `<div class="marker-arrow" style="transform:rotate(${p.bearing||0}deg)"></div>`;
+    return `<div class="marker-wrap"><div class="marker-arrow" style="transform:rotate(${p.bearing||0}deg)"></div></div>`;
   }
   if(meta.type==='paused'){
-    return `<div class="marker-circle" style="background:#3b82f6"></div>`;
+    return `<div class="marker-wrap"><div class="marker-circle" style="background:#3b82f6"></div></div>`;
   }
   const color=meta.type==='stop_long' ? '#ef4444' : '#f59e0b';
-  return `<div class="marker-circle" style="background:${color}"></div>`;
+  return `<div class="marker-wrap"><div class="marker-circle" style="background:${color}"></div></div>`;
 }
 
 function setMarkerIcon(p, sessionMeta){
-  const icon=L.divIcon({html:buildIconHtml(p, sessionMeta), className:''});
+  const icon=L.divIcon({
+    html:buildIconHtml(p, sessionMeta),
+    className:'',
+    iconSize:[24,24],
+    iconAnchor:[12,12]
+  });
   if(!marker){
     marker=L.marker([p.lat,p.lng],{icon}).addTo(map);
   }else{
@@ -469,7 +473,7 @@ function animateMarkerTo(target, sessionMeta){
   if(!displayPoint){
     displayPoint = {...target};
     marker.setLatLng([target.lat, target.lng]);
-    marker.setIcon(L.divIcon({html:buildIconHtml(target, sessionMeta), className:''}));
+    marker.setIcon(L.divIcon({html:buildIconHtml(target, sessionMeta), className:'', iconSize:[24,24], iconAnchor:[12,12]}));
     return;
   }
 
@@ -486,7 +490,7 @@ function animateMarkerTo(target, sessionMeta){
     const lat = start.lat + (end.lat - start.lat) * eased;
     const lng = start.lng + (end.lng - start.lng) * eased;
     marker.setLatLng([lat,lng]);
-    marker.setIcon(L.divIcon({html:buildIconHtml(target, sessionMeta), className:''}));
+    marker.setIcon(L.divIcon({html:buildIconHtml(target, sessionMeta), className:'', iconSize:[24,24], iconAnchor:[12,12]}));
     displayPoint = {...target, lat, lng};
     if(t < 1){
       animationFrameId=requestAnimationFrame(step);
@@ -588,7 +592,7 @@ function applySession(data){
 
   setMarkerIcon(livePoint, meta);
   if(!marker){
-    marker=L.marker([livePoint.lat,livePoint.lng],{icon:L.divIcon({html:buildIconHtml(livePoint, meta), className:''})}).addTo(map);
+    marker=L.marker([livePoint.lat,livePoint.lng],{icon:L.divIcon({html:buildIconHtml(livePoint, meta), className:'', iconSize:[24,24], iconAnchor:[12,12]})}).addTo(map);
     displayPoint = {...livePoint};
   }else{
     animateMarkerTo(livePoint, meta);
