@@ -2291,10 +2291,9 @@ async function exportPdfReport(){
   if(!pts.length) return showToast("Нет данных для PDF","warn");
 
   const options = getPdfOptions();
-  const lang = qs("pdfLangSelect")?.value || "ru";
-  const T = lang === "en" ? {
-    title: "GPS Report",
-    reportFor: "Report for",
+  const lang = "en";
+  const T = {
+    reportFor: "Report",
     created: "Created",
     summary: "Summary",
     points: "Points",
@@ -2302,7 +2301,7 @@ async function exportPdfReport(){
     avgSpeed: "Average speed",
     maxSpeed: "Max speed",
     map: "Route map",
-    speedAccuracyLabels: "Data summary",
+    dataSummary: "Data summary",
     speed: "Speed",
     accuracy: "Accuracy",
     labels: "Labels",
@@ -2314,36 +2313,11 @@ async function exportPdfReport(){
     speedCol: "Speed",
     accuracyCol: "Accuracy",
     labelsCol: "Labels",
-    print: "Print / Save PDF",
-    exported: "PDF report opened"
-  } : {
-    title: "Отчёт GPS",
-    reportFor: "Отчёт для",
-    created: "Создан",
-    summary: "Общая информация",
-    points: "Точек",
-    distance: "Пробег",
-    avgSpeed: "Средняя скорость",
-    maxSpeed: "Макс. скорость",
-    map: "Карта маршрута",
-    speedAccuracyLabels: "Сводка по данным",
-    speed: "Скорость",
-    accuracy: "Точность",
-    labels: "Метки",
-    min: "мин",
-    max: "макс",
-    table: "Таблица точек",
-    time: "Время",
-    coords: "Координаты",
-    speedCol: "Скорость",
-    accuracyCol: "Точность",
-    labelsCol: "Метки",
-    print: "Печать / Сохранить PDF",
-    exported: "PDF отчёт открыт"
+    exported: "PDF exported"
   };
 
   const reportFor = userLabel(selectedUid) || "—";
-  const createdAt = new Date().toLocaleString(lang === "en" ? "en-GB" : "ru-RU");
+  const createdAt = new Date().toLocaleString("en-GB");
   const s = computeSummary(pts);
   const labels = Array.from(new Set(pts.map(pointLabelsText).filter(v=>v && v !== "—")));
   const speeds = pts.map(p=>Number(p.speed||0)).filter(v=>Number.isFinite(v));
