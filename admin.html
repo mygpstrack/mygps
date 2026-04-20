@@ -2237,14 +2237,91 @@ function buildGpx(points){
   lines.push("</trkseg></trk></gpx>");
   return lines.join("");
 }
+const PDF_LOGO_SVG = `<svg width="220" height="56" viewBox="0 0 220 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="mygpsGrad" x1="6" y1="4" x2="214" y2="52" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#22C55E"/>
+      <stop offset="1" stop-color="#3B82F6"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(2,2)">
+    <path d="M24 2C14.06 2 6 10.06 6 20c0 12.32 18 28 18 28s18-15.68 18-28C42 10.06 33.94 2 24 2Z" fill="url(#mygpsGrad)"/>
+    <circle cx="24" cy="20" r="6.3" fill="white"/>
+    <path d="M5 46.5C11.5 41.2 18.5 40.2 26 43.8C32.5 46.9 38.1 46.4 44.5 42.8" stroke="url(#mygpsGrad)" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="3.8" cy="46.8" r="3.4" fill="url(#mygpsGrad)"/>
+  </g>
+  <text x="62" y="37" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="34" font-weight="800" fill="url(#mygpsGrad)">MyGps</text>
+</svg>`;
+
+async function svgToPngDataUrl(svgText, width=440, height=112){
+  return await new Promise((resolve, reject)=>{
+    const svgBlob = new Blob([svgText], {type:"image/svg+xml;charset=utf-8"});
+    const url = URL.createObjectURL(svgBlob);
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx.clearRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+        URL.revokeObjectURL(url);
+        resolve(canvas.toDataURL("image/png"));
+      } catch (e) {
+        URL.revokeObjectURL(url);
+        reject(e);
+      }
+    };
+    img.onerror = (e) => {
+      URL.revokeObjectURL(url);
+      reject(e);
+    };
+    img.src = url;
+  });
+}
+
 async function buildPdfBlob(){
-  const pts=filteredHistory(), s=computeSummary(pts), {jsPDF}=window.jspdf, doc=new jsPDF();
-  doc.text("MyGps History Report",14,16);
-  doc.text(`Distance: ${s.km.toFixed(2)} km`,14,28);
-  doc.text(`Average speed: ${s.avgSpeed.toFixed(1)} km/h`,14,36);
-  doc.text(`Max speed: ${s.maxSpeed.toFixed(1)} km/h`,14,44);
-  const rows=pts.slice(0,250).map(p=>[fmtTime(p.timestamp), `${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}`, p.speed != null ? Number(p.speed).toFixed(1) : "—"]);
-  doc.autoTable({startY:52, head:[["Time","Coordinates","Speed km/h"]], body:rows, styles:{fontSize:9}});
+  const pts = filteredHistory();
+  const s = computeSummary(pts);
+  const {jsPDF} = window.jspdf;
+  const doc = new jsPDF();
+  let y = 16;
+
+  try{
+    const logoPng = await svgToPngDataUrl(PDF_LOGO_SVG, 440, 112);
+    doc.addImage(logoPng, "PNG", 14, 8, 60, 15);
+    y = 30;
+  }catch(e){
+    doc.setFontSize(18);
+    doc.text("MyGps", 14, y);
+    y += 8;
+  }
+
+  doc.setFontSize(11);
+  doc.text(`Report: ${userLabel(selectedUid) || "—"}`, 14, y); y += 7;
+  doc.text(`Created: ${new Date().toLocaleString("en-GB")}`, 14, y); y += 8;
+
+  doc.setFontSize(12);
+  doc.text("Summary", 14, y); y += 7;
+  doc.setFontSize(10);
+  doc.text(`Distance: ${s.km.toFixed(2)} km`, 14, y); y += 6;
+  doc.text(`Average speed: ${s.avgSpeed.toFixed(1)} km/h`, 14, y); y += 6;
+  doc.text(`Max speed: ${s.maxSpeed.toFixed(1)} km/h`, 14, y); y += 10;
+
+  const rows = pts.slice(0,250).map(p=>[
+    fmtTime(p.timestamp),
+    `${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}`,
+    p.speed != null ? Number(p.speed).toFixed(1) : "—"
+  ]);
+
+  doc.autoTable({
+    startY: y,
+    head: [["Time","Coordinates","Speed km/h"]],
+    body: rows,
+    styles: {fontSize: 9}
+  });
+
   return doc.output("blob");
 }
 
