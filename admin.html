@@ -2783,16 +2783,36 @@ qs("exportGpxBtn").onclick=()=>{
   downloadBlob(blob, `route_${toLocalDateInputValue(new Date())}.gpx`);
   showToast("GPX экспортирован","success");
 };
-qs("exportPdfBtn").onclick=async()=>{
-  try{
+qs("exportPdfBtn").onclick = async () => {
+  try {
     const pts = filteredHistory();
-    if(!pts.length) return showToast("Нет данных для PDF","warn");
-    const blob = await buildPdfBlob();
-    downloadBlob(blob, `${exportBaseName()}.pdf`);
-    showToast("PDF экспортирован","success");
-  }catch(err){
-    recordError("exportPdf", err);
-    showToast("Ошибка PDF: " + errText(err), "error", 3600);
+    if (!pts.length) return showToast("Нет данных для PDF","warn");
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+
+    let y = 20;
+
+    doc.setFontSize(18);
+    doc.text("MyGps Report", 14, y);
+    y += 10;
+
+    const rows = pts.slice(0,200).map(p => [
+      fmtTime(p.timestamp),
+      `${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}`,
+      p.speed != null ? Number(p.speed).toFixed(1) : "—"
+    ]);
+
+    doc.autoTable({
+      startY: y,
+      head: [["Time","Coordinates","Speed"]],
+      body: rows
+    });
+
+    doc.save("report.pdf");
+
+  } catch (err) {
+    console.error(err);
   }
 };
 if(qs("exportPngBtn")) qs("exportPngBtn").onclick=()=>exportMapPng();
