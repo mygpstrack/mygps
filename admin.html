@@ -17,6 +17,74 @@
     h1,h2,h3,p{margin:0}
     .sub{color:var(--muted);margin-top:6px;line-height:1.6}
     .headerTime{margin-top:8px;color:var(--muted)}
+.topBar{
+  display:grid;
+  grid-template-columns:auto 1fr auto;
+  align-items:center;
+  gap:18px;
+  width:100%;
+}
+.topLogoWrap{display:flex;align-items:center;min-height:44px}
+.topCenterWrap{
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+  gap:8px;
+  min-width:0;
+}
+.topDateTime{
+  font-size:14px;
+  color:var(--muted);
+  font-weight:600;
+  letter-spacing:.01em;
+}
+.topUserWrap{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  justify-self:end;
+  white-space:nowrap;
+}
+.userPill{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:10px 14px;
+  border-radius:999px;
+  background:rgba(255,255,255,.04);
+  border:1px solid rgba(255,255,255,.08);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.04);
+}
+.userDot{
+  width:8px;height:8px;border-radius:50%;
+  background:#22c55e;
+  box-shadow:0 0 0 4px rgba(34,197,94,.12);
+  flex:0 0 auto;
+}
+.userEmailText{
+  color:#e5eefc;
+  font-size:13px;
+  font-weight:700;
+  max-width:260px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.logoutBtnTop{
+  border:none;
+  padding:10px 14px;
+  border-radius:12px;
+  color:#fff;
+  background:linear-gradient(135deg,#334155,#1f2937);
+  box-shadow:0 8px 20px rgba(0,0,0,.18);
+  font-weight:700;
+  cursor:pointer;
+}
+.logoutBtnTop:hover{filter:brightness(1.06)}
+@media (max-width:900px){
+  .topBar{grid-template-columns:1fr;align-items:flex-start}
+  .topUserWrap{justify-self:start}
+}
+
 .weatherBar{
   margin-top:10px;
   display:grid;
@@ -178,7 +246,8 @@
 <body>
 <div class="wrap">
   <div class="card">
-    <div style="display:flex;align-items:center;min-height:40px"><svg width="180" height="44" viewBox="0 0 220 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <div class="topBar">
+    <div class="topLogoWrap"><svg width="180" height="44" viewBox="0 0 220 56" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="mygpsGrad" x1="6" y1="4" x2="214" y2="52" gradientUnits="userSpaceOnUse">
       <stop stop-color="#22C55E"/>
@@ -193,11 +262,22 @@
   </g>
   <text x="62" y="37" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="34" font-weight="800" fill="url(#mygpsGrad)">MyGps</text>
 </svg></div>
-    <div id="pageDateTime" class="headerTime">—</div>
-    <div class="weatherBar">
-      <div id="headerWeatherStatic" class="weatherChip"><span class="weatherIcon">☁</span><span class="weatherText"><span class="weatherCity">Riga</span><span class="weatherMeta">Загрузка погоды…</span></span></div>
-      <div id="headerWeatherDynamic" class="weatherChip"><span class="weatherIcon">☁</span><span class="weatherText"><span class="weatherCity">По точке</span><span class="weatherMeta">Ожидание координат…</span></span></div>
+    <div class="topCenterWrap">
+      <div id="pageDateTime" class="topDateTime">—</div>
+      <div class="weatherBar">
+        <div id="headerWeatherStatic" class="weatherChip"><span class="weatherIcon">☁</span><span class="weatherText"><span class="weatherCity">Riga</span><span class="weatherMeta">Загрузка погоды…</span></span></div>
+        <div id="headerWeatherDynamic" class="weatherChip"><span class="weatherIcon">☁</span><span class="weatherText"><span class="weatherCity">По точке</span><span class="weatherMeta">Ожидание координат…</span></span></div>
+      </div>
     </div>
+    <div class="topUserWrap">
+      <div class="userPill">
+        <span class="userDot"></span>
+        <span id="topUserEmail" class="userEmailText">—</span>
+      </div>
+      <button id="logoutBtnTop" class="logoutBtnTop">Выйти</button>
+    </div>
+  </div>
+</div>
     
   </div>
 
@@ -218,7 +298,7 @@
 
   <div id="adminPanel" class="hidden">
     <div class="card">
-      <div class="row">
+      <div class="row" style="display:none">
         <div class="pill"><span class="dot ok"></span><span id="userInfo">Вы вошли</span></div>
         <button id="logoutBtn" class="secondary">Выйти</button>
       </div>
@@ -2281,98 +2361,188 @@ function getPdfOptions(){
   };
 }
 
+
 async function exportPdfReport(){
   const pts = getExportPoints();
   if(!pts.length) return showToast("Нет данных для PDF","warn");
 
   const options = getPdfOptions();
-  const {jsPDF} = window.jspdf;
-  const doc = new jsPDF();
+  const lang = qs("pdfLangSelect")?.value || "ru";
+  const T = lang === "en" ? {
+    title: "GPS Report",
+    reportFor: "Report for",
+    created: "Created",
+    summary: "Summary",
+    points: "Points",
+    distance: "Distance",
+    avgSpeed: "Average speed",
+    maxSpeed: "Max speed",
+    map: "Route map",
+    speedAccuracyLabels: "Data summary",
+    speed: "Speed",
+    accuracy: "Accuracy",
+    labels: "Labels",
+    min: "min",
+    max: "max",
+    table: "Points table",
+    time: "Time",
+    coords: "Coordinates",
+    speedCol: "Speed",
+    accuracyCol: "Accuracy",
+    labelsCol: "Labels",
+    print: "Print / Save PDF",
+    exported: "PDF report opened"
+  } : {
+    title: "Отчёт GPS",
+    reportFor: "Отчёт для",
+    created: "Создан",
+    summary: "Общая информация",
+    points: "Точек",
+    distance: "Пробег",
+    avgSpeed: "Средняя скорость",
+    maxSpeed: "Макс. скорость",
+    map: "Карта маршрута",
+    speedAccuracyLabels: "Сводка по данным",
+    speed: "Скорость",
+    accuracy: "Точность",
+    labels: "Метки",
+    min: "мин",
+    max: "макс",
+    table: "Таблица точек",
+    time: "Время",
+    coords: "Координаты",
+    speedCol: "Скорость",
+    accuracyCol: "Точность",
+    labelsCol: "Метки",
+    print: "Печать / Сохранить PDF",
+    exported: "PDF отчёт открыт"
+  };
+
+  const reportFor = userLabel(selectedUid) || "—";
+  const createdAt = new Date().toLocaleString(lang === "en" ? "en-GB" : "ru-RU");
   const s = computeSummary(pts);
-  let y = 14;
+  const labels = Array.from(new Set(pts.map(pointLabelsText).filter(v=>v && v !== "—")));
+  const speeds = pts.map(p=>Number(p.speed||0)).filter(v=>Number.isFinite(v));
+  const accs = pts.map(p=>Number(p.accuracy||0)).filter(v=>Number.isFinite(v) && v > 0);
+  const minSp = speeds.length ? Math.min(...speeds) : 0;
+  const maxSp = speeds.length ? Math.max(...speeds) : 0;
+  const minA = accs.length ? Math.min(...accs) : 0;
+  const maxA = accs.length ? Math.max(...accs) : 0;
 
-  try {
-    doc.addImage(svgToDataUri(PDF_LOGO_SVG), "SVG", 14, 8, 56, 14);
-  } catch(e) {
-    // fallback: nothing
-  }
-  y = 28;
-  doc.setFontSize(10);
-  doc.text(`Отчёт: ${userLabel(selectedUid) || "—"}`, 14, y);
-  y += 6;
-  doc.text(`Создан: ${new Date().toLocaleString("ru-RU")}`, 14, y);
-  y += 8;
-
-  if(options.summary){
-    doc.setFontSize(12);
-    doc.text("Общая информация", 14, y);
-    y += 6;
-    doc.setFontSize(10);
-    doc.text(`Точек: ${pts.length}`, 14, y); y += 5;
-    doc.text(`Пробег: ${s.km.toFixed(2)} км`, 14, y); y += 5;
-    doc.text(`Средняя скорость: ${s.avgSpeed.toFixed(1)} км/ч`, 14, y); y += 5;
-    doc.text(`Макс. скорость: ${s.maxSpeed.toFixed(1)} км/ч`, 14, y); y += 7;
-  }
-
+  let mapHtml = "";
   if(options.map){
-    try {
+    try{
       const mapData = await exportMapPng();
       if(mapData){
-        if(y > 190){ doc.addPage(); y = 16; }
-        doc.setFontSize(12);
-        doc.text("Карта маршрута", 14, y);
-        y += 5;
-        doc.addImage(mapData, "PNG", 14, y, 180, 70);
-        y += 78;
+        mapHtml = `<section class="block"><h2>${T.map}</h2><img class="map" src="${mapData}" alt="map"></section>`;
       }
-    } catch(e) {}
+    }catch(e){}
   }
 
+  const summaryHtml = options.summary ? `
+    <section class="block">
+      <h2>${T.summary}</h2>
+      <div class="grid">
+        <div class="item"><b>${T.points}:</b> ${pts.length}</div>
+        <div class="item"><b>${T.distance}:</b> ${s.km.toFixed(2)} km</div>
+        <div class="item"><b>${T.avgSpeed}:</b> ${s.avgSpeed.toFixed(1)} km/h</div>
+        <div class="item"><b>${T.maxSpeed}:</b> ${s.maxSpeed.toFixed(1)} km/h</div>
+      </div>
+    </section>` : "";
+
+  let dataHtml = "";
   if(options.speed || options.accuracy || options.labels){
-    if(y > 220){ doc.addPage(); y = 16; }
-    doc.setFontSize(12);
-    doc.text("Сводка по данным", 14, y);
-    y += 6;
-    doc.setFontSize(10);
-    if(options.speed){
-      const speeds = pts.map(p=>Number(p.speed||0)).filter(v=>Number.isFinite(v));
-      const minSp = speeds.length ? Math.min(...speeds) : 0;
-      const maxSp = speeds.length ? Math.max(...speeds) : 0;
-      doc.text(`Скорость: мин ${minSp.toFixed(1)} / макс ${maxSp.toFixed(1)} км/ч`, 14, y); y += 5;
-    }
-    if(options.accuracy){
-      const accs = pts.map(p=>Number(p.accuracy||0)).filter(v=>Number.isFinite(v) && v > 0);
-      const minA = accs.length ? Math.min(...accs) : 0;
-      const maxA = accs.length ? Math.max(...accs) : 0;
-      doc.text(`Точность: мин ${minA.toFixed(0)} / макс ${maxA.toFixed(0)} м`, 14, y); y += 5;
-    }
-    if(options.labels){
-      const labels = Array.from(new Set(pts.map(pointLabelsText).filter(v=>v && v !== "—")));
-      doc.text(`Метки: ${labels.length ? labels.join(", ").slice(0, 140) : "—"}`, 14, y, {maxWidth:180}); y += 8;
-    }
+    const rows = [];
+    if(options.speed) rows.push(`<div class="item"><b>${T.speed}:</b> ${T.min} ${minSp.toFixed(1)} / ${T.max} ${maxSp.toFixed(1)} km/h</div>`);
+    if(options.accuracy) rows.push(`<div class="item"><b>${T.accuracy}:</b> ${T.min} ${minA.toFixed(0)} / ${T.max} ${maxA.toFixed(0)} m</div>`);
+    if(options.labels) rows.push(`<div class="item"><b>${T.labels}:</b> ${labels.length ? labels.join(", ") : "—"}</div>`);
+    dataHtml = `<section class="block"><h2>${T.speedAccuracyLabels}</h2><div class="grid">${rows.join("")}</div></section>`;
   }
 
+  let tableHtml = "";
   if(options.table){
-    const rows = pts.slice(0,250).map(p=>[
-      fmtTime(p.timestamp),
-      `${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}`,
-      p.speed != null ? Number(p.speed).toFixed(1) : "—",
-      p.accuracy != null ? Number(p.accuracy).toFixed(0) : "—",
-      pointLabelsText(p)
-    ]);
-    doc.autoTable({
-      startY: y,
-      head:[["Время","Координаты","Скорость","Точность","Метки"]],
-      body: rows,
-      styles: {fontSize:8},
-      headStyles: {fillColor:[37,99,235]},
-      margin: {left:14,right:14}
-    });
+    const rows = pts.slice(0, 250).map(p => `
+      <tr>
+        <td>${fmtTime(p.timestamp)}</td>
+        <td>${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}</td>
+        <td>${p.speed != null ? Number(p.speed).toFixed(1) : "—"}</td>
+        <td>${p.accuracy != null ? Number(p.accuracy).toFixed(0) : "—"}</td>
+        <td>${pointLabelsText(p)}</td>
+      </tr>`).join("");
+    tableHtml = `
+      <section class="block">
+        <h2>${T.table}</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>${T.time}</th>
+              <th>${T.coords}</th>
+              <th>${T.speedCol}</th>
+              <th>${T.accuracyCol}</th>
+              <th>${T.labelsCol}</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </section>`;
   }
 
-  doc.save(`${exportBaseName()}.pdf`);
-  showToast("PDF экспортирован","success");
+  const logoHtml = typeof PDF_LOGO_SVG !== "undefined" ? PDF_LOGO_SVG : "";
+
+  const reportWin = window.open("", "_blank", "noopener,noreferrer,width=1100,height=900");
+  if(!reportWin) return showToast("Разреши открытие окна для PDF","warn");
+
+  reportWin.document.write(`<!doctype html>
+<html lang="${lang}">
+<head>
+<meta charset="utf-8">
+<title>${T.title}</title>
+<style>
+  body{font-family:Arial,Helvetica,sans-serif;margin:0;background:#f5f7fb;color:#0f172a}
+  .wrap{max-width:980px;margin:0 auto;padding:24px}
+  .head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 22px;background:#fff;border-radius:18px;box-shadow:0 8px 24px rgba(15,23,42,.08)}
+  .logo svg{height:42px;width:auto;display:block}
+  .meta{font-size:14px;color:#475569;text-align:right}
+  .block{margin-top:18px;padding:18px 22px;background:#fff;border-radius:18px;box-shadow:0 8px 24px rgba(15,23,42,.06);break-inside:avoid}
+  h1{margin:0;font-size:24px}
+  h2{margin:0 0 12px 0;font-size:18px}
+  .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .item{padding:10px 12px;background:#f8fafc;border-radius:12px}
+  .map{width:100%;border-radius:14px;border:1px solid #e2e8f0}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th,td{padding:8px 10px;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:top}
+  thead th{background:#eff6ff;color:#1d4ed8}
+  .actions{position:sticky;top:0;display:flex;justify-content:flex-end;padding:12px 0 0 0}
+  .printBtn{border:none;background:#2563eb;color:#fff;border-radius:12px;padding:10px 16px;font-weight:700;cursor:pointer}
+  @media print{
+    body{background:#fff}
+    .wrap{max-width:none;padding:0}
+    .actions{display:none}
+    .block,.head{box-shadow:none;border:1px solid #e5e7eb}
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="actions"><button class="printBtn" onclick="window.print()">${T.print}</button></div>
+    <div class="head">
+      <div class="logo">${logoHtml}</div>
+      <div class="meta">
+        <div><b>${T.reportFor}:</b> ${reportFor}</div>
+        <div><b>${T.created}:</b> ${createdAt}</div>
+      </div>
+    </div>
+    ${summaryHtml}
+    ${mapHtml}
+    ${dataHtml}
+    ${tableHtml}
+  </div>
+</body>
+</html>`);
+  reportWin.document.close();
+  showToast(T.exported, "success");
 }
+
 async function exportMapPngBlob(){
   const mapEl = qs("historyMap");
   if(!mapEl) throw new Error("historyMap not found");
@@ -2579,6 +2749,7 @@ qs("googleBtn").onclick = async()=>{ try{ await signInWithPopup(auth,provider); 
 if (qs("emailLoginBtn")) qs("emailLoginBtn").onclick = async()=>{ try{ await signInWithEmailAndPassword(auth,qs("emailInput").value.trim(),qs("passwordInput").value); }catch(e){ qs("errorBox").textContent="Ошибка входа: "+errText(e); qs("errorBox").classList.remove("hidden"); }};
 if (qs("emailRegisterBtn")) qs("emailRegisterBtn").onclick = async()=>{ try{ await createUserWithEmailAndPassword(auth,qs("emailInput").value.trim(),qs("passwordInput").value); }catch(e){ qs("errorBox").textContent="Ошибка регистрации: "+errText(e); qs("errorBox").classList.remove("hidden"); }};
 if (qs("logoutBtn")) qs("logoutBtn").onclick = async()=>{ await signOut(auth); };
+if (qs("logoutTopBtn")) qs("logoutTopBtn").onclick = async()=>{ await signOut(auth); };
 
 if (qs("todayBtn")) qs("todayBtn").onclick = ()=>{ const now=new Date(), start=new Date(); start.setHours(0,0,0,0); setDateTimeRange(start,now); renderHistory(); };
 if (qs("yesterdayBtn")) qs("yesterdayBtn").onclick = ()=>{ const start=new Date(); start.setDate(start.getDate()-1); start.setHours(0,0,0,0); const end=new Date(start); end.setHours(23,59,0,0); setDateTimeRange(start,end); renderHistory(); };
@@ -2735,6 +2906,7 @@ onAuthStateChanged(auth, async user => {
   if(!user){
     qs("authCard").classList.remove("hidden");
     qs("adminPanel").classList.add("hidden");
+    if(qs("topUserBar")) qs("topUserBar").classList.add("hidden");
     return;
   }
   const adminSnap = await get(ref(db, `admins/${user.uid}`));
@@ -2742,13 +2914,16 @@ onAuthStateChanged(auth, async user => {
   if(!allowed){
     qs("authCard").classList.remove("hidden");
     qs("adminPanel").classList.add("hidden");
+    if(qs("topUserBar")) qs("topUserBar").classList.add("hidden");
     qs("authMessage").innerHTML = `Ты вошёл, но ещё не добавлен как админ.<br><br><span class="mono">admins/${user.uid} = true</span>`;
     return;
   }
 
   qs("authCard").classList.add("hidden");
   qs("adminPanel").classList.remove("hidden");
+  if(qs("topUserBar")) qs("topUserBar").classList.remove("hidden");
   qs("userInfo").textContent = user.email || "Google user";
+  if(qs("userInfoTop")) qs("userInfoTop").textContent = user.email || "Google user";
   if(qs("userUidText")) qs("userUidText").closest(".pill")?.remove();
   setDefaultPeriodToday();
   await ensureUserMeta(user);
