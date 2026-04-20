@@ -1632,7 +1632,7 @@ async function renderHistory() {
     return;
   }
 
-  const s = computeSummary(pts);
+  const s = computeSummary(usedPts);
   const stops = detectStops(pts);
 
   qs("pointsCount").textContent = String(s.count);
@@ -2283,6 +2283,8 @@ async function svgToPngDataUrl(svgText, width=440, height=112){
 
 async function buildPdfBlob(){
   const pts = filteredHistory();
+  const MAX_PDF_POINTS = 1000;
+  const usedPts = pts.length > MAX_PDF_POINTS ? pts.slice(-MAX_PDF_POINTS) : pts;
   const s = computeSummary(pts);
   const {jsPDF} = window.jspdf;
   const doc = new jsPDF();
@@ -2305,8 +2307,8 @@ async function buildPdfBlob(){
   doc.text(`Created: ${new Date().toLocaleString("en-GB")}`, 14, y); y += 8;
 
   let periodText = "Period: —";
-  if (pts.length) {
-    const timestamps = pts
+  if (usedPts.length) {
+    const timestamps = usedPts
       .map(p => Number(p?.timestamp || 0))
       .filter(Boolean)
       .sort((a, b) => a - b);
@@ -2319,6 +2321,7 @@ async function buildPdfBlob(){
   }
   doc.setFont("helvetica", "normal");
   doc.text(periodText, 14, y); y += 8;
+  doc.text(`Points in report: ${usedPts.length} / ${pts.length}`, 14, y); y += 8;
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(12);
@@ -2807,6 +2810,17 @@ qs("exportPdfBtn").onclick=async()=>{
   try{
     const pts = filteredHistory();
     if(!pts.length) return showToast("Нет данных для PDF","warn");
+    if(pts.length > 1000){
+      const usedPts = pts.slice(-1000);
+      const timestamps = usedPts.map(p => Number(p?.timestamp || 0)).filter(Boolean).sort((a,b)=>a-b);
+      let periodMsg = "";
+      if(timestamps.length){
+        const start = new Date(timestamps[0]).toLocaleString("ru-RU");
+        const end = new Date(timestamps[timestamps.length - 1]).toLocaleString("ru-RU");
+        periodMsg = ` Отчёт создан только за период: ${start} - ${end}.`;
+      }
+      showToast(`В отчёт включены последние 1000 точек из ${pts.length}.${periodMsg}`, "warn", 6500);
+    }
     const blob = await buildPdfBlob();
     downloadBlob(blob, `${exportBaseName()}.pdf`);
     showToast("PDF экспортирован","success");
