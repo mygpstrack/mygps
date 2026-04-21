@@ -328,8 +328,7 @@
         <div class="toolbar">
           <button id="fitRouteBtn" class="secondary">Центрировать маршрут</button>
           <button id="lastRouteBtn" class="secondary">Последний маршрут</button>
-          <label class="pill"><input id="onlySelectedOnMapToggle" type="checkbox" style="width:auto;min-width:auto"/> Только выбранные точки на карте</label>
-          <button id="clearSelectedPointsBtn" class="secondary">Снять все выделения</button>
+                    <button id="clearSelectedPointsBtn" class="secondary">Снять все выделения</button>
           <button id="deleteSelectedPointsBtn" class="danger">Удалить выбранные</button>
           <button id="deleteRangeBtn" class="danger">Удалить период</button>
         </div>
@@ -451,7 +450,7 @@
           </div>
           <div id="customDurationBlock" style="display:none">
             <div class="label">Своё время</div>
-            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:nowrap;white-space:nowrap">
               <input id="customDurationDays" type="number" min="0" placeholder="0" style="max-width:110px"/>
               <span class="smallMuted">дн</span>
               <input id="customDurationHours" type="number" min="0" max="23" placeholder="0" style="max-width:110px"/>
@@ -1140,7 +1139,6 @@ function persistUiState(){
       hideJunkToggle: !!qs("hideJunkToggle")?.checked,
       hideStopsToggle: !!qs("hideStopsToggle")?.checked,
       onlyMoveToggle: !!qs("onlyMoveToggle")?.checked,
-      onlySelectedOnMapToggle: !!qs("onlySelectedOnMapToggle")?.checked,
       viewModeSelect: qs("viewModeSelect")?.value || "selected",
       toastPosition: qs("toastPositionSelect")?.value || "",
       autoRefreshSec: qs("autoRefreshSecSelect")?.value || ""
@@ -1170,7 +1168,6 @@ function restoreUiState(){
     if(qs("hideJunkToggle")) qs("hideJunkToggle").checked = !!state.hideJunkToggle;
     if(qs("hideStopsToggle")) qs("hideStopsToggle").checked = !!state.hideStopsToggle;
     if(qs("onlyMoveToggle")) qs("onlyMoveToggle").checked = !!state.onlyMoveToggle;
-    if(qs("onlySelectedOnMapToggle")) qs("onlySelectedOnMapToggle").checked = !!state.onlySelectedOnMapToggle;
     if(qs("viewModeSelect") && state.viewModeSelect) qs("viewModeSelect").value = state.viewModeSelect;
 
     if(qs("toastPositionSelect") && state.toastPosition) qs("toastPositionSelect").value = state.toastPosition;
@@ -3191,7 +3188,6 @@ if (qs("applyFiltersBtn")) qs("applyFiltersBtn").onclick = renderHistory;
 if (qs("resetFiltersBtn")) qs("resetFiltersBtn").onclick = ()=>{ qs("maxAccuracyFilter").value=""; qs("minSpeedFilter").value=""; qs("maxSpeedFilter").value=""; qs("hideJunkToggle").checked=false; if(qs("hideStopsToggle")) qs("hideStopsToggle").checked=false; if(qs("onlyMoveToggle")) qs("onlyMoveToggle").checked=false; clearQuickRangeActive(); renderHistory(); };
 if (qs("refreshHistoryBtn")) qs("refreshHistoryBtn").onclick = async()=>{ await loadAllData(); showToast("История обновлена","success"); };
 if (qs("fitRouteBtn")) qs("fitRouteBtn").onclick = ()=>{ historyMapAutoFit = true; const pts=getHistoryMapPointsFromCurrent().filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]); if(pts.length){ suppressHistoryMapInteraction = true; historyMap.fitBounds(L.latLngBounds(pts), {padding:[30,30]}); setTimeout(()=>{ suppressHistoryMapInteraction = false; }, 300); } };
-if (qs("onlySelectedOnMapToggle")) qs("onlySelectedOnMapToggle").onchange = async()=>{ persistUiState(); await refreshHistoryMapFromCurrentSelection(); };
 if (qs("clearSelectedPointsBtn")) qs("clearSelectedPointsBtn").onclick = async()=>{ document.querySelectorAll(".historyPointCheckbox").forEach(cb=>cb.checked=false); if(qs("selectAllHistoryPoints")) qs("selectAllHistoryPoints").checked=false; await refreshHistoryMapFromCurrentSelection(); showToast("Выделение снято","info"); };
 qs("deleteSelectedPointsBtn").onclick=async()=>{
   if(!selectedUid) return showToast("Нет выбранного пользователя","warn");
@@ -3297,7 +3293,7 @@ if (qs("deleteLiveBtn")) qs("deleteLiveBtn").onclick = async()=>{ const c = Obje
 if (qs("deleteAllDbBtn")) qs("deleteAllDbBtn").onclick = async()=>{ const code=prompt("Для полной очистки базы введи DELETE"); if(code!=="DELETE") return showToast("Очистка отменена","warn"); if(!confirm("Это удалит history, live, liveSessions, liveOwners и adminLogs. Продолжить?")) return; try{ await safeAction("Полная очистка базы", async()=>{ await update(ref(db),{history:null,live:null,liveSessions:null,liveOwners:null,adminLogs:null}); }, "База очищена"); }catch(e){} };
 
 
-["fromDate","fromHour","fromMinute","toDate","toHour","toMinute","maxAccuracyFilter","minSpeedFilter","maxSpeedFilter","hideJunkToggle","hideStopsToggle","onlyMoveToggle","onlySelectedOnMapToggle","viewModeSelect"].forEach(id=>{ if(qs(id)) qs(id).addEventListener("change", persistUiState); });
+["fromDate","fromHour","fromMinute","toDate","toHour","toMinute","maxAccuracyFilter","minSpeedFilter","maxSpeedFilter","hideJunkToggle","hideStopsToggle","onlyMoveToggle","viewModeSelect"].forEach(id=>{ if(qs(id)) qs(id).addEventListener("change", persistUiState); });
 document.querySelectorAll(".tab-btn").forEach(btn=>btn.addEventListener("click", persistUiState));
 
 qs("renameUserBtn").onclick=async()=>{
