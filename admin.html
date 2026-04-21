@@ -707,6 +707,8 @@ const errText = e => e?.message || e?.code || String(e);
 let nowWeatherCache = null;
 let nowWeatherFetchedAt = 0;
 let nowWeatherCoords = null;
+let historyMapAutoFit = true;
+let historyMapHasInitialFit = false;
 
 function windDirShort(deg){
   const dirs=["С","СВ","В","ЮВ","Ю","ЮЗ","З","СЗ"];
@@ -881,31 +883,35 @@ function setWeatherChip(id, city, icon, meta){
 }
 
 async function updateRigaWeather(){
+  const fallbackMeta = "Нет данных";
   try{
-    const lat=56.95, lon=24.10;
-    const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`, {cache:"no-store"});
-    if(!r.ok) throw new Error(`weather HTTP ${r.status}`);
+    const lat = 56.95, lon = 24.10;
+    const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`, { cache: "no-store" });
+    if(!r.ok) throw new Error(`weather ${r.status}`);
     const j = await r.json();
-    const w = j.current_weather;
+    const w = j?.current_weather;
     if(!w) throw new Error("weather empty");
     const dirs=["С","СВ","В","ЮВ","Ю","ЮЗ","З","СЗ"];
-    const d=dirs[Math.round(w.winddirection/45)%8];
-    setWeatherChip("headerWeatherStatic", "Riga", weatherIcon(w.weathercode), `+${Math.round(w.temperature)}°C • ${d} ${Math.round(w.windspeed)} м/с`);
+    const d=dirs[Math.round(Number(w.winddirection || 0)/45)%8];
+    setWeatherChip("headerWeatherStatic", "Riga", weatherIcon(w.weathercode), `+${Math.round(Number(w.temperature || 0))}°C • ${d} ${Math.round(Number(w.windspeed || 0))} м/с`);
   }catch(e){
-    setWeatherChip("headerWeatherStatic", "Riga", weatherIcon(3), "Погода недоступна");
+    setWeatherChip("headerWeatherStatic", "Riga", weatherIcon(3), fallbackMeta);
   }
 }
 
 async function updateHeaderWeather(){
-  if(!window.currentPointForHeader){
+  if(!window.currentPointForHeader || !Number.isFinite(Number(window.currentPointForHeader.lat)) || !Number.isFinite(Number(window.currentPointForHeader.lon))){
     setWeatherChip("headerWeatherDynamic", "По точке", weatherIcon(3), "Ожидание координат…");
     return;
   }
-  const {lat, lon} = window.currentPointForHeader;
+
+  const lat = Number(window.currentPointForHeader.lat);
+  const lon = Number(window.currentPointForHeader.lon);
+
   try{
     let city = "По точке";
     try{
-      const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&accept-language=ru`, {headers:{"Accept":"application/json"}, cache:"no-store"});
+      const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&accept-language=ru`, { cache: "no-store" });
       if(geoRes.ok){
         const geo = await geoRes.json();
         const a = geo?.address || {};
@@ -913,16 +919,16 @@ async function updateHeaderWeather(){
       }
     }catch(e){}
 
-    const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`, {cache:"no-store"});
-    if(!r.ok) throw new Error(`weather HTTP ${r.status}`);
+    const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`, { cache: "no-store" });
+    if(!r.ok) throw new Error(`weather ${r.status}`);
     const j = await r.json();
-    const w = j.current_weather;
+    const w = j?.current_weather;
     if(!w) throw new Error("weather empty");
     const dirs=["С","СВ","В","ЮВ","Ю","ЮЗ","З","СЗ"];
-    const d=dirs[Math.round(w.winddirection/45)%8];
-    setWeatherChip("headerWeatherDynamic", city, weatherIcon(w.weathercode), `+${Math.round(w.temperature)}°C • ${d} ${Math.round(w.windspeed)} м/с`);
+    const d=dirs[Math.round(Number(w.winddirection || 0)/45)%8];
+    setWeatherChip("headerWeatherDynamic", city, weatherIcon(w.weathercode), `+${Math.round(Number(w.temperature || 0))}°C • ${d} ${Math.round(Number(w.windspeed || 0))} м/с`);
   }catch(e){
-    setWeatherChip("headerWeatherDynamic", "По точке", weatherIcon(3), "Погода недоступна");
+    setWeatherChip("headerWeatherDynamic", "По точке", weatherIcon(3), "Нет данных");
   }
 }
 
@@ -1585,39 +1591,22 @@ function filteredHistory(){
 async function updateHistoryMap(points){
   clearRouteSegments();
   if(selectedPointMarker){ historyMap.removeLayer(selectedPointMarker); selectedPointMarker=null; }
-  const orderedPoints = [...points]
-    .filter(p=>p && p.latitude!=null && p.longitude!=null)
-    .sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
-  const latlngs=orderedPoints.map(p=>[Number(p.latitude),Number(p.longitude)]);
+  const ordered = [...(points || [])].filter(p=>p && p.latitude!=null && p.longitude!=null).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+  const latlngs=ordered.map(p=>[Number(p.latitude),Number(p.longitude)]);
   if(!latlngs.length) return;
-  for(let i=1;i<orderedPoints.length;i++){
-    const prev = orderedPoints[i-1];
-    const curr = orderedPoints[i];
-    const a=[Number(prev.latitude), Number(prev.longitude)];
-    const b=[Number(curr.latitude), Number(curr.longitude)];
+  for(let i=1;i<ordered.length;i++){
+    const a=[Number(ordered[i-1].latitude), Number(ordered[i-1].longitude)];
+    const b=[Number(ordered[i].latitude), Number(ordered[i].longitude)];
     const seg=L.polyline([a,b], {weight:5,color:"#60a5fa"}).addTo(historyMap);
-    seg.on("click", async ()=>{ await selectHistoryPoint(curr); });
     routeSegments.push(seg);
   }
-  orderedPoints.forEach((p, idx)=>{
-    const dot=L.circleMarker([Number(p.latitude), Number(p.longitude)], {
-      radius: idx===0 || idx===orderedPoints.length-1 ? 0 : 4,
-      color:"#93c5fd",
-      fillColor:"#93c5fd",
-      fillOpacity:.9,
-      opacity: idx===0 || idx===orderedPoints.length-1 ? 0 : 1
-    }).addTo(historyMap);
-    dot.on("click", async ()=>{ await selectHistoryPoint(p); });
-    routeSegments.push(dot);
-  });
-  const first=orderedPoints[0], last=orderedPoints[orderedPoints.length-1];
+  const first=ordered[0], last=ordered[ordered.length-1];
   startMarker.setLatLng([Number(first.latitude), Number(first.longitude)]).bindPopup("Старт");
-  startMarker.off("click");
-  startMarker.on("click", async ()=>{ await selectHistoryPoint(first); });
   endMarker.setLatLng([Number(last.latitude), Number(last.longitude)]).bindPopup("Финиш");
-  endMarker.off("click");
-  endMarker.on("click", async ()=>{ await selectHistoryPoint(last); });
-  if(latlngs.length===1) historyMap.setView(latlngs[0],16); else historyMap.fitBounds(L.latLngBounds(latlngs), {padding:[30,30]});
+  if(historyMapAutoFit || !historyMapHasInitialFit){
+    if(latlngs.length===1) historyMap.setView(latlngs[0],16); else historyMap.fitBounds(L.latLngBounds(latlngs), {padding:[30,30]});
+    historyMapHasInitialFit = true;
+  }
   const startAddr = await reverseGeocode(Number(first.latitude), Number(first.longitude));
   const endAddr = await reverseGeocode(Number(last.latitude), Number(last.longitude));
   qs("startAddress").textContent = startAddr;
@@ -1698,16 +1687,14 @@ async function renderHistory() {
   qs("avgSpeedValue").textContent = `${s.avgSpeed.toFixed(1)} км/ч`;
   qs("maxSpeedValue").textContent = `${s.maxSpeed.toFixed(1)} км/ч`;
 
-  const routePts = [...pts].sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
-  const first = routePts[0];
-  const last = routePts[routePts.length - 1];
+  const first = pts[0];
+  const last = pts[pts.length - 1];
 
   qs("routeStartCoords").textContent = "Поиск адреса...";
   qs("routeEndCoords").textContent = "Поиск адреса...";
   qs("routeDuration").textContent = formatDuration(Number(last.timestamp || 0) - Number(first.timestamp || 0));
   qs("routeStops").textContent = String(stops.length);
   qs("stopsNotice").textContent = stops.length ? `Стоянки: ${stops.map(s=>formatDuration(s.duration)).join(", ")}` : "Стоянок не найдено.";
-  if (qs("selectedAddress")) qs("selectedAddress").textContent = "Нажми на точку на карте или в таблице";
 
   reverseGeocode(Number(first.latitude), Number(first.longitude)).then(addr => {
     if(qs("routeStartCoords")) qs("routeStartCoords").textContent = addr;
@@ -1784,7 +1771,7 @@ async function updateNowUI(point, sourceLabel){
     updateRigaWeather();
   } else {
     qs("nowAddress").textContent = "—";
-    
+    setWeatherChip("headerWeatherDynamic", "По точке", weatherIcon(3), "Ожидание координат…");
   }
   const freshness = point?.timestamp ? Date.now() - Number(point.timestamp) : null;
   const isOnline = freshness != null && freshness <= 3*60*1000;
@@ -2832,7 +2819,7 @@ if (qs("range24hBtn")) qs("range24hBtn").onclick = ()=>{ const now=new Date(), s
 if (qs("applyFiltersBtn")) qs("applyFiltersBtn").onclick = renderHistory;
 if (qs("resetFiltersBtn")) qs("resetFiltersBtn").onclick = ()=>{ qs("maxAccuracyFilter").value=""; qs("minSpeedFilter").value=""; qs("maxSpeedFilter").value=""; qs("hideJunkToggle").checked=false; renderHistory(); };
 if (qs("refreshHistoryBtn")) qs("refreshHistoryBtn").onclick = async()=>{ await loadAllData(); showToast("История обновлена","success"); };
-if (qs("fitRouteBtn")) qs("fitRouteBtn").onclick = ()=>{ const pts=currentFiltered.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]); if(pts.length) historyMap.fitBounds(L.latLngBounds(pts), {padding:[30,30]}); };
+if (qs("fitRouteBtn")) qs("fitRouteBtn").onclick = ()=>{ historyMapAutoFit = true; const pts=currentFiltered.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]); if(pts.length) historyMap.fitBounds(L.latLngBounds(pts), {padding:[30,30]}); };
 qs("deleteRangeBtn").onclick=async()=>{
   const pts=filteredHistory();
   if(!pts.length) return showToast("Нет точек в выбранном диапазоне.","warn");
@@ -2949,7 +2936,7 @@ if (qs("openNowMapsBtn")) qs("openNowMapsBtn").onclick = ()=>{ const p=getSelect
 if (qs("exportTodayBtn")) qs("exportTodayBtn").onclick = ()=>{ const now=new Date(), start=new Date(); start.setHours(0,0,0,0); setDateTimeRange(start, now); renderHistory(); persistUiState(); };
 if (qs("exportYesterdayBtn")) qs("exportYesterdayBtn").onclick = ()=>{ const start=new Date(); start.setDate(start.getDate()-1); start.setHours(0,0,0,0); const end=new Date(start); end.setHours(23,59,59,999); setDateTimeRange(start,end); renderHistory(); persistUiState(); };
 if (qs("exportWeekBtn")) qs("exportWeekBtn").onclick = ()=>{ const now=new Date(), start=new Date(); start.setDate(start.getDate()-7); setDateTimeRange(start,now); renderHistory(); persistUiState(); };
-if (qs("lastRouteBtn")) qs("lastRouteBtn").onclick = ()=>{ const pts=getSelectedHistoryPoints(); if(!pts.length) return showToast("Нет истории","warn"); const last=pts[pts.length-1]; let i=pts.length-1; while(i>0 && (Number(pts[i].speed||0)>2 || Number(pts[i-1].speed||0)>2)) i--; const start=new Date(Number(pts[Math.max(0,i)].timestamp||Date.now())-5*60*1000); const end=new Date(Number(last.timestamp||Date.now())); setDateTimeRange(start,end); renderHistory(); persistUiState(); showToast("Выбран последний маршрут","info"); };
+if (qs("lastRouteBtn")) qs("lastRouteBtn").onclick = ()=>{ historyMapAutoFit = true; const pts=getSelectedHistoryPoints(); if(!pts.length) return showToast("Нет истории","warn"); const last=pts[pts.length-1]; let i=pts.length-1; while(i>0 && (Number(pts[i].speed||0)>2 || Number(pts[i-1].speed||0)>2)) i--; const start=new Date(Number(pts[Math.max(0,i)].timestamp||Date.now())-5*60*1000); const end=new Date(Number(last.timestamp||Date.now())); setDateTimeRange(start,end); renderHistory(); persistUiState(); showToast("Выбран последний маршрут","info"); };
 
 function getExportPoints(){
   let pts = qs("expCurrentFilters")?.checked ? filteredHistory() : getVisibleHistoryPoints();
@@ -3020,11 +3007,14 @@ onAuthStateChanged(auth, async user => {
   await loadSessions();
   await renderBackups();
   await createMonthlyBackup(false);
+  updateRigaWeather();
+  const headerPoint = getSelectedLiveData()?.lastPoint || getSelectedHistoryPoints().slice(-1)[0];
+  if(headerPoint && headerPoint.latitude != null && headerPoint.longitude != null){
+    window.currentPointForHeader = { lat: Number(headerPoint.latitude), lon: Number(headerPoint.longitude) };
+    updateHeaderWeather();
+  } else {
+    setWeatherChip("headerWeatherDynamic", "По точке", weatherIcon(3), "Ожидание координат…");
+  }
 });
-
-updateRigaWeather();
-updateHeaderWeather();
-setInterval(updateRigaWeather, 10 * 60 * 1000);
-setInterval(()=>{ if(window.currentPointForHeader) updateHeaderWeather(); }, 10 * 60 * 1000);
 </script>
 </body></html>
