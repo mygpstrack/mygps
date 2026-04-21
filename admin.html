@@ -321,6 +321,8 @@
           <input id="minSpeedFilter" type="number" min="0" step="0.1" placeholder="Скорость от, км/ч"/>
           <input id="maxSpeedFilter" type="number" min="0" step="0.1" placeholder="Скорость до, км/ч"/>
           <label class="pill"><input id="hideJunkToggle" type="checkbox" style="width:auto;min-width:auto"/> Скрыть мусорные</label>
+          <label class="pill"><input id="hideStopsToggle" type="checkbox" style="width:auto;min-width:auto"/> Скрыть стоянки</label>
+          <label class="pill"><input id="onlyMoveToggle" type="checkbox" style="width:auto;min-width:auto"/> Только движение</label>
           <button id="applyFiltersBtn" class="secondary">Применить</button>
           <button id="resetFiltersBtn" class="secondary">Сбросить</button>
         </div>
@@ -1117,6 +1119,8 @@ function persistUiState(){
       minSpeedFilter: qs("minSpeedFilter")?.value || "",
       maxSpeedFilter: qs("maxSpeedFilter")?.value || "",
       hideJunkToggle: !!qs("hideJunkToggle")?.checked,
+      hideStopsToggle: !!qs("hideStopsToggle")?.checked,
+      onlyMoveToggle: !!qs("onlyMoveToggle")?.checked,
       viewModeSelect: qs("viewModeSelect")?.value || "selected",
       toastPosition: qs("toastPositionSelect")?.value || "",
       autoRefreshSec: qs("autoRefreshSecSelect")?.value || ""
@@ -1144,6 +1148,8 @@ function restoreUiState(){
     if(qs("minSpeedFilter")) qs("minSpeedFilter").value = state.minSpeedFilter || "";
     if(qs("maxSpeedFilter")) qs("maxSpeedFilter").value = state.maxSpeedFilter || "";
     if(qs("hideJunkToggle")) qs("hideJunkToggle").checked = !!state.hideJunkToggle;
+    if(qs("hideStopsToggle")) qs("hideStopsToggle").checked = !!state.hideStopsToggle;
+    if(qs("onlyMoveToggle")) qs("onlyMoveToggle").checked = !!state.onlyMoveToggle;
     if(qs("viewModeSelect") && state.viewModeSelect) qs("viewModeSelect").value = state.viewModeSelect;
 
     if(qs("toastPositionSelect") && state.toastPosition) qs("toastPositionSelect").value = state.toastPosition;
@@ -1682,7 +1688,7 @@ function filteredHistory(){
   const base = getVisibleHistoryPoints();
   const from=parseDateTime(qs("fromDate").value, qs("fromHour").value, qs("fromMinute").value);
   const to=parseDateTime(qs("toDate").value, qs("toHour").value, qs("toMinute").value);
-  const maxAcc=Number(qs("maxAccuracyFilter").value||0), minSp=Number(qs("minSpeedFilter").value||0), maxSp=Number(qs("maxSpeedFilter").value||0), hideJunk=qs("hideJunkToggle").checked;
+  const maxAcc=Number(qs("maxAccuracyFilter").value||0), minSp=Number(qs("minSpeedFilter").value||0), maxSp=Number(qs("maxSpeedFilter").value||0), hideJunk=qs("hideJunkToggle").checked, hideStops=!!qs("hideStopsToggle")?.checked, onlyMove=!!qs("onlyMoveToggle")?.checked;
   const sortField = historySortState.field || "timestamp";
   const sortDir = (historySortState.dir || "desc") === "asc" ? 1 : -1;
 
@@ -1694,6 +1700,8 @@ function filteredHistory(){
     if(minSp>0&&sp<minSp) return false;
     if(maxSp>0&&sp>maxSp) return false;
     if(hideJunk&&looksJunk(arr[idx-1],p)) return false;
+    if(hideStops&&sp<=2) return false;
+    if(onlyMove&&sp<=2) return false;
     return true;
   });
 
@@ -3075,7 +3083,7 @@ if (qs("weekBtn")) qs("weekBtn").onclick = ()=>{ const now=new Date(), start=new
 if (qs("range1hBtn")) qs("range1hBtn").onclick = ()=>{ const now=new Date(), start=new Date(Date.now()-60*60*1000); setDateTimeRange(start,now); renderHistory(); };
 if (qs("range24hBtn")) qs("range24hBtn").onclick = ()=>{ const now=new Date(), start=new Date(Date.now()-24*60*60*1000); setDateTimeRange(start,now); renderHistory(); };
 if (qs("applyFiltersBtn")) qs("applyFiltersBtn").onclick = renderHistory;
-if (qs("resetFiltersBtn")) qs("resetFiltersBtn").onclick = ()=>{ qs("maxAccuracyFilter").value=""; qs("minSpeedFilter").value=""; qs("maxSpeedFilter").value=""; qs("hideJunkToggle").checked=false; renderHistory(); };
+if (qs("resetFiltersBtn")) qs("resetFiltersBtn").onclick = ()=>{ qs("maxAccuracyFilter").value=""; qs("minSpeedFilter").value=""; qs("maxSpeedFilter").value=""; qs("hideJunkToggle").checked=false; if(qs("hideStopsToggle")) qs("hideStopsToggle").checked=false; if(qs("onlyMoveToggle")) qs("onlyMoveToggle").checked=false; renderHistory(); };
 if (qs("refreshHistoryBtn")) qs("refreshHistoryBtn").onclick = async()=>{ await loadAllData(); showToast("История обновлена","success"); };
 if (qs("fitRouteBtn")) qs("fitRouteBtn").onclick = ()=>{ historyMapAutoFit = true; const pts=currentFiltered.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]); if(pts.length) historyMap.fitBounds(L.latLngBounds(pts), {padding:[30,30]}); };
 qs("deleteSelectedPointsBtn").onclick=async()=>{
@@ -3182,7 +3190,7 @@ if (qs("deleteLiveBtn")) qs("deleteLiveBtn").onclick = async()=>{ const c = Obje
 if (qs("deleteAllDbBtn")) qs("deleteAllDbBtn").onclick = async()=>{ const code=prompt("Для полной очистки базы введи DELETE"); if(code!=="DELETE") return showToast("Очистка отменена","warn"); if(!confirm("Это удалит history, live, liveSessions, liveOwners и adminLogs. Продолжить?")) return; try{ await safeAction("Полная очистка базы", async()=>{ await update(ref(db),{history:null,live:null,liveSessions:null,liveOwners:null,adminLogs:null}); }, "База очищена"); }catch(e){} };
 
 
-["fromDate","fromHour","fromMinute","toDate","toHour","toMinute","maxAccuracyFilter","minSpeedFilter","maxSpeedFilter","hideJunkToggle","viewModeSelect"].forEach(id=>{ if(qs(id)) qs(id).addEventListener("change", persistUiState); });
+["fromDate","fromHour","fromMinute","toDate","toHour","toMinute","maxAccuracyFilter","minSpeedFilter","maxSpeedFilter","hideJunkToggle","hideStopsToggle","onlyMoveToggle","viewModeSelect"].forEach(id=>{ if(qs(id)) qs(id).addEventListener("change", persistUiState); });
 document.querySelectorAll(".tab-btn").forEach(btn=>btn.addEventListener("click", persistUiState));
 
 qs("renameUserBtn").onclick=async()=>{
