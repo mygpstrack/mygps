@@ -238,12 +238,15 @@
       </div>
 
 
-      <div class="row adminToolsRow">
+      <div class="row adminToolsRow" style="align-items:flex-start">
         <div>
           <div class="label">Пользователь</div>
           <select id="userSelect"></select>
         </div>
-        <button id="renameUserBtn" class="secondary">Переименовать</button>
+        <div>
+          <div class="label">&nbsp;</div>
+          <button id="renameUserBtn" class="secondary">Переименовать</button>
+        </div>
         <div>
           <div class="label">Режим</div>
           <select id="viewModeSelect">
@@ -251,10 +254,22 @@
             <option value="all">Все пользователи</option>
           </select>
         </div>
-        <button id="refreshUsersBtn" class="secondary">Обновить пользователей</button>
-        <button id="deleteHistoryBtn" class="warn">Очистить history</button>
-        <button id="deleteLiveBtn" class="warn">Очистить live</button>
-        <button id="deleteAllDbBtn" class="danger">Очистить базу</button>
+        <div>
+          <div class="label">&nbsp;</div>
+          <button id="refreshUsersBtn" class="secondary">Обновить пользователей</button>
+        </div>
+        <div>
+          <div class="label">&nbsp;</div>
+          <button id="deleteHistoryBtn" class="warn">Очистить history</button>
+        </div>
+        <div>
+          <div class="label">&nbsp;</div>
+          <button id="deleteLiveBtn" class="warn">Очистить live</button>
+        </div>
+        <div>
+          <div class="label">&nbsp;</div>
+          <button id="deleteAllDbBtn" class="danger">Очистить базу</button>
+        </div>
       </div>
 
       <div class="tabs">
