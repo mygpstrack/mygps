@@ -2633,6 +2633,34 @@ async function svgToPngDataUrl(svgText, width=440, height=112){
   });
 }
 
+function getPdfAddressEnSync(p){
+  const lat = Number(p?.latitude);
+  const lon = Number(p?.longitude);
+  const coords = `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+  if(!Number.isFinite(lat) || !Number.isFinite(lon)) return "—";
+
+  const direct = [p?.addressEn, p?.address_en, p?.address, p?.display_name_en, p?.display_name]
+    .find(v => typeof v === "string" && v.trim());
+  if(direct) return direct;
+
+  const enKeys = [
+    `${lat.toFixed(5)},${lon.toFixed(5)}|en`,
+    `${lat.toFixed(6)},${lon.toFixed(6)}|en`,
+    `${lat},${lon}|en`,
+    `${lat.toFixed(5)},${lon.toFixed(5)}`,
+    `${lat.toFixed(6)},${lon.toFixed(6)}`,
+    `${lat},${lon}`
+  ];
+  for(const key of enKeys){
+    const cached = geocodeCache?.[key];
+    if(typeof cached === "string" && cached.trim()) return cached;
+    if(cached && typeof cached.address === "string" && cached.address.trim()) return cached.address;
+    if(cached && typeof cached.display_name === "string" && cached.display_name.trim()) return cached.display_name;
+  }
+
+  return coords;
+}
+
 async function buildPdfBlob(){
   const pts = filteredHistory();
   const s = computeSummary(pts);
@@ -2684,19 +2712,16 @@ async function buildPdfBlob(){
     .sort((a, b) => Number(a?.timestamp || 0) - Number(b?.timestamp || 0))
     .slice(0, 250);
 
-  const rows = await Promise.all(pdfPoints.map(async (p) => {
+  const rows = pdfPoints.map((p) => {
     const coords = `${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}`;
-    let address = coords;
-    try {
-      address = await reverseGeocodeEn(p.latitude, p.longitude);
-    } catch (e) {}
+    const address = getPdfAddressEnSync(p);
     return [
       fmtTime(p.timestamp),
       coords,
       address,
       p.speed != null ? Number(p.speed).toFixed(1) : "—"
     ];
-  }));
+  });
 
   doc.autoTable({
     startY: y,
