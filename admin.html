@@ -164,6 +164,14 @@
 .progress{height:10px;background:#0b1220;border-radius:999px;overflow:hidden;border:1px solid var(--border)}
 .progress>span{display:block;height:100%;background:var(--blue)}
 .smallMuted{font-size:12px;color:var(--muted)}
+
+    .adminToolsRow{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start;margin-top:12px}
+    .adminToolsRow > .toolField{display:flex;flex-direction:column;min-width:180px}
+    .adminToolsRow > .toolField.selectField select{width:100%}
+    .adminToolsRow > .toolField.buttonField{min-width:auto}
+    .adminToolsRow > .toolField .label{min-height:18px}
+    .adminToolsRow > .toolField.buttonField .label{visibility:hidden}
+
 .emptyState{padding:18px;border:1px dashed var(--border);border-radius:16px;color:var(--muted);text-align:center;margin-top:12px}
     @media (max-width:1200px){.grid6,.grid5{grid-template-columns:repeat(3,minmax(0,1fr))}}
     @media (max-width:1000px){.grid4{grid-template-columns:repeat(2,minmax(0,1fr))}.grid3,.grid2{grid-template-columns:1fr}}
@@ -238,36 +246,36 @@
       </div>
 
 
-      <div class="row adminToolsRow">
-        <div class="adminToolField">
+      <div class="adminToolsRow">
+        <div class="toolField selectField">
           <div class="label">Пользователь</div>
           <select id="userSelect"></select>
         </div>
-        <div class="adminToolField">
-          <div class="label">&nbsp;</div>
+        <div class="toolField buttonField">
+          <div class="label">.</div>
           <button id="renameUserBtn" class="secondary">Переименовать</button>
         </div>
-        <div class="adminToolField">
+        <div class="toolField selectField">
           <div class="label">Режим</div>
           <select id="viewModeSelect">
             <option value="selected" selected>Выбранный пользователь</option>
             <option value="all">Все пользователи</option>
           </select>
         </div>
-        <div class="adminToolField">
-          <div class="label">&nbsp;</div>
+        <div class="toolField buttonField">
+          <div class="label">.</div>
           <button id="refreshUsersBtn" class="secondary">Обновить пользователей</button>
         </div>
-        <div class="adminToolField">
-          <div class="label">&nbsp;</div>
+        <div class="toolField buttonField">
+          <div class="label">.</div>
           <button id="deleteHistoryBtn" class="warn">Очистить history</button>
         </div>
-        <div class="adminToolField">
-          <div class="label">&nbsp;</div>
+        <div class="toolField buttonField">
+          <div class="label">.</div>
           <button id="deleteLiveBtn" class="warn">Очистить live</button>
         </div>
-        <div class="adminToolField">
-          <div class="label">&nbsp;</div>
+        <div class="toolField buttonField">
+          <div class="label">.</div>
           <button id="deleteAllDbBtn" class="danger">Очистить базу</button>
         </div>
       </div>
@@ -763,6 +771,9 @@ let nowWeatherCoords = null;
 let historyMapAutoFit = true;
 let historyMapHasInitialFit = false;
 let historyPointMarkers = [];
+let gpsProfilesListenerStarted = false;
+let lastGpsProfilesSnapshot = null;
+let suppressNextGpsProfilesToast = false;
 let suppressHistoryMapInteraction = false;
 
 function windDirShort(deg){
@@ -2185,6 +2196,51 @@ async function ensureUserMeta(user){
     await update(r, {email:user.email, updatedAt:Date.now()});
   }
 }
+
+function normalizeGpsProfilesShape(value){
+  const src = value && typeof value === "object" ? value : {};
+  const normal = src.normal && typeof src.normal === "object" ? src.normal : {};
+  const live = src.live && typeof src.live === "object" ? src.live : {};
+  return {
+    normal: {
+      intervalMs: Number(normal.intervalMs || 5000),
+      minDistanceM: Number(normal.minDistanceM || 3)
+    },
+    live: {
+      intervalMs: Number(live.intervalMs || 3000),
+      minDistanceM: Number(live.minDistanceM || 2)
+    }
+  };
+}
+function gpsProfilesEqual(a,b){
+  const x = normalizeGpsProfilesShape(a);
+  const y = normalizeGpsProfilesShape(b);
+  return x.normal.intervalMs === y.normal.intervalMs &&
+         x.normal.minDistanceM === y.normal.minDistanceM &&
+         x.live.intervalMs === y.live.intervalMs &&
+         x.live.minDistanceM === y.live.minDistanceM;
+}
+function startGpsProfilesRealtimeSync(){
+  if(gpsProfilesListenerStarted) return;
+  gpsProfilesListenerStarted = true;
+  onValue(ref(db, "adminSettings/config/gpsProfiles"), snap => {
+    const incoming = normalizeGpsProfilesShape(snap.val());
+    const current = normalizeGpsProfilesShape(adminSettings.gpsProfiles);
+    const changed = !gpsProfilesEqual(incoming, current);
+    adminSettings.gpsProfiles = incoming;
+    setGpsProfileControlsFromState();
+    if(lastGpsProfilesSnapshot === null){
+      lastGpsProfilesSnapshot = incoming;
+      return;
+    }
+    if(changed && !suppressNextGpsProfilesToast){
+      showToast("Частота GPS изменена из приложения", "info", 3200);
+    }
+    suppressNextGpsProfilesToast = false;
+    lastGpsProfilesSnapshot = incoming;
+  });
+}
+
 async function loadAdminSettings(){
   try{
     const snap = await get(ref(db,"adminSettings/config"));
@@ -2201,6 +2257,7 @@ async function loadAdminSettings(){
   if(qs("impossibleSpeedKmhInput")) qs("impossibleSpeedKmhInput").value = Number(adminSettings.impossibleSpeedKmh ?? 250);
   if(qs("junkAccuracyMetersInput")) qs("junkAccuracyMetersInput").value = Number(adminSettings.junkAccuracyMeters ?? 100);
   setGpsProfileControlsFromState();
+  lastGpsProfilesSnapshot = normalizeGpsProfilesShape(adminSettings.gpsProfiles);
   applyToastPosition();
   updateStatusAlgorithmCard();
   setupAutoRefresh();
@@ -2243,10 +2300,13 @@ async function saveAdminUiSettings(){
 
 async function saveGpsSettings(){
   adminSettings.gpsProfiles = readGpsProfilesFromControls();
+  suppressNextGpsProfilesToast = true;
+  lastGpsProfilesSnapshot = normalizeGpsProfilesShape(adminSettings.gpsProfiles);
   await update(ref(db,"adminSettings/config"), {
     gpsProfiles: adminSettings.gpsProfiles
   });
   refreshGpsProfileCurrentText();
+  showToast("Настройки GPS сохранены", "success");
 }
 
 function setupAutoRefresh(){
@@ -3406,6 +3466,7 @@ onAuthStateChanged(auth, async user => {
   onValue(ref(db, "adminLogs/actions"), snap => { actionLogs=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0)); renderJournal(); });
 
   await loadAdminSettings();
+  startGpsProfilesRealtimeSync();
   await loadUsers();
   restoreUiState();
   await loadAllData();
