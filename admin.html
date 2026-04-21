@@ -1831,7 +1831,9 @@ async function renderHistory() {
     if(qs("routeEndCoords")) qs("routeEndCoords").textContent = addr;
   });
 
-  for (const p of [...chronological].reverse()) {
+  const tablePoints = [...pts];
+
+  for (const p of tablePoints) {
     const tr = document.createElement("tr");
     const quality = isCleanPoint(null,p)
       ? (Number(p.accuracy||0)<=10 ? '<span class="tag online">хороший</span>'
@@ -2082,15 +2084,15 @@ async function saveAdminUiSettings(){
   adminSettings.autoRefreshSec = Number(qs("autoRefreshSecSelect").value||0);
   adminSettings.offlineMinutes = Number(qs("offlineMinutesSelect").value||5);
   adminSettings.autoCleanMode = qs("autoCleanModeSelect").value;
-  adminSettings.gpsAccuracyMax = Number(qs("gpsAccuracyMaxInput").value||100);
-  adminSettings.gpsImpossibleSpeed = Number(qs("gpsImpossibleSpeedInput").value||250);
-  adminSettings.speedSmoothing = qs("speedSmoothingSelect")?.value || "off";
-  adminSettings.hideAccuracyAbove = Number(qs("hideAccuracyAboveInput")?.value || 20);
-  adminSettings.pdfPointLimit = Number(qs("pdfPointLimitInput")?.value || 1000);
-  adminSettings.moveSpeedThresholdKmh = Number(qs("moveSpeedThresholdInput")?.value || 3);
-  adminSettings.stopLongMinutes = Number(qs("stopLongMinutesInput")?.value || 5);
-  adminSettings.impossibleSpeedKmh = Number(qs("impossibleSpeedKmhInput")?.value || 250);
-  adminSettings.junkAccuracyMeters = Number(qs("junkAccuracyMetersInput")?.value || 100);
+  adminSettings.gpsAccuracyMax = Number(qs("gpsAccuracyMaxInput")?.value || adminSettings.gpsAccuracyMax || 100);
+  adminSettings.gpsImpossibleSpeed = Number(qs("gpsImpossibleSpeedInput")?.value || adminSettings.gpsImpossibleSpeed || 250);
+  adminSettings.speedSmoothing = qs("speedSmoothingSelect")?.value || adminSettings.speedSmoothing || "off";
+  adminSettings.hideAccuracyAbove = Number(qs("hideAccuracyAboveInput")?.value || adminSettings.hideAccuracyAbove || 20);
+  adminSettings.pdfPointLimit = Number(qs("pdfPointLimitInput")?.value || adminSettings.pdfPointLimit || 1000);
+  adminSettings.moveSpeedThresholdKmh = Number(qs("moveSpeedThresholdInput")?.value || adminSettings.moveSpeedThresholdKmh || 3);
+  adminSettings.stopLongMinutes = Number(qs("stopLongMinutesInput")?.value || adminSettings.stopLongMinutes || 5);
+  adminSettings.impossibleSpeedKmh = Number(qs("impossibleSpeedKmhInput")?.value || adminSettings.impossibleSpeedKmh || 250);
+  adminSettings.junkAccuracyMeters = Number(qs("junkAccuracyMetersInput")?.value || adminSettings.junkAccuracyMeters || 100);
 
   const payload = {
     toastPosition: adminSettings.toastPosition,
