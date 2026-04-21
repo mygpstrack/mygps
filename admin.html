@@ -1462,6 +1462,16 @@ document.querySelectorAll(".tab-btn").forEach(btn=>{
   };
 });
 
+function buildBdcAddress(json){
+  const parts = [
+    json?.locality,
+    json?.city,
+    json?.principalSubdivision,
+    json?.countryName
+  ].filter(Boolean);
+  return parts.join(", ");
+}
+
 async function reverseGeocode(lat, lon){
   const latNum = Number(lat), lonNum = Number(lon);
   if(!Number.isFinite(latNum) || !Number.isFinite(lonNum)) return "Адрес не найден";
@@ -1469,16 +1479,30 @@ async function reverseGeocode(lat, lon){
   if (geocodeCache[key]) return geocodeCache[key];
 
   const task = async () => {
-    const urls = [
-      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(latNum)}&lon=${encodeURIComponent(lonNum)}&accept-language=ru&zoom=18&addressdetails=1`,
-      `https://geocode.maps.co/reverse?lat=${encodeURIComponent(latNum)}&lon=${encodeURIComponent(lonNum)}&accept-language=ru`
-    ];
-    for(const url of urls){
-      try {
-        const res = await fetch(url, { headers: { "Accept": "application/json" }, cache: "no-store" });
-        if (!res.ok) continue;
+    const providers = [
+      async () => {
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(latNum)}&lon=${encodeURIComponent(lonNum)}&accept-language=ru&zoom=18&addressdetails=1`, { headers: { "Accept": "application/json" }, cache: "no-store" });
+        if (!res.ok) return "";
         const json = await res.json();
-        const addr = json?.display_name || json?.address?.road || "";
+        return json?.display_name || json?.address?.road || "";
+      },
+      async () => {
+        const res = await fetch(`https://geocode.maps.co/reverse?lat=${encodeURIComponent(latNum)}&lon=${encodeURIComponent(lonNum)}&accept-language=ru`, { headers: { "Accept": "application/json" }, cache: "no-store" });
+        if (!res.ok) return "";
+        const json = await res.json();
+        return json?.display_name || json?.address?.road || "";
+      },
+      async () => {
+        const res = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${encodeURIComponent(latNum)}&longitude=${encodeURIComponent(lonNum)}&localityLanguage=ru`, { headers: { "Accept": "application/json" }, cache: "no-store" });
+        if (!res.ok) return "";
+        const json = await res.json();
+        return buildBdcAddress(json);
+      }
+    ];
+
+    for(const provider of providers){
+      try {
+        const addr = await provider();
         if(addr){
           geocodeCache[key] = addr;
           try { localStorage.setItem("geocodeCache", JSON.stringify(geocodeCache)); } catch (e) {}
@@ -1491,7 +1515,7 @@ async function reverseGeocode(lat, lon){
     return `${latNum.toFixed(5)}, ${lonNum.toFixed(5)}`;
   };
 
-  geocodeQueue = geocodeQueue.then(() => new Promise(r => setTimeout(r, 400))).then(task);
+  geocodeQueue = geocodeQueue.then(() => new Promise(r => setTimeout(r, 350))).then(task);
   return geocodeQueue;
 }
 
@@ -1810,6 +1834,7 @@ async function selectHistoryPoint(p){
   if(selectedPointMarker) historyMap.removeLayer(selectedPointMarker);
   selectedPointMarker = L.circleMarker([lat,lon], {radius:7,color:"#f59e0b",fillColor:"#f59e0b",fillOpacity:1}).addTo(historyMap);
   historyMap.setView([lat,lon],16);
+  qs("selectedAddress").textContent = "Поиск адреса…";
   qs("selectedAddress").textContent = await reverseGeocode(lat,lon);
 }
 
