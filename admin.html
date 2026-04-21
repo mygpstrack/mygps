@@ -464,7 +464,6 @@
           <div style="margin-top:8px" class="mono" id="shareLinkText">—</div>
           <div class="row"><button id="copyCreatedShareBtn" class="secondary">Копировать</button><button id="shareCreatedShareBtn2" class="secondary">Поделиться</button><button id="openCreatedShareResultBtn">Открыть</button></div>
         </div>
-        <div id="activeSessionNotice" class="notice hidden"></div>
       </div>
 
       <div class="card">
@@ -675,8 +674,6 @@ let historyByUid = {}, liveByUid = {}, allSessions = {}, selectedUid = "", allUs
 let currentFiltered = [], deletionsLog = [], actionLogs = [];
 let liveAutoCenter = true, createdShareUrl = "", speedChart = null, distanceChart = null, currentNowSourceLabel = "—";
 let usersMeta = {};
-let liveOwners = {};
-let activeSessionNoticeTimer = null;
 let adminSettings = {
   toastPosition: "top-right",
   autoRefreshSec: 0,
@@ -886,43 +883,47 @@ function setWeatherChip(id, city, icon, meta){
 async function updateRigaWeather(){
   try{
     const lat=56.95, lon=24.10;
-    const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`);
+    const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`, {cache:"no-store"});
+    if(!r.ok) throw new Error(`weather HTTP ${r.status}`);
     const j = await r.json();
     const w = j.current_weather;
-    if(!w) return;
+    if(!w) throw new Error("weather empty");
     const dirs=["С","СВ","В","ЮВ","Ю","ЮЗ","З","СЗ"];
     const d=dirs[Math.round(w.winddirection/45)%8];
     setWeatherChip("headerWeatherStatic", "Riga", weatherIcon(w.weathercode), `+${Math.round(w.temperature)}°C • ${d} ${Math.round(w.windspeed)} м/с`);
-  }catch{}
+  }catch(e){
+    setWeatherChip("headerWeatherStatic", "Riga", weatherIcon(3), "Погода недоступна");
+  }
 }
 
 async function updateHeaderWeather(){
-  if(!window.currentPointForHeader) return;
+  if(!window.currentPointForHeader){
+    setWeatherChip("headerWeatherDynamic", "По точке", weatherIcon(3), "Ожидание координат…");
+    return;
+  }
   const {lat, lon} = window.currentPointForHeader;
   try{
     let city = "По точке";
     try{
-      const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&accept-language=en`);
-      const geo = await geoRes.json();
-      const a = geo?.address || {};
-      city =
-        a.city ||
-        a.town ||
-        a.village ||
-        a.municipality ||
-        a.suburb ||
-        a.county ||
-        "По точке";
+      const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&accept-language=ru`, {headers:{"Accept":"application/json"}, cache:"no-store"});
+      if(geoRes.ok){
+        const geo = await geoRes.json();
+        const a = geo?.address || {};
+        city = a.city || a.town || a.village || a.municipality || a.suburb || a.county || "По точке";
+      }
     }catch(e){}
 
-    const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`);
+    const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`, {cache:"no-store"});
+    if(!r.ok) throw new Error(`weather HTTP ${r.status}`);
     const j = await r.json();
     const w = j.current_weather;
-    if(!w) return;
+    if(!w) throw new Error("weather empty");
     const dirs=["С","СВ","В","ЮВ","Ю","ЮЗ","З","СЗ"];
     const d=dirs[Math.round(w.winddirection/45)%8];
     setWeatherChip("headerWeatherDynamic", city, weatherIcon(w.weathercode), `+${Math.round(w.temperature)}°C • ${d} ${Math.round(w.windspeed)} м/с`);
-  }catch{}
+  }catch(e){
+    setWeatherChip("headerWeatherDynamic", "По точке", weatherIcon(3), "Погода недоступна");
+  }
 }
 
 async function updateNowWeather(lat, lon){
@@ -1205,24 +1206,12 @@ function formatRemainingMs(ms){
 
 function getSelectedActiveSessionEntry(){
   const now = Date.now();
-  if(selectedUid){
-    const activeSessionId = liveOwners?.[selectedUid]?.activeSessionId;
-    if(activeSessionId && allSessions?.[activeSessionId]){
-      const session = getSessionRoot(allSessions[activeSessionId]);
-      const meta = session?.meta || {};
-      if((meta.paused && Number(meta.remainingMs||0) > 0) || (!!meta.active && Number(meta.expiresAt||0) > now)){
-        return [activeSessionId, session];
-      }
-    }
-  }
-  return Object.entries(allSessions||{})
-    .filter(([token,session])=>{
-      if(token === "_init") return false;
-      const root = getSessionRoot(session), meta = root?.meta || {};
-      if(selectedUid && meta.ownerUid && meta.ownerUid !== selectedUid) return false;
-      return (meta.paused && Number(meta.remainingMs||0) > 0) || (!!meta.active && Number(meta.expiresAt||0) > now);
-    })
-    .sort((a,b)=>Number((getSessionRoot(b[1])?.meta?.createdAt||0))-Number((getSessionRoot(a[1])?.meta?.createdAt||0)))[0] || null;
+  return Object.entries(allSessions||{}).find(([token,session])=>{
+    if(token === "_init") return false;
+    const root = getSessionRoot(session), meta = root?.meta || {};
+    if(selectedUid && meta.ownerUid && meta.ownerUid !== selectedUid) return false;
+    return !!meta.active && Number(meta.expiresAt||0) > now;
+  }) || null;
 }
 
 function updateActiveSessionToast(){
@@ -1233,7 +1222,7 @@ function updateActiveSessionToast(){
   const entry = getSelectedActiveSessionEntry();
 
   if(!entry){
-    if(el){ clearInterval(el._timer); el.remove(); }
+    if(el) el.remove();
     const createBtn = qs("createShareBtn");
     if(createBtn){
       createBtn.disabled = false;
@@ -1244,13 +1233,11 @@ function updateActiveSessionToast(){
 
   const [token, session] = entry;
   const meta = getSessionRoot(session)?.meta || {};
-  const isPaused = !!meta.paused;
+  const leftMs = Math.max(0, Number(meta.expiresAt||0) - Date.now());
   const url = buildShareUrl(token);
-  const leftNow = ()=> isPaused ? Math.max(0, Number(meta.remainingMs||0)) : Math.max(0, Number(meta.expiresAt||0) - Date.now());
-  let leftMs = leftNow();
 
   if(leftMs <= 0){
-    if(el){ clearInterval(el._timer); el.remove(); }
+    if(el) el.remove();
     const createBtn = qs("createShareBtn");
     if(createBtn){
       createBtn.disabled = false;
@@ -1277,25 +1264,28 @@ function updateActiveSessionToast(){
     host.appendChild(el);
   }
 
-  const render = ()=>{
-    const left = leftNow();
-    el.innerHTML = `
-      <div style="font-weight:800">${isPaused ? 'Live-сессия на паузе' : 'Live-сессия активна'}</div>
-      <div id="activeSessionToastTime" style="font-size:13px;opacity:.95">Осталось: ${formatRemainingMs(left)}</div>
-      <div style="font-size:12px;opacity:.9" class="mono">${url}</div>
-    `;
-    if(left <= 0 && !isPaused){
-      clearInterval(el._timer);
-      el.remove();
-      renderSessions();
-    }
-  };
-  render();
+  el.innerHTML = `
+    <div style="font-weight:800">Live-сессия активна</div>
+    <div id="activeSessionToastTime" style="font-size:13px;opacity:.95">Осталось: ${formatRemainingMs(leftMs)}</div>
+  `;
 
   clearInterval(el._timer);
-  if(!isPaused){
-    el._timer = setInterval(render, 1000);
-  }
+  el._expiresAt = Number(meta.expiresAt||0);
+  el._timer = setInterval(()=>{
+    const left = Math.max(0, el._expiresAt - Date.now());
+    const timeEl = document.getElementById("activeSessionToastTime");
+    if(timeEl) timeEl.textContent = `Осталось: ${formatRemainingMs(left)}`;
+    if(left <= 0){
+      clearInterval(el._timer);
+      el.remove();
+      const createBtn = qs("createShareBtn");
+      if(createBtn){
+        createBtn.disabled = false;
+        createBtn.textContent = "Создать live-ссылку";
+      }
+      renderSessions();
+    }
+  }, 1000);
 }
 function parseDateTime(dateVal,hVal,mVal){ if(!dateVal) return null; return new Date(`${dateVal}T${hVal||"00"}:${mVal||"00"}:00`).getTime(); }
 function userLabel(uid){ return getDisplayName(uid); }
@@ -1305,8 +1295,6 @@ function renderHeaderTime(){
   qs("pageDateTime").textContent = `${days[d.getDay()]}, ${d.toLocaleString("ru-RU")}`;
 }
 setInterval(()=>{ renderHeaderTime(); updateActiveSessionNotice(); }, 1000); renderHeaderTime();
-updateRigaWeather();
-setInterval(updateRigaWeather, 600000);
 
 function populateTimeSelects(){
   const hourOpts = Array.from({length:24}, (_,i)=>`<option value="${String(i).padStart(2,"0")}">${String(i).padStart(2,"0")}</option>`).join("");
@@ -1597,17 +1585,38 @@ function filteredHistory(){
 async function updateHistoryMap(points){
   clearRouteSegments();
   if(selectedPointMarker){ historyMap.removeLayer(selectedPointMarker); selectedPointMarker=null; }
-  const latlngs=points.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]);
+  const orderedPoints = [...points]
+    .filter(p=>p && p.latitude!=null && p.longitude!=null)
+    .sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+  const latlngs=orderedPoints.map(p=>[Number(p.latitude),Number(p.longitude)]);
   if(!latlngs.length) return;
-  for(let i=1;i<points.length;i++){
-    const a=[Number(points[i-1].latitude), Number(points[i-1].longitude)];
-    const b=[Number(points[i].latitude), Number(points[i].longitude)];
+  for(let i=1;i<orderedPoints.length;i++){
+    const prev = orderedPoints[i-1];
+    const curr = orderedPoints[i];
+    const a=[Number(prev.latitude), Number(prev.longitude)];
+    const b=[Number(curr.latitude), Number(curr.longitude)];
     const seg=L.polyline([a,b], {weight:5,color:"#60a5fa"}).addTo(historyMap);
+    seg.on("click", async ()=>{ await selectHistoryPoint(curr); });
     routeSegments.push(seg);
   }
-  const first=points[0], last=points[points.length-1];
+  orderedPoints.forEach((p, idx)=>{
+    const dot=L.circleMarker([Number(p.latitude), Number(p.longitude)], {
+      radius: idx===0 || idx===orderedPoints.length-1 ? 0 : 4,
+      color:"#93c5fd",
+      fillColor:"#93c5fd",
+      fillOpacity:.9,
+      opacity: idx===0 || idx===orderedPoints.length-1 ? 0 : 1
+    }).addTo(historyMap);
+    dot.on("click", async ()=>{ await selectHistoryPoint(p); });
+    routeSegments.push(dot);
+  });
+  const first=orderedPoints[0], last=orderedPoints[orderedPoints.length-1];
   startMarker.setLatLng([Number(first.latitude), Number(first.longitude)]).bindPopup("Старт");
+  startMarker.off("click");
+  startMarker.on("click", async ()=>{ await selectHistoryPoint(first); });
   endMarker.setLatLng([Number(last.latitude), Number(last.longitude)]).bindPopup("Финиш");
+  endMarker.off("click");
+  endMarker.on("click", async ()=>{ await selectHistoryPoint(last); });
   if(latlngs.length===1) historyMap.setView(latlngs[0],16); else historyMap.fitBounds(L.latLngBounds(latlngs), {padding:[30,30]});
   const startAddr = await reverseGeocode(Number(first.latitude), Number(first.longitude));
   const endAddr = await reverseGeocode(Number(last.latitude), Number(last.longitude));
@@ -1681,23 +1690,24 @@ async function renderHistory() {
     return;
   }
 
-  const ptsChrono = pts.slice().sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
-  const s = computeSummary(ptsChrono);
-  const stops = detectStops(ptsChrono);
+  const s = computeSummary(pts);
+  const stops = detectStops(pts);
 
   qs("pointsCount").textContent = String(s.count);
   qs("distanceValue").textContent = `${s.km.toFixed(2)} км`;
   qs("avgSpeedValue").textContent = `${s.avgSpeed.toFixed(1)} км/ч`;
   qs("maxSpeedValue").textContent = `${s.maxSpeed.toFixed(1)} км/ч`;
 
-  const first = ptsChrono[0];
-  const last = ptsChrono[ptsChrono.length - 1];
+  const routePts = [...pts].sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+  const first = routePts[0];
+  const last = routePts[routePts.length - 1];
 
   qs("routeStartCoords").textContent = "Поиск адреса...";
   qs("routeEndCoords").textContent = "Поиск адреса...";
   qs("routeDuration").textContent = formatDuration(Number(last.timestamp || 0) - Number(first.timestamp || 0));
   qs("routeStops").textContent = String(stops.length);
   qs("stopsNotice").textContent = stops.length ? `Стоянки: ${stops.map(s=>formatDuration(s.duration)).join(", ")}` : "Стоянок не найдено.";
+  if (qs("selectedAddress")) qs("selectedAddress").textContent = "Нажми на точку на карте или в таблице";
 
   reverseGeocode(Number(first.latitude), Number(first.longitude)).then(addr => {
     if(qs("routeStartCoords")) qs("routeStartCoords").textContent = addr;
@@ -1755,8 +1765,8 @@ async function renderHistory() {
     tbody.appendChild(tr);
   }
 
-  updateCharts(ptsChrono);
-  await updateHistoryMap(ptsChrono);
+  updateCharts(pts);
+  await updateHistoryMap(pts);
   qs("startAddress").textContent = await reverseGeocode(Number(first.latitude), Number(first.longitude));
   qs("endAddress").textContent = await reverseGeocode(Number(last.latitude), Number(last.longitude));
 }
@@ -2049,41 +2059,27 @@ function getSessionStatusLabel(status){ if(status==="active") return "актив
 function updateActiveSessionNotice(){
   const box = qs("activeSessionNotice");
   if(!box) return;
+  const now = Date.now();
+  const activeEntry = Object.entries(allSessions || {}).find(([token, session])=>{
+    if(token === "_init") return false;
+    const root = getSessionRoot(session);
+    const meta = root.meta || {};
+    return (!selectedUid || meta.ownerUid === selectedUid) && !!meta.active && Number(meta.expiresAt || 0) > now;
+  });
 
-  const entry = getSelectedActiveSessionEntry();
-  if(activeSessionNoticeTimer){
-    clearInterval(activeSessionNoticeTimer);
-    activeSessionNoticeTimer = null;
-  }
-
-  if(!entry){
+  if(!activeEntry){
     box.classList.add("hidden");
     box.innerHTML = "";
     return;
   }
 
-  const [token, session] = entry;
-  const meta = getSessionRoot(session)?.meta || {};
-  const isPaused = !!meta.paused;
+  const [token, session] = activeEntry;
+  const meta = getSessionRoot(session).meta || {};
+  const left = Math.max(0, Number(meta.expiresAt || 0) - now);
   const url = buildShareUrl(token);
   createdShareUrl = url;
   box.classList.remove("hidden");
-
-  const render = ()=>{
-    const left = isPaused ? Math.max(0, Number(meta.remainingMs || 0)) : Math.max(0, Number(meta.expiresAt || 0) - Date.now());
-    box.innerHTML = `<strong>${isPaused ? 'Live-сессия на паузе' : 'Live-сессия активна'}</strong><div style="margin-top:6px">Осталось: <b>${fmtRemainingCompact(left)}</b></div><div style="margin-top:6px" class="mono">${url}</div>`;
-    if(left <= 0 && !isPaused){
-      box.classList.add("hidden");
-      box.innerHTML = "";
-      clearInterval(activeSessionNoticeTimer);
-      activeSessionNoticeTimer = null;
-    }
-  };
-
-  render();
-  if(!isPaused){
-    activeSessionNoticeTimer = setInterval(render, 1000);
-  }
+  box.innerHTML = `<strong>Live-сессия активна</strong><div style="margin-top:6px">Осталось: <b>${fmtRemainingCompact(left)}</b></div><div style="margin-top:6px" class="mono">${url}</div>`;
 }
 
 async function loadSessions(){
@@ -2091,7 +2087,6 @@ async function loadSessions(){
   allSessions = snap.val() || {};
   updateUsage();
   renderSessions();
-  updateActiveSessionToast();
   updateActiveSessionNotice();
   await updateNowFromAvailableSources();
 }
@@ -2230,8 +2225,7 @@ function renderSessions(){
   tbody.querySelectorAll("[data-delete]").forEach(btn=>btn.onclick=()=>deleteSession(btn.dataset.delete));
   const createBtn = qs("createShareBtn");
   if(createBtn){
-    const activeEntry = getSelectedActiveSessionEntry();
-    const hasActiveForSelected = !!activeEntry;
+    const hasActiveForSelected = entries.some(([token,session,status]) => status==="active" && (!selectedUid || session?.meta?.ownerUid===selectedUid) && Number(session?.meta?.expiresAt||0) > Date.now());
     createBtn.disabled = hasActiveForSelected;
     createBtn.textContent = hasActiveForSelected ? "Есть активная ссылка" : "Создать live-ссылку";
   }
@@ -3015,8 +3009,7 @@ onAuthStateChanged(auth, async user => {
     });
     updateUsage(); renderHistory(); updateNowFromAvailableSources();
   });
-  onValue(ref(db, "liveSessions"), snap => { allSessions=snap.val()||{}; updateUsage(); renderSessions(); updateActiveSessionToast(); updateActiveSessionNotice(); updateNowFromAvailableSources(); });
-  onValue(ref(db, "liveOwners"), snap => { liveOwners=snap.val()||{}; renderSessions(); updateActiveSessionToast(); updateActiveSessionNotice(); });
+  onValue(ref(db, "liveSessions"), snap => { allSessions=snap.val()||{}; updateUsage(); renderSessions(); updateActiveSessionToast(); updateNowFromAvailableSources(); });
   onValue(ref(db, "adminLogs/deletions"), snap => { deletionsLog=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0)); renderJournal(); });
   onValue(ref(db, "adminLogs/actions"), snap => { actionLogs=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0)); renderJournal(); });
 
@@ -3028,5 +3021,10 @@ onAuthStateChanged(auth, async user => {
   await renderBackups();
   await createMonthlyBackup(false);
 });
+
+updateRigaWeather();
+updateHeaderWeather();
+setInterval(updateRigaWeather, 10 * 60 * 1000);
+setInterval(()=>{ if(window.currentPointForHeader) updateHeaderWeather(); }, 10 * 60 * 1000);
 </script>
 </body></html>
