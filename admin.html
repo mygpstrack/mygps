@@ -238,15 +238,12 @@
       </div>
 
 
-      <div class="row adminToolsRow" style="align-items:flex-start">
+      <div class="row adminToolsRow">
         <div>
           <div class="label">Пользователь</div>
           <select id="userSelect"></select>
         </div>
-        <div>
-          <div class="label">&nbsp;</div>
-          <button id="renameUserBtn" class="secondary">Переименовать</button>
-        </div>
+        <button id="renameUserBtn" class="secondary">Переименовать</button>
         <div>
           <div class="label">Режим</div>
           <select id="viewModeSelect">
@@ -254,22 +251,10 @@
             <option value="all">Все пользователи</option>
           </select>
         </div>
-        <div>
-          <div class="label">&nbsp;</div>
-          <button id="refreshUsersBtn" class="secondary">Обновить пользователей</button>
-        </div>
-        <div>
-          <div class="label">&nbsp;</div>
-          <button id="deleteHistoryBtn" class="warn">Очистить history</button>
-        </div>
-        <div>
-          <div class="label">&nbsp;</div>
-          <button id="deleteLiveBtn" class="warn">Очистить live</button>
-        </div>
-        <div>
-          <div class="label">&nbsp;</div>
-          <button id="deleteAllDbBtn" class="danger">Очистить базу</button>
-        </div>
+        <button id="refreshUsersBtn" class="secondary">Обновить пользователей</button>
+        <button id="deleteHistoryBtn" class="warn">Очистить history</button>
+        <button id="deleteLiveBtn" class="warn">Очистить live</button>
+        <button id="deleteAllDbBtn" class="danger">Очистить базу</button>
       </div>
 
       <div class="tabs">
@@ -764,6 +749,8 @@ let historyMapAutoFit = true;
 let historyMapHasInitialFit = false;
 let historyPointMarkers = [];
 let suppressHistoryMapInteraction = false;
+let gpsProfilesLiveSyncReady = false;
+let lastGpsProfilesSignature = "";
 
 function windDirShort(deg){
   const dirs=["С","СВ","В","ЮВ","Ю","ЮЗ","З","СЗ"];
@@ -2141,6 +2128,53 @@ function refreshGpsProfileCurrentText(){
   const profiles = readGpsProfilesFromControls();
   box.textContent = `Сейчас: обычный ${profiles.normal.intervalMs / 1000}s / ${profiles.normal.minDistanceM}м • live ${profiles.live.intervalMs / 1000}s / ${profiles.live.minDistanceM}м`;
 }
+
+function gpsProfilesSignatureOf(profiles){
+  try{
+    const p = profiles || {};
+    return JSON.stringify({
+      normal:{
+        intervalMs:Number(p.normal?.intervalMs || 0),
+        minDistanceM:Number(p.normal?.minDistanceM || 0)
+      },
+      live:{
+        intervalMs:Number(p.live?.intervalMs || 0),
+        minDistanceM:Number(p.live?.minDistanceM || 0)
+      }
+    });
+  }catch(e){
+    return "";
+  }
+}
+function applyRemoteGpsProfiles(nextProfiles, sourceLabel="приложения"){
+  ensureGpsProfiles();
+  const nextSig = gpsProfilesSignatureOf(nextProfiles);
+  const prevSig = gpsProfilesSignatureOf(adminSettings.gpsProfiles);
+  if(!nextSig) return;
+  adminSettings.gpsProfiles = {
+    normal:{
+      intervalMs:Number(nextProfiles?.normal?.intervalMs || adminSettings.gpsProfiles.normal.intervalMs || 5000),
+      minDistanceM:Number(nextProfiles?.normal?.minDistanceM || adminSettings.gpsProfiles.normal.minDistanceM || 3)
+    },
+    live:{
+      intervalMs:Number(nextProfiles?.live?.intervalMs || adminSettings.gpsProfiles.live.intervalMs || 3000),
+      minDistanceM:Number(nextProfiles?.live?.minDistanceM || adminSettings.gpsProfiles.live.minDistanceM || 2)
+    }
+  };
+  setGpsProfileControlsFromState();
+  const appliedSig = gpsProfilesSignatureOf(adminSettings.gpsProfiles);
+  if(!gpsProfilesLiveSyncReady){
+    lastGpsProfilesSignature = appliedSig;
+    gpsProfilesLiveSyncReady = true;
+    return;
+  }
+  if(appliedSig !== prevSig && appliedSig !== lastGpsProfilesSignature){
+    lastGpsProfilesSignature = appliedSig;
+    showToast(`Частота GPS обновлена из ${sourceLabel}`, "info", 3200);
+  } else {
+    lastGpsProfilesSignature = appliedSig;
+  }
+}
 function applyGpsPreset(kind){
   initGpsSettingsControls();
   if(kind === 'fast'){
@@ -2201,6 +2235,7 @@ async function loadAdminSettings(){
   if(qs("impossibleSpeedKmhInput")) qs("impossibleSpeedKmhInput").value = Number(adminSettings.impossibleSpeedKmh ?? 250);
   if(qs("junkAccuracyMetersInput")) qs("junkAccuracyMetersInput").value = Number(adminSettings.junkAccuracyMeters ?? 100);
   setGpsProfileControlsFromState();
+  lastGpsProfilesSignature = gpsProfilesSignatureOf(adminSettings.gpsProfiles);
   applyToastPosition();
   updateStatusAlgorithmCard();
   setupAutoRefresh();
@@ -2243,6 +2278,7 @@ async function saveAdminUiSettings(){
 
 async function saveGpsSettings(){
   adminSettings.gpsProfiles = readGpsProfilesFromControls();
+  lastGpsProfilesSignature = gpsProfilesSignatureOf(adminSettings.gpsProfiles);
   await update(ref(db,"adminSettings/config"), {
     gpsProfiles: adminSettings.gpsProfiles
   });
@@ -3404,6 +3440,24 @@ onAuthStateChanged(auth, async user => {
   onValue(ref(db, "liveSessions"), snap => { allSessions=snap.val()||{}; updateUsage(); renderSessions(); updateActiveSessionToast(); updateNowFromAvailableSources(); });
   onValue(ref(db, "adminLogs/deletions"), snap => { deletionsLog=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0)); renderJournal(); });
   onValue(ref(db, "adminLogs/actions"), snap => { actionLogs=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0)); renderJournal(); });
+  onValue(ref(db, "adminSettings/config"), snap => {
+    const cfg = snap.val() || {};
+    adminSettings = {...adminSettings, ...cfg};
+    if(qs("toastPositionSelect")) qs("toastPositionSelect").value = String(adminSettings.toastPosition ?? "top-right");
+    if(qs("autoRefreshSecSelect")) qs("autoRefreshSecSelect").value = String(adminSettings.autoRefreshSec ?? 0);
+    if(qs("offlineMinutesSelect")) qs("offlineMinutesSelect").value = String(adminSettings.offlineMinutes ?? 5);
+    if(qs("speedSmoothingSelect")) qs("speedSmoothingSelect").value = adminSettings.speedSmoothing || "off";
+    if(qs("hideAccuracyAboveInput")) qs("hideAccuracyAboveInput").value = Number(adminSettings.hideAccuracyAbove ?? 20);
+    if(qs("pdfPointLimitInput")) qs("pdfPointLimitInput").value = Number(adminSettings.pdfPointLimit ?? 1000);
+    if(qs("moveSpeedThresholdInput")) qs("moveSpeedThresholdInput").value = Number(adminSettings.moveSpeedThresholdKmh ?? 3);
+    if(qs("stopLongMinutesInput")) qs("stopLongMinutesInput").value = Number(adminSettings.stopLongMinutes ?? 5);
+    if(qs("impossibleSpeedKmhInput")) qs("impossibleSpeedKmhInput").value = Number(adminSettings.impossibleSpeedKmh ?? 250);
+    if(qs("junkAccuracyMetersInput")) qs("junkAccuracyMetersInput").value = Number(adminSettings.junkAccuracyMeters ?? 100);
+    applyRemoteGpsProfiles(cfg.gpsProfiles, "приложения");
+    applyToastPosition();
+    updateStatusAlgorithmCard();
+    setupAutoRefresh();
+  });
 
   await loadAdminSettings();
   await loadUsers();
