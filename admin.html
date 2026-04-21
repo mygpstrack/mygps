@@ -594,18 +594,28 @@
           </div>
         </div>
 
+        <div class="toolbar" style="margin-top:12px">
+          <button id="saveAdminUiSettingsBtn" class="success">Сохранить настройки</button>
+        </div>
+
         <div class="card" style="margin-top:12px">
-          <h3>Лимиты Firebase</h3>
-          <div class="grid4">
-            <div><div class="label">Хранилище, GB</div><input id="storageLimitGbInput" type="number" min="0" step="0.1" value="1"></div>
-            <div><div class="label">Трафик, GB/месяц</div><input id="trafficLimitGbInput" type="number" min="0" step="0.1" value="10"></div>
-            <div><div class="label">Accuracy max</div><input id="gpsAccuracyMaxInput" type="number" min="1" max="100" step="1" value="100"></div>
-            <div><div class="label">Нереальная скорость, км/ч</div><input id="gpsImpossibleSpeedInput" type="number" min="50" max="500" step="1" value="250"></div>
+          <h3>Частота GPS</h3>
+          <div class="notice smallMuted">Тот же набор режимов, что и в приложении. Синхронизация идёт через <span class="mono">adminSettings/config/gpsProfiles</span>.</div>
+          <div class="toolbar" style="margin-top:10px">
+            <button id="gpsPresetFastBtn" class="secondary">Точно</button>
+            <button id="gpsPresetBalancedBtn" class="secondary">Баланс</button>
+            <button id="gpsPresetEcoBtn" class="secondary">Экономно</button>
           </div>
-          <div class="toolbar"><button id="saveSettingsBtn" class="success">Сохранить настройки</button></div>
-          <div class="grid2">
-            <div class="stat"><div class="label">Storage</div><div class="value" id="storageUsageText">—</div><div class="progress"><span id="storageUsageBar" style="width:0%"></span></div></div>
-            <div class="stat"><div class="label">Traffic</div><div class="value" id="trafficUsageText">—</div><div class="progress"><span id="trafficUsageBar" style="width:0%"></span></div></div>
+          <div class="grid4" style="margin-top:12px">
+            <div><div class="label">Обычный режим — интервал</div><select id="gpsNormalIntervalSelect"></select></div>
+            <div><div class="label">Обычный режим — дистанция</div><select id="gpsNormalDistanceSelect"></select></div>
+            <div><div class="label">Live — интервал</div><select id="gpsLiveIntervalSelect"></select></div>
+            <div><div class="label">Live — дистанция</div><select id="gpsLiveDistanceSelect"></select></div>
+          </div>
+          <div class="notice" id="gpsProfileCurrentText" style="margin-top:12px">Сейчас: обычный 5s / 3м • live 3s / 2м</div>
+          <div class="toolbar">
+            <button id="gpsResetDefaultsBtn" class="secondary">Сбросить GPS по умолчанию</button>
+            <button id="saveGpsSettingsBtn" class="success">Сохранить настройки GPS</button>
           </div>
         </div>
 
@@ -685,7 +695,11 @@ let adminSettings = {
   gpsImpossibleSpeed: 250,
   speedSmoothing: "off",
   hideAccuracyAbove: 20,
-  pdfPointLimit: 1000
+  pdfPointLimit: 1000,
+  gpsProfiles: {
+    normal: { intervalMs: 5000, minDistanceM: 3 },
+    live: { intervalMs: 3000, minDistanceM: 2 }
+  }
 };
 let errorLogs = [];
 let autoRefreshTimer = null;
@@ -707,6 +721,9 @@ const errText = e => e?.message || e?.code || String(e);
 let nowWeatherCache = null;
 let nowWeatherFetchedAt = 0;
 let nowWeatherCoords = null;
+let historyMapAutoFit = true;
+let historyMapHasInitialFit = false;
+let historyPointMarkers = [];
 
 function windDirShort(deg){
   const dirs=["С","СВ","В","ЮВ","Ю","ЮЗ","З","СЗ"];
@@ -880,46 +897,132 @@ function setWeatherChip(id, city, icon, meta){
   el._flashTimer = setTimeout(()=>el.classList.remove("flash"), 900);
 }
 
+function parseWeatherCurrent(data){
+  const c = data?.current || data?.current_weather || null;
+  if(!c) return null;
+  const temperature = Number(c.temperature_2m ?? c.temperature);
+  const windspeed = Number(c.wind_speed_10m ?? c.windspeed);
+  const winddirection = Number(c.wind_direction_10m ?? c.winddirection);
+  const weathercode = Number(c.weather_code ?? c.weathercode ?? 3);
+  if(!Number.isFinite(temperature)) return null;
+  return { temperature, windspeed, winddirection, weathercode };
+}
+
+function parseWttrWeather(data){
+  const cc = data?.current_condition?.[0];
+  if(!cc) return null;
+  const temperature = Number(cc.temp_C);
+  const windspeedKmh = Number(cc.windspeedKmph);
+  const winddirection = Number(cc.winddirDegree);
+  const desc = String(cc.weatherDesc?.[0]?.value || '').toLowerCase();
+  let weathercode = 3;
+  if(desc.includes('sun') || desc.includes('clear')) weathercode = 0;
+  else if(desc.includes('partly')) weathercode = 2;
+  else if(desc.includes('cloud')) weathercode = 3;
+  else if(desc.includes('fog') || desc.includes('mist')) weathercode = 45;
+  else if(desc.includes('snow') || desc.includes('sleet') || desc.includes('ice')) weathercode = 71;
+  else if(desc.includes('thunder')) weathercode = 95;
+  else if(desc.includes('rain') || desc.includes('drizzle') || desc.includes('shower')) weathercode = 61;
+  if(!Number.isFinite(temperature)) return null;
+  return {
+    temperature,
+    windspeed: Number.isFinite(windspeedKmh) ? (windspeedKmh / 3.6) : 0,
+    winddirection: Number.isFinite(winddirection) ? winddirection : 0,
+    weathercode
+  };
+}
+
+async function fetchJsonWithTimeout(url, timeoutMs = 8000){
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try{
+    const r = await fetch(url, {
+      method: 'GET',
+      mode: 'cors',
+      cache: 'no-store',
+      headers: { 'Accept': 'application/json' },
+      signal: controller.signal
+    });
+    if(!r.ok) throw new Error(`weather ${r.status}`);
+    return await r.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function fetchWeatherPayload(lat, lon){
+  const providers = [
+    async () => {
+      const j = await fetchJsonWithTimeout(`https://wttr.in/${encodeURIComponent(`${lat},${lon}`)}?format=j1`);
+      const w = parseWttrWeather(j);
+      if(!w) throw new Error('wttr empty');
+      return w;
+    },
+    async () => {
+      const j = await fetchJsonWithTimeout(`https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(lat)}&longitude=${encodeURIComponent(lon)}&current=temperature_2m,weather_code,wind_speed_10m,wind_direction_10m&timezone=auto`);
+      const w = parseWeatherCurrent(j);
+      if(!w) throw new Error('open-meteo current empty');
+      return w;
+    },
+    async () => {
+      const j = await fetchJsonWithTimeout(`https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(lat)}&longitude=${encodeURIComponent(lon)}&current_weather=true&timezone=auto`);
+      const w = parseWeatherCurrent(j);
+      if(!w) throw new Error('open-meteo current_weather empty');
+      return w;
+    }
+  ];
+
+  let lastError = null;
+  for(const provider of providers){
+    try{
+      return await provider();
+    }catch(e){
+      lastError = e;
+      console.warn('weather provider failed', e);
+    }
+  }
+  throw lastError || new Error('weather fetch failed');
+}
+
 async function updateRigaWeather(){
   try{
-    const lat=56.95, lon=24.10;
-    const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`);
-    const j = await r.json();
-    const w = j.current_weather;
-    if(!w) return;
+    const lat = 56.95, lon = 24.10;
+    const w = await fetchWeatherPayload(lat, lon);
     const dirs=["С","СВ","В","ЮВ","Ю","ЮЗ","З","СЗ"];
-    const d=dirs[Math.round(w.winddirection/45)%8];
-    setWeatherChip("headerWeatherStatic", "Riga", weatherIcon(w.weathercode), `+${Math.round(w.temperature)}°C • ${d} ${Math.round(w.windspeed)} м/с`);
-  }catch{}
+    const d=dirs[Math.round(Number(w.winddirection || 0)/45)%8];
+    setWeatherChip("headerWeatherStatic", "Riga", weatherIcon(w.weathercode), `${Math.round(Number(w.temperature || 0)) > 0 ? '+' : ''}${Math.round(Number(w.temperature || 0))}°C • ${d} ${Math.round(Number(w.windspeed || 0))} м/с`);
+  }catch(e){
+    setWeatherChip("headerWeatherStatic", "Riga", weatherIcon(3), "Нет данных");
+  }
 }
 
 async function updateHeaderWeather(){
-  if(!window.currentPointForHeader) return;
-  const {lat, lon} = window.currentPointForHeader;
+  if(!window.currentPointForHeader || !Number.isFinite(Number(window.currentPointForHeader.lat)) || !Number.isFinite(Number(window.currentPointForHeader.lon))){
+    setWeatherChip("headerWeatherDynamic", "По точке", weatherIcon(3), "Ожидание координат…");
+    return;
+  }
+
+  const lat = Number(window.currentPointForHeader.lat);
+  const lon = Number(window.currentPointForHeader.lon);
+
   try{
     let city = "По точке";
     try{
-      const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&accept-language=en`);
-      const geo = await geoRes.json();
-      const a = geo?.address || {};
-      city =
-        a.city ||
-        a.town ||
-        a.village ||
-        a.municipality ||
-        a.suburb ||
-        a.county ||
-        "По точке";
+      const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&accept-language=ru`, { cache: "no-store" });
+      if(geoRes.ok){
+        const geo = await geoRes.json();
+        const a = geo?.address || {};
+        city = a.city || a.town || a.village || a.municipality || a.suburb || a.county || "По точке";
+      }
     }catch(e){}
 
-    const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`);
-    const j = await r.json();
-    const w = j.current_weather;
-    if(!w) return;
+    const w = await fetchWeatherPayload(lat, lon);
     const dirs=["С","СВ","В","ЮВ","Ю","ЮЗ","З","СЗ"];
-    const d=dirs[Math.round(w.winddirection/45)%8];
-    setWeatherChip("headerWeatherDynamic", city, weatherIcon(w.weathercode), `+${Math.round(w.temperature)}°C • ${d} ${Math.round(w.windspeed)} м/с`);
-  }catch{}
+    const d=dirs[Math.round(Number(w.winddirection || 0)/45)%8];
+    setWeatherChip("headerWeatherDynamic", city, weatherIcon(w.weathercode), `${Math.round(Number(w.temperature || 0)) > 0 ? '+' : ''}${Math.round(Number(w.temperature || 0))}°C • ${d} ${Math.round(Number(w.windspeed || 0))} м/с`);
+  }catch(e){
+    setWeatherChip("headerWeatherDynamic", "По точке", weatherIcon(3), "Нет данных");
+  }
 }
 
 async function updateNowWeather(lat, lon){
@@ -1414,7 +1517,7 @@ const startMarker = L.circleMarker([56.95,24.10], {radius:8,color:"#16a34a",fill
 const endMarker = L.circleMarker([56.95,24.10], {radius:8,color:"#dc2626",fillColor:"#dc2626",fillOpacity:1}).addTo(historyMap);
 let selectedPointMarker = null;
 
-function clearRouteSegments(){ routeSegments.forEach(s=>historyMap.removeLayer(s)); routeSegments=[]; }
+function clearRouteSegments(){ routeSegments.forEach(s=>historyMap.removeLayer(s)); routeSegments=[]; historyPointMarkers.forEach(m=>historyMap.removeLayer(m)); historyPointMarkers=[]; }
 
 function updateUsage(){
   const visibleHistory = getVisibleHistoryPoints();
@@ -1581,18 +1684,36 @@ function filteredHistory(){
 async function updateHistoryMap(points){
   clearRouteSegments();
   if(selectedPointMarker){ historyMap.removeLayer(selectedPointMarker); selectedPointMarker=null; }
-  const latlngs=points.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]);
+  const ordered = [...(points || [])].filter(p=>p && p.latitude!=null && p.longitude!=null).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+  const latlngs=ordered.map(p=>[Number(p.latitude),Number(p.longitude)]);
   if(!latlngs.length) return;
-  for(let i=1;i<points.length;i++){
-    const a=[Number(points[i-1].latitude), Number(points[i-1].longitude)];
-    const b=[Number(points[i].latitude), Number(points[i].longitude)];
+  for(let i=1;i<ordered.length;i++){
+    const a=[Number(ordered[i-1].latitude), Number(ordered[i-1].longitude)];
+    const b=[Number(ordered[i].latitude), Number(ordered[i].longitude)];
     const seg=L.polyline([a,b], {weight:5,color:"#60a5fa"}).addTo(historyMap);
     routeSegments.push(seg);
   }
-  const first=points[0], last=points[points.length-1];
+  for(const p of ordered){
+    const lat = Number(p.latitude), lon = Number(p.longitude);
+    const pointMarker = L.circleMarker([lat,lon], {
+      radius: 4,
+      color: "#93c5fd",
+      fillColor: "#3b82f6",
+      fillOpacity: 0.9,
+      weight: 1
+    }).addTo(historyMap);
+    pointMarker.on('click', async ()=>{ await selectHistoryPoint(p); });
+    historyPointMarkers.push(pointMarker);
+  }
+  const first=ordered[0], last=ordered[ordered.length-1];
   startMarker.setLatLng([Number(first.latitude), Number(first.longitude)]).bindPopup("Старт");
   endMarker.setLatLng([Number(last.latitude), Number(last.longitude)]).bindPopup("Финиш");
-  if(latlngs.length===1) historyMap.setView(latlngs[0],16); else historyMap.fitBounds(L.latLngBounds(latlngs), {padding:[30,30]});
+  startMarker.off('click').on('click', async ()=>{ await selectHistoryPoint(first); });
+  endMarker.off('click').on('click', async ()=>{ await selectHistoryPoint(last); });
+  if(historyMapAutoFit || !historyMapHasInitialFit){
+    if(latlngs.length===1) historyMap.setView(latlngs[0],16); else historyMap.fitBounds(L.latLngBounds(latlngs), {padding:[30,30]});
+    historyMapHasInitialFit = true;
+  }
   const startAddr = await reverseGeocode(Number(first.latitude), Number(first.longitude));
   const endAddr = await reverseGeocode(Number(last.latitude), Number(last.longitude));
   qs("startAddress").textContent = startAddr;
@@ -1757,7 +1878,7 @@ async function updateNowUI(point, sourceLabel){
     updateRigaWeather();
   } else {
     qs("nowAddress").textContent = "—";
-    
+    setWeatherChip("headerWeatherDynamic", "По точке", weatherIcon(3), "Ожидание координат…");
   }
   const freshness = point?.timestamp ? Date.now() - Number(point.timestamp) : null;
   const isOnline = freshness != null && freshness <= 3*60*1000;
@@ -1810,6 +1931,94 @@ async function updateNowFromAvailableSources(){
 }
 
 
+
+const gpsIntervalValues = [1000,3000,5000,10000,15000,30000,60000];
+const gpsIntervalLabels = ["1 сек","3 сек","5 сек","10 сек","15 сек","30 сек","60 сек"];
+const gpsDistanceValues = [1,3,5,10,20,50];
+const gpsDistanceLabels = ["1 м","3 м","5 м","10 м","20 м","50 м"];
+
+function ensureGpsProfiles(){
+  adminSettings.gpsProfiles = adminSettings.gpsProfiles || {};
+  adminSettings.gpsProfiles.normal = adminSettings.gpsProfiles.normal || { intervalMs: 5000, minDistanceM: 3 };
+  adminSettings.gpsProfiles.live = adminSettings.gpsProfiles.live || { intervalMs: 3000, minDistanceM: 2 };
+}
+function fillSelectOptions(selectId, values, labels){
+  const el = qs(selectId);
+  if(!el || el.options.length) return;
+  labels.forEach((label, idx)=>{
+    const opt = document.createElement('option');
+    opt.value = String(values[idx]);
+    opt.textContent = label;
+    el.appendChild(opt);
+  });
+}
+function initGpsSettingsControls(){
+  fillSelectOptions('gpsNormalIntervalSelect', gpsIntervalValues, gpsIntervalLabels);
+  fillSelectOptions('gpsLiveIntervalSelect', gpsIntervalValues, gpsIntervalLabels);
+  fillSelectOptions('gpsNormalDistanceSelect', gpsDistanceValues, gpsDistanceLabels);
+  fillSelectOptions('gpsLiveDistanceSelect', gpsDistanceValues, gpsDistanceLabels);
+}
+function setGpsProfileControlsFromState(){
+  ensureGpsProfiles();
+  initGpsSettingsControls();
+  if(qs('gpsNormalIntervalSelect')) qs('gpsNormalIntervalSelect').value = String(adminSettings.gpsProfiles.normal.intervalMs || 5000);
+  if(qs('gpsNormalDistanceSelect')) qs('gpsNormalDistanceSelect').value = String(adminSettings.gpsProfiles.normal.minDistanceM || 3);
+  if(qs('gpsLiveIntervalSelect')) qs('gpsLiveIntervalSelect').value = String(adminSettings.gpsProfiles.live.intervalMs || 3000);
+  if(qs('gpsLiveDistanceSelect')) qs('gpsLiveDistanceSelect').value = String(adminSettings.gpsProfiles.live.minDistanceM || 2);
+  refreshGpsProfileCurrentText();
+}
+function readGpsProfilesFromControls(){
+  return {
+    normal: {
+      intervalMs: Number(qs('gpsNormalIntervalSelect')?.value || 5000),
+      minDistanceM: Number(qs('gpsNormalDistanceSelect')?.value || 3)
+    },
+    live: {
+      intervalMs: Number(qs('gpsLiveIntervalSelect')?.value || 3000),
+      minDistanceM: Number(qs('gpsLiveDistanceSelect')?.value || 2)
+    }
+  };
+}
+function refreshGpsProfileCurrentText(){
+  const box = qs('gpsProfileCurrentText');
+  if(!box) return;
+  const profiles = readGpsProfilesFromControls();
+  box.textContent = `Сейчас: обычный ${profiles.normal.intervalMs / 1000}s / ${profiles.normal.minDistanceM}м • live ${profiles.live.intervalMs / 1000}s / ${profiles.live.minDistanceM}м`;
+}
+function applyGpsPreset(kind){
+  initGpsSettingsControls();
+  if(kind === 'fast'){
+    qs('gpsNormalIntervalSelect').value = '1000';
+    qs('gpsNormalDistanceSelect').value = '1';
+    qs('gpsLiveIntervalSelect').value = '1000';
+    qs('gpsLiveDistanceSelect').value = '1';
+  } else if(kind === 'balanced'){
+    qs('gpsNormalIntervalSelect').value = '5000';
+    qs('gpsNormalDistanceSelect').value = '3';
+    qs('gpsLiveIntervalSelect').value = '3000';
+    qs('gpsLiveDistanceSelect').value = '3';
+  } else if(kind === 'eco'){
+    qs('gpsNormalIntervalSelect').value = '30000';
+    qs('gpsNormalDistanceSelect').value = '20';
+    qs('gpsLiveIntervalSelect').value = '15000';
+    qs('gpsLiveDistanceSelect').value = '10';
+  }
+  refreshGpsProfileCurrentText();
+}
+function bindGpsSettingsControls(){
+  ['gpsNormalIntervalSelect','gpsNormalDistanceSelect','gpsLiveIntervalSelect','gpsLiveDistanceSelect'].forEach(id=>{
+    if(qs(id)) qs(id).onchange = refreshGpsProfileCurrentText;
+  });
+  if(qs('gpsPresetFastBtn')) qs('gpsPresetFastBtn').onclick = ()=>applyGpsPreset('fast');
+  if(qs('gpsPresetBalancedBtn')) qs('gpsPresetBalancedBtn').onclick = ()=>applyGpsPreset('balanced');
+  if(qs('gpsPresetEcoBtn')) qs('gpsPresetEcoBtn').onclick = ()=>applyGpsPreset('eco');
+  if(qs('gpsResetDefaultsBtn')) qs('gpsResetDefaultsBtn').onclick = async()=>{
+    adminSettings.gpsProfiles = { normal:{ intervalMs:5000, minDistanceM:3 }, live:{ intervalMs:3000, minDistanceM:2 } };
+    setGpsProfileControlsFromState();
+    await safeAction("Сброс настроек GPS", saveGpsSettings, "Настройки GPS сброшены");
+  };
+}
+
 async function ensureUserMeta(user){
   if(!user?.uid) return;
   const r = ref(db, `users/${user.uid}`);
@@ -1826,32 +2035,52 @@ async function loadAdminSettings(){
     adminSettings = {...adminSettings, ...(snap.val()||{})};
   }catch(e){ recordError("loadAdminSettings", e); }
   ["toastPositionSelect","autoRefreshSecSelect","offlineMinutesSelect","autoCleanModeSelect"].forEach(id=>{ if(qs(id)) qs(id).value = String(adminSettings[{toastPositionSelect:"toastPosition",autoRefreshSecSelect:"autoRefreshSec",offlineMinutesSelect:"offlineMinutes",autoCleanModeSelect:"autoCleanMode"}[id]]); });
-  if(qs("storageLimitGbInput")) qs("storageLimitGbInput").value = adminSettings.storageLimitGb;
-  if(qs("trafficLimitGbInput")) qs("trafficLimitGbInput").value = adminSettings.trafficLimitGb;
   if(qs("gpsAccuracyMaxInput")) qs("gpsAccuracyMaxInput").value = adminSettings.gpsAccuracyMax;
   if(qs("gpsImpossibleSpeedInput")) qs("gpsImpossibleSpeedInput").value = adminSettings.gpsImpossibleSpeed;
   if(qs("speedSmoothingSelect")) qs("speedSmoothingSelect").value = adminSettings.speedSmoothing || "off";
   if(qs("hideAccuracyAboveInput")) qs("hideAccuracyAboveInput").value = Number(adminSettings.hideAccuracyAbove ?? 20);
   if(qs("pdfPointLimitInput")) qs("pdfPointLimitInput").value = Number(adminSettings.pdfPointLimit ?? 1000);
+  setGpsProfileControlsFromState();
   applyToastPosition();
   setupAutoRefresh();
 }
-async function saveAdminSettings(){
+async function saveAdminUiSettings(){
   adminSettings.toastPosition = qs("toastPositionSelect").value;
   adminSettings.autoRefreshSec = Number(qs("autoRefreshSecSelect").value||0);
   adminSettings.offlineMinutes = Number(qs("offlineMinutesSelect").value||5);
   adminSettings.autoCleanMode = qs("autoCleanModeSelect").value;
-  adminSettings.storageLimitGb = Number(qs("storageLimitGbInput").value||1);
-  adminSettings.trafficLimitGb = Number(qs("trafficLimitGbInput").value||10);
   adminSettings.gpsAccuracyMax = Number(qs("gpsAccuracyMaxInput").value||100);
   adminSettings.gpsImpossibleSpeed = Number(qs("gpsImpossibleSpeedInput").value||250);
   adminSettings.speedSmoothing = qs("speedSmoothingSelect")?.value || "off";
   adminSettings.hideAccuracyAbove = Number(qs("hideAccuracyAboveInput")?.value || 20);
   adminSettings.pdfPointLimit = Number(qs("pdfPointLimitInput")?.value || 1000);
-  await set(ref(db,"adminSettings/config"), adminSettings);
+
+  const payload = {
+    toastPosition: adminSettings.toastPosition,
+    autoRefreshSec: adminSettings.autoRefreshSec,
+    offlineMinutes: adminSettings.offlineMinutes,
+    autoCleanMode: adminSettings.autoCleanMode,
+    gpsAccuracyMax: adminSettings.gpsAccuracyMax,
+    gpsImpossibleSpeed: adminSettings.gpsImpossibleSpeed,
+    speedSmoothing: adminSettings.speedSmoothing,
+    hideAccuracyAbove: adminSettings.hideAccuracyAbove,
+    pdfPointLimit: adminSettings.pdfPointLimit
+  };
+
+  await update(ref(db,"adminSettings/config"), payload);
   updateUsageBars();
+  applyToastPosition();
   setupAutoRefresh();
 }
+
+async function saveGpsSettings(){
+  adminSettings.gpsProfiles = readGpsProfilesFromControls();
+  await update(ref(db,"adminSettings/config"), {
+    gpsProfiles: adminSettings.gpsProfiles
+  });
+  refreshGpsProfileCurrentText();
+}
+
 function setupAutoRefresh(){
   if(autoRefreshTimer) clearInterval(autoRefreshTimer);
   const sec = Number(adminSettings.autoRefreshSec||0);
@@ -2805,7 +3034,7 @@ if (qs("range24hBtn")) qs("range24hBtn").onclick = ()=>{ const now=new Date(), s
 if (qs("applyFiltersBtn")) qs("applyFiltersBtn").onclick = renderHistory;
 if (qs("resetFiltersBtn")) qs("resetFiltersBtn").onclick = ()=>{ qs("maxAccuracyFilter").value=""; qs("minSpeedFilter").value=""; qs("maxSpeedFilter").value=""; qs("hideJunkToggle").checked=false; renderHistory(); };
 if (qs("refreshHistoryBtn")) qs("refreshHistoryBtn").onclick = async()=>{ await loadAllData(); showToast("История обновлена","success"); };
-if (qs("fitRouteBtn")) qs("fitRouteBtn").onclick = ()=>{ const pts=currentFiltered.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]); if(pts.length) historyMap.fitBounds(L.latLngBounds(pts), {padding:[30,30]}); };
+if (qs("fitRouteBtn")) qs("fitRouteBtn").onclick = ()=>{ historyMapAutoFit = true; const pts=currentFiltered.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]); if(pts.length) historyMap.fitBounds(L.latLngBounds(pts), {padding:[30,30]}); };
 qs("deleteRangeBtn").onclick=async()=>{
   const pts=filteredHistory();
   if(!pts.length) return showToast("Нет точек в выбранном диапазоне.","warn");
@@ -2907,7 +3136,10 @@ qs("renameUserBtn").onclick=async()=>{
     showToast("Имя сохранено","success");
   }catch(e){ recordError("renameUser", e); showToast("Ошибка сохранения имени","error"); }
 };
-if (qs("saveSettingsBtn")) qs("saveSettingsBtn").onclick = async()=>{ await safeAction("Сохранение настроек", saveAdminSettings, "Настройки сохранены"); };
+bindGpsSettingsControls();
+setGpsProfileControlsFromState();
+if (qs("saveAdminUiSettingsBtn")) qs("saveAdminUiSettingsBtn").onclick = async()=>{ await safeAction("Сохранение настроек", saveAdminUiSettings, "Настройки сохранены"); };
+if (qs("saveGpsSettingsBtn")) qs("saveGpsSettingsBtn").onclick = async()=>{ await safeAction("Сохранение настроек GPS", saveGpsSettings, "Настройки GPS сохранены"); };
 if (qs("backupNowBtn")) qs("backupNowBtn").onclick = async()=>{ await safeAction("Создание backup", async()=>{ await createMonthlyBackup(true); await renderBackups(); }, "Backup создан"); };
 qs("downloadBackupBtn").onclick=async()=>{
   const payload = {history:historyByUid, live:liveByUid, liveSessions:allSessions, users:usersMeta, adminSettings};
@@ -2922,7 +3154,7 @@ if (qs("openNowMapsBtn")) qs("openNowMapsBtn").onclick = ()=>{ const p=getSelect
 if (qs("exportTodayBtn")) qs("exportTodayBtn").onclick = ()=>{ const now=new Date(), start=new Date(); start.setHours(0,0,0,0); setDateTimeRange(start, now); renderHistory(); persistUiState(); };
 if (qs("exportYesterdayBtn")) qs("exportYesterdayBtn").onclick = ()=>{ const start=new Date(); start.setDate(start.getDate()-1); start.setHours(0,0,0,0); const end=new Date(start); end.setHours(23,59,59,999); setDateTimeRange(start,end); renderHistory(); persistUiState(); };
 if (qs("exportWeekBtn")) qs("exportWeekBtn").onclick = ()=>{ const now=new Date(), start=new Date(); start.setDate(start.getDate()-7); setDateTimeRange(start,now); renderHistory(); persistUiState(); };
-if (qs("lastRouteBtn")) qs("lastRouteBtn").onclick = ()=>{ const pts=getSelectedHistoryPoints(); if(!pts.length) return showToast("Нет истории","warn"); const last=pts[pts.length-1]; let i=pts.length-1; while(i>0 && (Number(pts[i].speed||0)>2 || Number(pts[i-1].speed||0)>2)) i--; const start=new Date(Number(pts[Math.max(0,i)].timestamp||Date.now())-5*60*1000); const end=new Date(Number(last.timestamp||Date.now())); setDateTimeRange(start,end); renderHistory(); persistUiState(); showToast("Выбран последний маршрут","info"); };
+if (qs("lastRouteBtn")) qs("lastRouteBtn").onclick = ()=>{ historyMapAutoFit = true; const pts=getSelectedHistoryPoints(); if(!pts.length) return showToast("Нет истории","warn"); const last=pts[pts.length-1]; let i=pts.length-1; while(i>0 && (Number(pts[i].speed||0)>2 || Number(pts[i-1].speed||0)>2)) i--; const start=new Date(Number(pts[Math.max(0,i)].timestamp||Date.now())-5*60*1000); const end=new Date(Number(last.timestamp||Date.now())); setDateTimeRange(start,end); renderHistory(); persistUiState(); showToast("Выбран последний маршрут","info"); };
 
 function getExportPoints(){
   let pts = qs("expCurrentFilters")?.checked ? filteredHistory() : getVisibleHistoryPoints();
@@ -2993,6 +3225,14 @@ onAuthStateChanged(auth, async user => {
   await loadSessions();
   await renderBackups();
   await createMonthlyBackup(false);
+  updateRigaWeather();
+  const headerPoint = getSelectedLiveData()?.lastPoint || getSelectedHistoryPoints().slice(-1)[0];
+  if(headerPoint && headerPoint.latitude != null && headerPoint.longitude != null){
+    window.currentPointForHeader = { lat: Number(headerPoint.latitude), lon: Number(headerPoint.longitude) };
+    updateHeaderWeather();
+  } else {
+    setWeatherChip("headerWeatherDynamic", "По точке", weatherIcon(3), "Ожидание координат…");
+  }
 });
 </script>
 </body></html>
