@@ -246,8 +246,7 @@ let displayPoint=null;
 let animationFrameId=null;
 let lastPausedState=null;
 let currentSessionMeta=null;
-let currentSessionData=null;
-const DEFAULT_STATUS_CONFIG = {
+let runtimeSettings = {
   moveSpeedThresholdKmh: 3,
   stopLongMinutes: 5,
   offlineMinutes: 5,
@@ -427,87 +426,42 @@ function getMoveType(points, currentPoint){
   return 'Мото';
 }
 
-function getStatusConfig(sessionData){
-  const sessionCfg = sessionData?.public?.statusConfig || sessionData?.meta?.statusConfig || sessionData?.statusConfig || {};
-  return {
-    moveSpeedThresholdKmh: Number(sessionCfg.moveSpeedThresholdKmh ?? DEFAULT_STATUS_CONFIG.moveSpeedThresholdKmh),
-    stopLongMinutes: Number(sessionCfg.stopLongMinutes ?? DEFAULT_STATUS_CONFIG.stopLongMinutes),
-    offlineMinutes: Number(sessionCfg.offlineMinutes ?? DEFAULT_STATUS_CONFIG.offlineMinutes),
-    junkAccuracyMeters: Number(sessionCfg.junkAccuracyMeters ?? DEFAULT_STATUS_CONFIG.junkAccuracyMeters),
-    impossibleSpeedKmh: Number(sessionCfg.impossibleSpeedKmh ?? DEFAULT_STATUS_CONFIG.impossibleSpeedKmh)
-  };
-}
-
-function isUsableStatusPoint(p, cfg){
-  if(!p) return false;
-  if(!Number.isFinite(Number(p.lat)) || !Number.isFinite(Number(p.lng))) return false;
-  const accuracy = Number(p.accuracy || 0);
-  const speed = Number(p.speed || 0);
-  if(accuracy > Number(cfg.junkAccuracyMeters || 100)) return false;
-  if(speed > Number(cfg.impossibleSpeedKmh || 250)) return false;
-  return true;
-}
-
-function getStationaryMs(points, currentPoint, cfg){
-  const arr = Array.isArray(points) ? [...points] : [];
-  if(!arr.length) return 0;
-  const ordered = arr
-    .filter(Boolean)
-    .sort((a,b)=>Number(a.ts||0)-Number(b.ts||0));
-
-  let lastMovingTs = null;
-  for(let i = ordered.length - 1; i >= 0; i--){
-    const p = ordered[i];
-    if(!isUsableStatusPoint(p, cfg)) continue;
-    const speed = Number(p.speed || 0);
-    if(speed >= Number(cfg.moveSpeedThresholdKmh || 3)){
-      lastMovingTs = Number(p.ts || 0);
-      break;
-    }
-  }
-
-  if(lastMovingTs){
-    return Math.max(0, Number(currentPoint?.ts || 0) - lastMovingTs);
-  }
-
-  const oldestTs = Number(ordered[0]?.ts || currentPoint?.ts || 0);
-  return Math.max(0, Number(currentPoint?.ts || 0) - oldestTs);
-}
-
-function getStatusMeta(p, sessionMeta, routePoints=[], sessionData=null){
+function getStatusMeta(p, sessionMeta){
   if(sessionMeta?.paused){
-    return {status:'⏸ Приостановлено', signal:'—', type:'paused', color:'#3b82f6'};
+    return {status:'⏸ Пауза', signal:'—', type:'paused', color:'#3b82f6'};
   }
 
-  const cfg = getStatusConfig(sessionData);
-  const ageMs = (p?.ts ? Date.now() - Number(p.ts) : Number.MAX_SAFE_INTEGER);
-  const offlineMs = Number(cfg.offlineMinutes || 5) * 60 * 1000;
+  const ageMs = p?.ts ? Math.max(0, Date.now() - Number(p.ts || 0)) : Number.POSITIVE_INFINITY;
+  const speed = Number(p?.speed || 0);
+  const accuracy = Number(p?.accuracy || 0);
 
-  if(ageMs > offlineMs){
+  const moveThreshold = Number(runtimeSettings?.moveSpeedThresholdKmh || 3);
+  const stopLongMinutes = Number(runtimeSettings?.stopLongMinutes || 5);
+  const offlineMinutes = Number(runtimeSettings?.offlineMinutes || 5);
+  const junkAccuracyMeters = Number(runtimeSettings?.junkAccuracyMeters || 100);
+  const impossibleSpeedKmh = Number(runtimeSettings?.impossibleSpeedKmh || 250);
+
+  const offlineMs = offlineMinutes * 60 * 1000;
+  const stopLongMs = stopLongMinutes * 60 * 1000;
+
+  if(!p || !Number.isFinite(Number(p.ts || 0)) || ageMs > offlineMs){
     return {status:'📡 Нет сигнала', signal:'Потерян', type:'offline', color:'#94a3b8'};
   }
 
-  if(!isUsableStatusPoint(p, cfg)){
-    return {status:'📡 Нет сигнала', signal:'Слабый GPS', type:'offline', color:'#94a3b8'};
+  const isJunk = (accuracy > junkAccuracyMeters) || (speed > impossibleSpeedKmh);
+  if(!isJunk && speed >= moveThreshold){
+    return {status:'🚗 Движение', signal:'Есть', type:'moving', color:'#22c55e'};
   }
 
-  const speed = Number(p.speed || 0);
-  if(speed >= Number(cfg.moveSpeedThresholdKmh || 3)){
-    return {status:'🚗 Движение', signal:'Хороший', type:'moving', color:'#22c55e'};
-  }
-
-  const stationaryMs = getStationaryMs(routePoints, p, cfg);
-  const stopLongMs = Number(cfg.stopLongMinutes || 5) * 60 * 1000;
-
-  if(stationaryMs >= stopLongMs){
+  if(ageMs >= stopLongMs){
     return {status:'🅿 Стоянка', signal:'Есть', type:'stop_long', color:'#ef4444'};
   }
 
-  return {status:'⏸ Остановка', signal:'Есть', type:'stop_short', color:'#eab308'};
+  return {status:'⏸ Остановка', signal:'Есть', type:'stop_short', color:'#f59e0b'};
 }
 
-function buildIconHtml(p, sessionMeta, routePoints=[], sessionData=null){
-  const meta=getStatusMeta(p, sessionMeta, routePoints, sessionData);
+function buildIconHtml(p, sessionMeta){
+  const meta=getStatusMeta(p, sessionMeta);
   if(meta.type==='offline'){
     return `<div class="marker-wrap"><div class="marker-circle" style="background:#94a3b8"></div></div>`;
   }
@@ -521,9 +475,9 @@ function buildIconHtml(p, sessionMeta, routePoints=[], sessionData=null){
   return `<div class="marker-wrap"><div class="marker-circle" style="background:${color}"></div></div>`;
 }
 
-function setMarkerIcon(p, sessionMeta, routePoints=[], sessionData=null){
+function setMarkerIcon(p, sessionMeta){
   const icon=L.divIcon({
-    html:buildIconHtml(p, sessionMeta, routePoints, sessionData),
+    html:buildIconHtml(p, sessionMeta),
     className:'',
     iconSize:[24,24],
     iconAnchor:[12,12]
@@ -535,11 +489,11 @@ function setMarkerIcon(p, sessionMeta, routePoints=[], sessionData=null){
   }
 }
 
-function animateMarkerTo(target, sessionMeta, routePoints=[], sessionData=null){
+function animateMarkerTo(target, sessionMeta){
   if(!target) return;
   if(!marker){
     setMarkerIcon(target, sessionMeta);
-    marker=L.marker([target.lat,target.lng],{icon:L.divIcon({html:buildIconHtml(target, sessionMeta, routePoints, sessionData), className:''})}).addTo(map);
+    marker=L.marker([target.lat,target.lng],{icon:L.divIcon({html:buildIconHtml(target, sessionMeta), className:''})}).addTo(map);
     displayPoint = {...target};
     return;
   }
@@ -547,7 +501,7 @@ function animateMarkerTo(target, sessionMeta, routePoints=[], sessionData=null){
   if(!displayPoint){
     displayPoint = {...target};
     marker.setLatLng([target.lat, target.lng]);
-    marker.setIcon(L.divIcon({html:buildIconHtml(target, sessionMeta, routePoints, sessionData), className:'', iconSize:[24,24], iconAnchor:[12,12]}));
+    marker.setIcon(L.divIcon({html:buildIconHtml(target, sessionMeta), className:'', iconSize:[24,24], iconAnchor:[12,12]}));
     return;
   }
 
@@ -564,7 +518,7 @@ function animateMarkerTo(target, sessionMeta, routePoints=[], sessionData=null){
     const lat = start.lat + (end.lat - start.lat) * eased;
     const lng = start.lng + (end.lng - start.lng) * eased;
     marker.setLatLng([lat,lng]);
-    marker.setIcon(L.divIcon({html:buildIconHtml(target, sessionMeta, routePoints, sessionData), className:'', iconSize:[24,24], iconAnchor:[12,12]}));
+    marker.setIcon(L.divIcon({html:buildIconHtml(target, sessionMeta), className:'', iconSize:[24,24], iconAnchor:[12,12]}));
     displayPoint = {...target, lat, lng};
     if(t < 1){
       animationFrameId=requestAnimationFrame(step);
@@ -573,15 +527,15 @@ function animateMarkerTo(target, sessionMeta, routePoints=[], sessionData=null){
   animationFrameId=requestAnimationFrame(step);
 }
 
-function updateUi(p, expiresAt, sessionMeta, moveType, routePoints=[], sessionData=null){
-  const meta=getStatusMeta(p, sessionMeta, routePoints, sessionData);
+function updateUi(p, expiresAt, sessionMeta, moveType){
+  const meta=getStatusMeta(p, sessionMeta);
   const leftMs = sessionMeta?.paused
     ? Math.max(0, Number(sessionMeta?.remainingMs || 0))
     : (expiresAt ? Math.max(0, Number(expiresAt)-Date.now()) : 0);
   const leftText=expiresAt || sessionMeta?.paused ? fmtCountdown(leftMs) : '—';
 
   qs('status').innerText=meta.status;
-  qs('status').style.color = meta.color || '';
+  qs('status').style.color=meta.color || '#fff';
   qs('speed').innerText=(Number(p.speed||0)).toFixed(1)+' км/ч';
   qs('updated').innerText=relTime(p.ts);
   qs('time').innerText=leftText;
@@ -590,13 +544,13 @@ function updateUi(p, expiresAt, sessionMeta, moveType, routePoints=[], sessionDa
   let gpsState='OK';
   const ageMs = Date.now() - Number(p.ts || 0);
   const accuracy = Number(p.accuracy || 0);
-  if(ageMs > 10 * 60 * 1000) gpsState='Нет сигнала';
+  if(ageMs > Number(runtimeSettings?.offlineMinutes || 5) * 60 * 1000) gpsState='Нет сигнала';
   else if(ageMs > 2 * 60 * 1000) gpsState='Точка старая';
-  else if(accuracy > 50) gpsState='Слабый';
+  else if(accuracy > Number(runtimeSettings?.junkAccuracyMeters || 100)) gpsState='Слабый';
   else gpsState='OK';
 
   qs('d_status').innerText=meta.status;
-  qs('d_status').style.color = meta.color || '';
+  qs('d_status').style.color=meta.color || '#fff';
   qs('d_speed').innerText=(Number(p.speed||0)).toFixed(1)+' км/ч';
   qs('d_updated').innerText=fmtClock(p.ts)+' ('+relTime(p.ts)+' назад)';
   qs('d_time').innerText=leftText;
@@ -628,7 +582,6 @@ function applySession(data){
   if(!data){ showEnd('Ссылка не найдена или была удалена.'); return; }
   const meta=data.meta||{};
   currentSessionMeta=meta;
-  currentSessionData=data;
 
   if(lastPausedState!==null && lastPausedState!==!!meta.paused){
     showAlert(meta.paused ? '⏸ Трансляция приостановлена' : '▶️ Трансляция продолжена');
@@ -664,20 +617,19 @@ function applySession(data){
   const livePoint = routePoints[routePoints.length - 1];
   lastPoint = {...livePoint};
 
-  window._lastRoutePoints = routePoints.slice(-30);
   tailPoints = routePoints.slice(-30).map(p=>[p.lat,p.lng]);
   tailLine.setLatLngs(tailPoints);
 
-  setMarkerIcon(livePoint, meta, routePoints, data);
+  setMarkerIcon(livePoint, meta);
   if(!marker){
-    marker=L.marker([livePoint.lat,livePoint.lng],{icon:L.divIcon({html:buildIconHtml(livePoint, meta, routePoints, data), className:'', iconSize:[24,24], iconAnchor:[12,12]})}).addTo(map);
+    marker=L.marker([livePoint.lat,livePoint.lng],{icon:L.divIcon({html:buildIconHtml(livePoint, meta), className:'', iconSize:[24,24], iconAnchor:[12,12]})}).addTo(map);
     displayPoint = {...livePoint};
   }else{
-    animateMarkerTo(livePoint, meta, routePoints, data);
+    animateMarkerTo(livePoint, meta);
   }
 
   const moveType = getMoveType(routePoints, livePoint);
-  updateUi(livePoint, meta.expiresAt, meta, moveType, routePoints, data);
+  updateUi(livePoint, meta.expiresAt, meta, moveType);
   fetchWeather(livePoint.lat, livePoint.lng);
 
   if(follow) map.panTo([livePoint.lat, livePoint.lng], {animate:true});
@@ -777,13 +729,13 @@ ${dir} ветер ${wind} м/с`;
 
 setInterval(() => {
   if(!lastPoint) return;
-  const meta = getStatusMeta(lastPoint, currentSessionMeta, window._lastRoutePoints || [lastPoint], currentSessionData);
+  const meta = getStatusMeta(lastPoint, currentSessionMeta);
   qs('updated').innerText = relTime(lastPoint.ts);
   qs('d_updated').innerText = fmtClock(lastPoint.ts)+' ('+relTime(lastPoint.ts)+' назад)';
   qs('status').innerText = meta.status;
-  qs('status').style.color = meta.color || '';
+  qs('status').style.color = meta.color || '#fff';
   qs('d_status').innerText = meta.status;
-  qs('d_status').style.color = meta.color || '';
+  qs('d_status').style.color = meta.color || '#fff';
   qs('d_signal').innerText = meta.signal;
 
   const leftMs = currentSessionMeta?.paused
@@ -801,6 +753,19 @@ setInterval(() => {
     }
   }
 }, 1000);
+
+
+onValue(ref(db, 'adminSettings'), snap => {
+  const raw = snap.val() || {};
+  const cfg = raw?.config || raw;
+  runtimeSettings = {
+    moveSpeedThresholdKmh: Number(cfg?.moveSpeedThresholdKmh ?? raw?.moveSpeedThresholdKmh ?? 3),
+    stopLongMinutes: Number(cfg?.stopLongMinutes ?? raw?.stopLongMinutes ?? 5),
+    offlineMinutes: Number(cfg?.offlineMinutes ?? raw?.offlineMinutes ?? 5),
+    junkAccuracyMeters: Number(cfg?.junkAccuracyMeters ?? raw?.junkAccuracyMeters ?? 100),
+    impossibleSpeedKmh: Number(cfg?.impossibleSpeedKmh ?? raw?.impossibleSpeedKmh ?? 250)
+  };
+}, () => {});
 
 if(!sessionId){
   showEnd('Неверная ссылка (нет session).');
