@@ -610,7 +610,10 @@
             <div><div class="label">Live — дистанция</div><select id="gpsLiveDistanceSelect"></select></div>
           </div>
           <div class="notice" id="gpsProfileCurrentText" style="margin-top:12px">Сейчас: обычный 5s / 3м • live 3s / 2м</div>
-          <div class="toolbar"><button id="gpsResetDefaultsBtn" class="secondary">Сбросить GPS по умолчанию</button><button id="saveSettingsBtn" class="success">Сохранить настройки</button></div>
+          <div class="toolbar">
+            <button id="gpsResetDefaultsBtn" class="secondary">Сбросить GPS по умолчанию</button>
+            <button id="saveGpsSettingsBtn" class="success">Сохранить настройки GPS</button>
+          </div>
         </div>
 
         <div class="card" style="margin-top:12px">
@@ -2006,9 +2009,10 @@ function bindGpsSettingsControls(){
   if(qs('gpsPresetFastBtn')) qs('gpsPresetFastBtn').onclick = ()=>applyGpsPreset('fast');
   if(qs('gpsPresetBalancedBtn')) qs('gpsPresetBalancedBtn').onclick = ()=>applyGpsPreset('balanced');
   if(qs('gpsPresetEcoBtn')) qs('gpsPresetEcoBtn').onclick = ()=>applyGpsPreset('eco');
-  if(qs('gpsResetDefaultsBtn')) qs('gpsResetDefaultsBtn').onclick = ()=>{
+  if(qs('gpsResetDefaultsBtn')) qs('gpsResetDefaultsBtn').onclick = async()=>{
     adminSettings.gpsProfiles = { normal:{ intervalMs:5000, minDistanceM:3 }, live:{ intervalMs:3000, minDistanceM:2 } };
     setGpsProfileControlsFromState();
+    await safeAction("Сброс настроек GPS", saveGpsSettings, "Настройки GPS сброшены");
   };
 }
 
@@ -2037,7 +2041,7 @@ async function loadAdminSettings(){
   applyToastPosition();
   setupAutoRefresh();
 }
-async function saveAdminSettings(){
+async function saveAdminUiSettings(){
   adminSettings.toastPosition = qs("toastPositionSelect").value;
   adminSettings.autoRefreshSec = Number(qs("autoRefreshSecSelect").value||0);
   adminSettings.offlineMinutes = Number(qs("offlineMinutesSelect").value||5);
@@ -2047,11 +2051,33 @@ async function saveAdminSettings(){
   adminSettings.speedSmoothing = qs("speedSmoothingSelect")?.value || "off";
   adminSettings.hideAccuracyAbove = Number(qs("hideAccuracyAboveInput")?.value || 20);
   adminSettings.pdfPointLimit = Number(qs("pdfPointLimitInput")?.value || 1000);
-  adminSettings.gpsProfiles = readGpsProfilesFromControls();
-  await set(ref(db,"adminSettings/config"), adminSettings);
+
+  const payload = {
+    toastPosition: adminSettings.toastPosition,
+    autoRefreshSec: adminSettings.autoRefreshSec,
+    offlineMinutes: adminSettings.offlineMinutes,
+    autoCleanMode: adminSettings.autoCleanMode,
+    gpsAccuracyMax: adminSettings.gpsAccuracyMax,
+    gpsImpossibleSpeed: adminSettings.gpsImpossibleSpeed,
+    speedSmoothing: adminSettings.speedSmoothing,
+    hideAccuracyAbove: adminSettings.hideAccuracyAbove,
+    pdfPointLimit: adminSettings.pdfPointLimit
+  };
+
+  await update(ref(db,"adminSettings/config"), payload);
   updateUsageBars();
+  applyToastPosition();
   setupAutoRefresh();
 }
+
+async function saveGpsSettings(){
+  adminSettings.gpsProfiles = readGpsProfilesFromControls();
+  await update(ref(db,"adminSettings/config"), {
+    gpsProfiles: adminSettings.gpsProfiles
+  });
+  refreshGpsProfileCurrentText();
+}
+
 function setupAutoRefresh(){
   if(autoRefreshTimer) clearInterval(autoRefreshTimer);
   const sec = Number(adminSettings.autoRefreshSec||0);
@@ -3109,7 +3135,8 @@ qs("renameUserBtn").onclick=async()=>{
 };
 bindGpsSettingsControls();
 setGpsProfileControlsFromState();
-if (qs("saveSettingsBtn")) qs("saveSettingsBtn").onclick = async()=>{ await safeAction("Сохранение настроек", saveAdminSettings, "Настройки сохранены"); };
+if (qs("saveAdminUiSettingsBtn")) qs("saveAdminUiSettingsBtn").onclick = async()=>{ await safeAction("Сохранение настроек", saveAdminUiSettings, "Настройки сохранены"); };
+if (qs("saveGpsSettingsBtn")) qs("saveGpsSettingsBtn").onclick = async()=>{ await safeAction("Сохранение настроек GPS", saveGpsSettings, "Настройки GPS сохранены"); };
 if (qs("backupNowBtn")) qs("backupNowBtn").onclick = async()=>{ await safeAction("Создание backup", async()=>{ await createMonthlyBackup(true); await renderBackups(); }, "Backup создан"); };
 qs("downloadBackupBtn").onclick=async()=>{
   const payload = {history:historyByUid, live:liveByUid, liveSessions:allSessions, users:usersMeta, adminSettings};
