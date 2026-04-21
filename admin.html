@@ -327,6 +327,7 @@
         <div class="toolbar">
           <button id="fitRouteBtn" class="secondary">Центрировать маршрут</button>
           <button id="lastRouteBtn" class="secondary">Последний маршрут</button>
+          <button id="deleteSelectedPointsBtn" class="danger">Удалить выбранные</button>
           <button id="deleteRangeBtn" class="danger">Удалить период</button>
         </div>
         <div class="card" style="margin-top:12px;padding:12px">
@@ -382,7 +383,7 @@
         <h2>История точек</h2>
         <div style="overflow:auto">
           <table>
-            <thead><tr><th id="historyHeadTime" class="sortableHead" onclick="window.toggleHistorySort('timestamp')">Время</th><th>Координаты</th><th id="historyHeadAccuracy" class="sortableHead" onclick="window.toggleHistorySort('accuracy')">Точность</th><th id="historyHeadSpeed" class="sortableHead" onclick="window.toggleHistorySort('speed')">Скорость</th><th>Метки</th><th>Действие</th></tr></thead>
+            <thead><tr><th style="width:36px"><input id="selectAllHistoryPoints" type="checkbox" style="width:auto;min-width:auto"></th><th id="historyHeadTime" class="sortableHead" onclick="window.toggleHistorySort('timestamp')">Время</th><th>Координаты</th><th id="historyHeadAccuracy" class="sortableHead" onclick="window.toggleHistorySort('accuracy')">Точность</th><th id="historyHeadSpeed" class="sortableHead" onclick="window.toggleHistorySort('speed')">Скорость</th><th>Метки</th><th>Действие</th></tr></thead>
             <tbody id="historyTbody"></tbody>
           </table>
         </div>
@@ -592,6 +593,22 @@
             <div class="label">Лимит точек в PDF</div>
             <input id="pdfPointLimitInput" type="number" min="100" step="100" value="1000">
           </div>
+          <div class="stat">
+            <div class="label">Порог движения, км/ч</div>
+            <input id="moveSpeedThresholdInput" type="number" min="0" step="0.1" value="3">
+          </div>
+          <div class="stat">
+            <div class="label">Долгая стоянка, мин</div>
+            <input id="stopLongMinutesInput" type="number" min="1" step="1" value="5">
+          </div>
+          <div class="stat">
+            <div class="label">Нереальная скорость, км/ч</div>
+            <input id="impossibleSpeedKmhInput" type="number" min="20" step="1" value="250">
+          </div>
+          <div class="stat">
+            <div class="label">Плохая точность GPS, м</div>
+            <input id="junkAccuracyMetersInput" type="number" min="1" step="1" value="100">
+          </div>
         </div>
 
         <div class="toolbar" style="margin-top:12px">
@@ -696,6 +713,10 @@ let adminSettings = {
   speedSmoothing: "off",
   hideAccuracyAbove: 20,
   pdfPointLimit: 1000,
+  moveSpeedThresholdKmh: 3,
+  stopLongMinutes: 5,
+  impossibleSpeedKmh: 250,
+  junkAccuracyMeters: 100,
   gpsProfiles: {
     normal: { intervalMs: 5000, minDistanceM: 3 },
     live: { intervalMs: 3000, minDistanceM: 2 }
@@ -1430,33 +1451,35 @@ document.querySelectorAll(".tab-btn").forEach(btn=>{
 });
 
 async function reverseGeocode(lat, lon){
-  const key = `${Number(lat).toFixed(5)},${Number(lon).toFixed(5)}`;
+  const latNum = Number(lat), lonNum = Number(lon);
+  if(!Number.isFinite(latNum) || !Number.isFinite(lonNum)) return "Адрес не найден";
+  const key = `${latNum.toFixed(5)},${lonNum.toFixed(5)}`;
   if (geocodeCache[key]) return geocodeCache[key];
 
   const task = async () => {
-    try {
-      const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&accept-language=ru`;
-      const res = await fetch(url, {
-        headers: { "Accept": "application/json" }
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      const addr = json?.display_name || "Адрес не найден";
-      geocodeCache[key] = addr;
+    const urls = [
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(latNum)}&lon=${encodeURIComponent(lonNum)}&accept-language=ru&zoom=18&addressdetails=1`,
+      `https://geocode.maps.co/reverse?lat=${encodeURIComponent(latNum)}&lon=${encodeURIComponent(lonNum)}&accept-language=ru`
+    ];
+    for(const url of urls){
       try {
-        localStorage.setItem("geocodeCache", JSON.stringify(geocodeCache));
-      } catch (e) {}
-      return addr;
-    } catch (e) {
-      console.warn("reverseGeocode error", e);
-      return "Адрес не найден";
+        const res = await fetch(url, { headers: { "Accept": "application/json" }, cache: "no-store" });
+        if (!res.ok) continue;
+        const json = await res.json();
+        const addr = json?.display_name || json?.address?.road || "";
+        if(addr){
+          geocodeCache[key] = addr;
+          try { localStorage.setItem("geocodeCache", JSON.stringify(geocodeCache)); } catch (e) {}
+          return addr;
+        }
+      } catch (e) {
+        console.warn("reverseGeocode provider error", e);
+      }
     }
+    return `${latNum.toFixed(5)}, ${lonNum.toFixed(5)}`;
   };
 
-  geocodeQueue = geocodeQueue
-    .then(() => new Promise(r => setTimeout(r, 700)))
-    .then(task);
-
+  geocodeQueue = geocodeQueue.then(() => new Promise(r => setTimeout(r, 400))).then(task);
   return geocodeQueue;
 }
 
@@ -1469,11 +1492,13 @@ function distanceMeters(a,b){
 }
 function looksJunk(prev,cur){
   const acc=Number(cur.accuracy||0), sp=Number(cur.speed||0);
-  if(acc>100) return true;
+  const maxAcc = Number(adminSettings.junkAccuracyMeters || adminSettings.gpsAccuracyMax || 100);
+  const impossible = Number(adminSettings.impossibleSpeedKmh || adminSettings.gpsImpossibleSpeed || 250);
+  if(acc>maxAcc) return true;
   if(prev){
     const dist=distanceMeters(prev,cur), dt=Math.max(1,(Number(cur.timestamp||0)-Number(prev.timestamp||0))/1000), calcSpeed=dist/dt*3.6;
     if(sp<=.5 && calcSpeed>30) return true;
-    if(calcSpeed>250) return true;
+    if(calcSpeed>impossible) return true;
   }
   return false;
 }
@@ -1759,18 +1784,14 @@ async function renderHistory() {
   const pts = filteredHistory();
   currentFiltered = pts;
 
-  console.log("renderHistory points:", pts.length);
-
   const tbody = qs("historyTbody");
-  if (!tbody) {
-    console.error("historyTbody not found");
-    return;
-  }
-
+  if (!tbody) return;
   tbody.innerHTML = "";
 
-  if (!pts.length) {
-    tbody.innerHTML = `<tr><td colspan="6">Нет данных за выбранный период</td></tr>`;
+  const chronological = [...pts].sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+
+  if (!chronological.length) {
+    tbody.innerHTML = `<tr><td colspan="7">Нет данных за выбранный период</td></tr>`;
     if (qs("pointsCount")) qs("pointsCount").textContent = "0";
     if (qs("distanceValue")) qs("distanceValue").textContent = "0 км";
     if (qs("avgSpeedValue")) qs("avgSpeedValue").textContent = "0 км/ч";
@@ -1786,16 +1807,16 @@ async function renderHistory() {
     return;
   }
 
-  const s = computeSummary(pts);
-  const stops = detectStops(pts);
+  const s = computeSummary(chronological);
+  const stops = detectStops(chronological);
 
   qs("pointsCount").textContent = String(s.count);
   qs("distanceValue").textContent = `${s.km.toFixed(2)} км`;
   qs("avgSpeedValue").textContent = `${s.avgSpeed.toFixed(1)} км/ч`;
   qs("maxSpeedValue").textContent = `${s.maxSpeed.toFixed(1)} км/ч`;
 
-  const first = pts[0];
-  const last = pts[pts.length - 1];
+  const first = chronological[0];
+  const last = chronological[chronological.length - 1];
 
   qs("routeStartCoords").textContent = "Поиск адреса...";
   qs("routeEndCoords").textContent = "Поиск адреса...";
@@ -1810,7 +1831,7 @@ async function renderHistory() {
     if(qs("routeEndCoords")) qs("routeEndCoords").textContent = addr;
   });
 
-  for (const p of pts.slice().reverse()) {
+  for (const p of [...chronological].reverse()) {
     const tr = document.createElement("tr");
     const quality = isCleanPoint(null,p)
       ? (Number(p.accuracy||0)<=10 ? '<span class="tag online">хороший</span>'
@@ -1818,7 +1839,9 @@ async function renderHistory() {
       : '<span class="tag offline">плохой</span>')
       : '<span class="tag">мусор</span>';
 
+    const ts = String(Number(p.timestamp || 0));
     tr.innerHTML = `
+      <td><input class="historyPointCheckbox" type="checkbox" data-ts="${ts}" style="width:auto;min-width:auto"></td>
       <td>${fmtTime(p.timestamp)}</td>
       <td class="mono">${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}</td>
       <td>${formatAccuracy(p.accuracy)}</td>
@@ -1859,8 +1882,14 @@ async function renderHistory() {
     tbody.appendChild(tr);
   }
 
-  updateCharts(pts);
-  await updateHistoryMap(pts);
+  const allCb = qs('selectAllHistoryPoints');
+  if(allCb){
+    allCb.checked = false;
+    allCb.onchange = () => document.querySelectorAll('.historyPointCheckbox').forEach(cb=>cb.checked = allCb.checked);
+  }
+
+  updateCharts(chronological);
+  await updateHistoryMap(chronological);
   qs("startAddress").textContent = await reverseGeocode(Number(first.latitude), Number(first.longitude));
   qs("endAddress").textContent = await reverseGeocode(Number(last.latitude), Number(last.longitude));
 }
@@ -2040,6 +2069,10 @@ async function loadAdminSettings(){
   if(qs("speedSmoothingSelect")) qs("speedSmoothingSelect").value = adminSettings.speedSmoothing || "off";
   if(qs("hideAccuracyAboveInput")) qs("hideAccuracyAboveInput").value = Number(adminSettings.hideAccuracyAbove ?? 20);
   if(qs("pdfPointLimitInput")) qs("pdfPointLimitInput").value = Number(adminSettings.pdfPointLimit ?? 1000);
+  if(qs("moveSpeedThresholdInput")) qs("moveSpeedThresholdInput").value = Number(adminSettings.moveSpeedThresholdKmh ?? 3);
+  if(qs("stopLongMinutesInput")) qs("stopLongMinutesInput").value = Number(adminSettings.stopLongMinutes ?? 5);
+  if(qs("impossibleSpeedKmhInput")) qs("impossibleSpeedKmhInput").value = Number(adminSettings.impossibleSpeedKmh ?? 250);
+  if(qs("junkAccuracyMetersInput")) qs("junkAccuracyMetersInput").value = Number(adminSettings.junkAccuracyMeters ?? 100);
   setGpsProfileControlsFromState();
   applyToastPosition();
   setupAutoRefresh();
@@ -2054,6 +2087,10 @@ async function saveAdminUiSettings(){
   adminSettings.speedSmoothing = qs("speedSmoothingSelect")?.value || "off";
   adminSettings.hideAccuracyAbove = Number(qs("hideAccuracyAboveInput")?.value || 20);
   adminSettings.pdfPointLimit = Number(qs("pdfPointLimitInput")?.value || 1000);
+  adminSettings.moveSpeedThresholdKmh = Number(qs("moveSpeedThresholdInput")?.value || 3);
+  adminSettings.stopLongMinutes = Number(qs("stopLongMinutesInput")?.value || 5);
+  adminSettings.impossibleSpeedKmh = Number(qs("impossibleSpeedKmhInput")?.value || 250);
+  adminSettings.junkAccuracyMeters = Number(qs("junkAccuracyMetersInput")?.value || 100);
 
   const payload = {
     toastPosition: adminSettings.toastPosition,
@@ -2064,7 +2101,11 @@ async function saveAdminUiSettings(){
     gpsImpossibleSpeed: adminSettings.gpsImpossibleSpeed,
     speedSmoothing: adminSettings.speedSmoothing,
     hideAccuracyAbove: adminSettings.hideAccuracyAbove,
-    pdfPointLimit: adminSettings.pdfPointLimit
+    pdfPointLimit: adminSettings.pdfPointLimit,
+    moveSpeedThresholdKmh: adminSettings.moveSpeedThresholdKmh,
+    stopLongMinutes: adminSettings.stopLongMinutes,
+    impossibleSpeedKmh: adminSettings.impossibleSpeedKmh,
+    junkAccuracyMeters: adminSettings.junkAccuracyMeters
   };
 
   await update(ref(db,"adminSettings/config"), payload);
@@ -3035,6 +3076,24 @@ if (qs("applyFiltersBtn")) qs("applyFiltersBtn").onclick = renderHistory;
 if (qs("resetFiltersBtn")) qs("resetFiltersBtn").onclick = ()=>{ qs("maxAccuracyFilter").value=""; qs("minSpeedFilter").value=""; qs("maxSpeedFilter").value=""; qs("hideJunkToggle").checked=false; renderHistory(); };
 if (qs("refreshHistoryBtn")) qs("refreshHistoryBtn").onclick = async()=>{ await loadAllData(); showToast("История обновлена","success"); };
 if (qs("fitRouteBtn")) qs("fitRouteBtn").onclick = ()=>{ historyMapAutoFit = true; const pts=currentFiltered.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]); if(pts.length) historyMap.fitBounds(L.latLngBounds(pts), {padding:[30,30]}); };
+qs("deleteSelectedPointsBtn").onclick=async()=>{
+  if(!selectedUid) return showToast("Нет выбранного пользователя","warn");
+  const selectedTs = Array.from(document.querySelectorAll('.historyPointCheckbox:checked')).map(cb=>String(cb.dataset.ts||'')).filter(Boolean);
+  if(!selectedTs.length) return showToast("Не выбраны точки","warn");
+  if(!confirm(`Удалить выбранные точки: ${selectedTs.length}?`)) return;
+  try{
+    const payload = {};
+    selectedTs.forEach(ts=> payload[`history/${selectedUid}/${ts}`] = null);
+    await update(ref(db), payload);
+    await logAction("delete_points_batch", `Удалено точек: ${selectedTs.length}`);
+    showToast(`Удалено точек: ${selectedTs.length}`, "success");
+    await loadAllData();
+  }catch(err){
+    recordError("deleteSelectedPoints", err);
+    showToast("Ошибка удаления точек: "+errText(err), "error", 3600);
+  }
+};
+
 qs("deleteRangeBtn").onclick=async()=>{
   const pts=filteredHistory();
   if(!pts.length) return showToast("Нет точек в выбранном диапазоне.","warn");
