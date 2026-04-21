@@ -644,7 +644,8 @@
 
         <div class="card" style="margin-top:12px">
           <h3>Частота GPS</h3>
-                    <div class="toolbar" style="margin-top:10px">
+          <div class="notice smallMuted">Тот же набор режимов, что и в приложении. Синхронизация идёт через <span class="mono">adminSettings/config/gpsProfiles</span>.</div>
+          <div class="toolbar" style="margin-top:10px">
             <button id="gpsPresetFastBtn" class="secondary">Точно</button>
             <button id="gpsPresetBalancedBtn" class="secondary">Баланс</button>
             <button id="gpsPresetEcoBtn" class="secondary">Экономно</button>
@@ -1124,13 +1125,6 @@ function statusByPoint(point){
     return { text:"🅿 Стоянка", cls:"offline", color:"#ef4444", kind:"stop_long" };
   }
   return { text:"⏸ Остановка", cls:"idle", color:"#eab308", kind:"stop_short" };
-}
-
-function updateLiveAutoCenterButton(){
-  const btn = qs("liveAutoCenterBtn");
-  if(!btn) return;
-  btn.textContent = `Автоцентр: ${liveAutoCenter ? "вкл" : "выкл"}`;
-  btn.className = liveAutoCenter ? "" : "secondary";
 }
 
 function isCleanPoint(prev, point){
@@ -2055,7 +2049,6 @@ async function updateNowUI(point, sourceLabel){
     setWeatherChip("headerWeatherDynamic", "По точке", weatherIcon(3), "Ожидание координат…");
   }
   const st = statusByPoint(point);
-  liveMarker.setStyle({ color: st.color, fillColor: st.color, radius: 8, fillOpacity: 1 });
   qs("nowStatus").innerHTML = `<span class="tag ${st.cls}" style="background:${st.color}22;border-color:${st.color};color:${st.color};font-weight:800">${st.text}</span>`;
   qs("nowSource").textContent = sourceLabel || "—";
   qs("nowSpeed").textContent = point?.speed != null ? `${Number(point.speed).toFixed(1)} км/ч` : "—";
@@ -2187,7 +2180,7 @@ function bindGpsSettingsControls(){
   if(qs('gpsPresetBalancedBtn')) qs('gpsPresetBalancedBtn').onclick = ()=>applyGpsPreset('balanced');
   if(qs('gpsPresetEcoBtn')) qs('gpsPresetEcoBtn').onclick = ()=>applyGpsPreset('eco');
   if(qs('gpsResetDefaultsBtn')) qs('gpsResetDefaultsBtn').onclick = async()=>{
-    adminSettings.gpsProfiles = { normal:{ intervalMs:5000, minDistanceM:3 }, live:{ intervalMs:5000, minDistanceM:3 } };
+    adminSettings.gpsProfiles = { normal:{ intervalMs:5000, minDistanceM:3 }, live:{ intervalMs:3000, minDistanceM:2 } };
     setGpsProfileControlsFromState();
     await safeAction("Сброс настроек GPS", saveGpsSettings, "Настройки GPS сброшены");
   };
@@ -2227,25 +2220,52 @@ function gpsProfilesEqual(a,b){
          x.live.intervalMs === y.live.intervalMs &&
          x.live.minDistanceM === y.live.minDistanceM;
 }
+function applyIncomingGpsProfiles(incoming, source="external"){
+  const normalized = normalizeGpsProfilesShape(incoming);
+  const previous = normalizeGpsProfilesShape(lastGpsProfilesSnapshot || adminSettings.gpsProfiles);
+  const changed = !gpsProfilesEqual(normalized, previous);
+  adminSettings.gpsProfiles = normalized;
+  setGpsProfileControlsFromState();
+  refreshGpsProfileCurrentText();
+  if(lastGpsProfilesSnapshot === null){
+    lastGpsProfilesSnapshot = normalized;
+    suppressNextGpsProfilesToast = false;
+    return;
+  }
+  if(changed){
+    if(suppressNextGpsProfilesToast){
+      suppressNextGpsProfilesToast = false;
+    }else{
+      showToast("Частота GPS изменена из приложения", "info", 3200);
+    }
+    lastGpsProfilesSnapshot = normalized;
+    return;
+  }
+  suppressNextGpsProfilesToast = false;
+  lastGpsProfilesSnapshot = normalized;
+}
+
+async function pollGpsProfilesRealtime(){
+  try{
+    const snap = await get(ref(db, "adminSettings/config/gpsProfiles"));
+    if(!snap.exists()) return;
+    applyIncomingGpsProfiles(snap.val(), "poll");
+  }catch(e){}
+}
+
 function startGpsProfilesRealtimeSync(){
   if(gpsProfilesListenerStarted) return;
   gpsProfilesListenerStarted = true;
-  onValue(ref(db, "adminSettings/config/gpsProfiles"), snap => {
-    const incoming = normalizeGpsProfilesShape(snap.val());
-    const current = normalizeGpsProfilesShape(adminSettings.gpsProfiles);
-    const changed = !gpsProfilesEqual(incoming, current);
-    adminSettings.gpsProfiles = incoming;
-    setGpsProfileControlsFromState();
-    if(lastGpsProfilesSnapshot === null){
-      lastGpsProfilesSnapshot = incoming;
-      return;
+  onValue(ref(db, "adminSettings/config"), snap => {
+    const cfg = snap.val() || {};
+    if(cfg.gpsProfiles){
+      applyIncomingGpsProfiles(cfg.gpsProfiles, "realtime");
     }
-    if(changed && !suppressNextGpsProfilesToast){
-      showToast("Частота GPS изменена из приложения", "info", 3200);
-    }
-    suppressNextGpsProfilesToast = false;
-    lastGpsProfilesSnapshot = incoming;
   });
+  setInterval(()=>{
+    if(!auth.currentUser) return;
+    pollGpsProfilesRealtime();
+  }, 4000);
 }
 
 async function loadAdminSettings(){
@@ -3091,6 +3111,17 @@ async function exportZip(){
 }
 function downloadText(name,content,type){ const blob=new Blob([content],{type}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=name; a.click(); URL.revokeObjectURL(url); }
 
+if (qs("refreshLiveBtn")) qs("refreshLiveBtn").onclick = async () => {
+  try{
+    await loadSessions();
+    await updateNowFromAvailableSources();
+    renderSessions?.();
+    showToast("Live обновлён", "success");
+  }catch(e){
+    recordError("refreshLiveBtn", e);
+    showToast("Ошибка обновления live: " + errText(e), "error", 3600);
+  }
+};
 
 if (qs("cleanupEndedSessionsBtn")) qs("cleanupEndedSessionsBtn").onclick = async () => {
   if(!confirm("Очистить завершённые сессии?")) return;
@@ -3332,21 +3363,8 @@ if(qs("exportPngBtn")) qs("exportPngBtn").onclick=()=>exportMapPng();
 if(qs("exportZipBtn")) qs("exportZipBtn").onclick=()=>exportZip();
 
 if (qs("refreshNowBtn")) qs("refreshNowBtn").onclick = async()=>{ await updateNowFromAvailableSources(); showToast("Блок «Сейчас» обновлён","success"); };
-if (qs("refreshLiveBtn")) qs("refreshLiveBtn").onclick = async()=>{
-  try{
-    await refreshLiveNow();
-    showToast("Live обновлён","success");
-  }catch(e){
-    recordError("refreshLiveBtn_bottom", e);
-    showToast("Ошибка обновления live: " + errText(e), "error", 3600);
-  }
-};
-if (qs("liveAutoCenterBtn")) qs("liveAutoCenterBtn").onclick = ()=>{
-  liveAutoCenter=!liveAutoCenter;
-  updateLiveAutoCenterButton();
-  showToast(`Автоцентр ${liveAutoCenter ? "включён" : "выключен"}`, "info");
-};
-updateLiveAutoCenterButton();
+if (qs("refreshLiveBtn")) qs("refreshLiveBtn").onclick = ()=>refreshLiveNow();
+if (qs("liveAutoCenterBtn")) qs("liveAutoCenterBtn").onclick = ()=>{ liveAutoCenter=!liveAutoCenter; qs("liveAutoCenterBtn").textContent=`Автоцентр: ${liveAutoCenter?"вкл":"выкл"}`; };
 if (qs("btnDiag")) qs("btnDiag").onclick = showDiag;
 
 if (qs("createShareBtn")) qs("createShareBtn").onclick = ()=>createLiveSession();
