@@ -1075,15 +1075,31 @@ async function updateNowWeather(lat, lon){
 }
 
 function statusByPoint(point){
-  if(!point) return { text:"Нет данных", cls:"offline" };
+  const moveThreshold = Number(adminSettings?.moveSpeedThresholdKmh ?? 3);
+  const stopLongMinutes = Number(adminSettings?.stopLongMinutes ?? 5);
+  const offlineMs = Number(adminSettings?.offlineMinutes ?? 5) * 60 * 1000;
+  const junkAccuracy = Number(adminSettings?.junkAccuracyMeters ?? 100);
+
+  if(!point || !Number.isFinite(Number(point.timestamp || 0))){
+    return { text:"📡 Нет сигнала", cls:"offline", color:"#9ca3af", kind:"offline" };
+  }
+
   const speed = Number(point.speed || 0);
   const ts = Number(point.timestamp || 0);
-  const age = Date.now() - ts;
-  const offlineMs = Number(adminSettings?.offlineMinutes || 5) * 60 * 1000;
+  const age = Math.max(0, Date.now() - ts);
+  const accuracy = Number(point.accuracy || 9999);
+  const stopLongMs = stopLongMinutes * 60 * 1000;
 
-  if(age > offlineMs) return { text:"Нет сигнала", cls:"offline" };
-  if(speed > 2) return { text:"Движение", cls:"online" };
-  return { text:"Стоит", cls:"idle" };
+  if(age > offlineMs){
+    return { text:"📡 Нет сигнала", cls:"offline", color:"#9ca3af", kind:"offline" };
+  }
+  if(accuracy <= junkAccuracy && speed >= moveThreshold){
+    return { text:"🚗 Движение", cls:"online", color:"#22c55e", kind:"moving" };
+  }
+  if(age >= stopLongMs){
+    return { text:"🅿 Стоянка", cls:"offline", color:"#ef4444", kind:"stop_long" };
+  }
+  return { text:"⏸ Остановка", cls:"idle", color:"#eab308", kind:"stop_short" };
 }
 
 function isCleanPoint(prev, point){
@@ -1611,16 +1627,23 @@ function getAllLastPoints(){ return Object.entries(liveByUid).map(([uid,live])=>
 
 function updateTodaySummary(){
   try{
-    const now = new Date();
+    const now = Date.now();
     const start = new Date();
     start.setHours(0,0,0,0);
     const startTs = start.getTime();
-    const endTs = now.getTime();
+    const endTs = now;
+    const moveThreshold = Number(adminSettings.moveSpeedThresholdKmh ?? 3);
+    const junkAccuracy = Number(adminSettings.junkAccuracyMeters ?? 100);
+    const impossibleSpeedKmh = Number(adminSettings.impossibleSpeedKmh ?? 250);
+    const summaryMaxGapMs = 2 * 60 * 1000;
 
-    const visible = getVisibleHistoryPoints().filter(p => {
-      const ts = Number(p.timestamp || 0);
-      return ts >= startTs && ts <= endTs;
-    });
+    const visible = getVisibleHistoryPoints()
+      .filter(Boolean)
+      .filter(p => {
+        const ts = Number(p.timestamp || 0);
+        return ts >= startTs && ts <= endTs;
+      })
+      .sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
 
     qs("todayPoints").textContent = String(visible.length);
 
@@ -1634,27 +1657,35 @@ function updateTodaySummary(){
 
     let meters = 0;
     let moveMs = 0;
-    let stopMs = 0;
 
     for(let i=1;i<visible.length;i++){
       const prev = visible[i-1];
       const cur = visible[i];
       const dt = Math.max(0, Number(cur.timestamp||0) - Number(prev.timestamp||0));
-      meters += distanceMeters(prev, cur);
+      if(dt <= 0 || dt > summaryMaxGapMs) continue;
+
+      const prevAcc = Number(prev.accuracy || 9999);
+      const curAcc = Number(cur.accuracy || 9999);
+      if(prevAcc > junkAccuracy || curAcc > junkAccuracy) continue;
+
+      const segmentMeters = distanceMeters(prev, cur);
+      const calcSpeed = (segmentMeters / Math.max(1, dt / 1000)) * 3.6;
+      if(calcSpeed > impossibleSpeedKmh) continue;
+
+      meters += segmentMeters;
 
       const spPrev = Number(prev.speed || 0);
       const spCur = Number(cur.speed || 0);
       const avgSp = (spPrev + spCur) / 2;
+      const effectiveSpeed = Math.max(avgSp, calcSpeed);
 
-      const moveThreshold = Number(adminSettings.moveSpeedThresholdKmh ?? 3);
-      if(avgSp >= moveThreshold) moveMs += dt;
-      else stopMs += dt;
+      if(effectiveSpeed >= moveThreshold) moveMs += dt;
     }
 
     const last = visible[visible.length - 1];
     qs("todayKm").textContent = `${(meters/1000).toFixed(2)} км`;
     qs("todayMove").textContent = formatDuration(moveMs);
-    if(qs("todayStop")) qs("todayStop").textContent = formatDuration(stopMs);
+    if(qs("todayStop")) qs("todayStop").textContent = "—";
     qs("todayLast").textContent = fmtTime(last.timestamp);
   }catch(e){
     console.warn("updateTodaySummary error", e);
@@ -1975,9 +2006,8 @@ async function updateNowUI(point, sourceLabel){
     qs("nowAddress").textContent = "—";
     setWeatherChip("headerWeatherDynamic", "По точке", weatherIcon(3), "Ожидание координат…");
   }
-  const freshness = point?.timestamp ? Date.now() - Number(point.timestamp) : null;
-  const isOnline = freshness != null && freshness <= 3*60*1000;
-  const st = statusByPoint(point); qs("nowStatus").innerHTML = `<span class="tag ${st.cls}">${st.text}</span> ${Number(point?.speed||0)>2?"🚗 Движение":"🅿️ Стоянка"}`;
+  const st = statusByPoint(point);
+  qs("nowStatus").innerHTML = `<span class="tag ${st.cls}" style="background:${st.color}22;border-color:${st.color};color:${st.color};font-weight:800">${st.text}</span>`;
   qs("nowSource").textContent = sourceLabel || "—";
   qs("nowSpeed").textContent = point?.speed != null ? `${Number(point.speed).toFixed(1)} км/ч` : "—";
   qs("nowAccuracy").textContent = formatAccuracy(point?.accuracy);
