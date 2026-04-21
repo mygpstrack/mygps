@@ -323,12 +323,14 @@
           <label class="pill"><input id="hideJunkToggle" type="checkbox" style="width:auto;min-width:auto"/> Скрыть мусорные</label>
           <label class="pill"><input id="hideStopsToggle" type="checkbox" style="width:auto;min-width:auto"/> Скрыть стоянки</label>
           <label class="pill"><input id="onlyMoveToggle" type="checkbox" style="width:auto;min-width:auto"/> Только движение</label>
+          <label class="pill"><input id="showOnlySelectedOnMapToggle" type="checkbox" style="width:auto;min-width:auto"/> Только выбранные точки на карте</label>
           <button id="applyFiltersBtn" class="secondary">Применить</button>
           <button id="resetFiltersBtn" class="secondary">Сбросить</button>
         </div>
         <div class="toolbar">
           <button id="fitRouteBtn" class="secondary">Центрировать маршрут</button>
           <button id="lastRouteBtn" class="secondary">Последний маршрут</button>
+          <button id="clearSelectedPointsBtn" class="secondary">Снять все выделения</button>
           <button id="deleteSelectedPointsBtn" class="danger">Удалить выбранные</button>
           <button id="deleteRangeBtn" class="danger">Удалить период</button>
         </div>
@@ -571,14 +573,6 @@
             </select>
           </div>
           <div class="stat">
-            <div class="label">Auto-clean мусора</div>
-            <select id="autoCleanModeSelect">
-              <option value="off">Выкл</option>
-              <option value="daily">Раз в день</option>
-              <option value="weekly">Раз в неделю</option>
-            </select>
-          </div>
-          <div class="stat">
             <div class="label">Сглаживание скорости</div>
             <select id="speedSmoothingSelect">
               <option value="off">Выкл</option>
@@ -615,6 +609,17 @@
 
         <div class="toolbar" style="margin-top:12px">
           <button id="saveAdminUiSettingsBtn" class="success">Сохранить настройки</button>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <h3>Текущий алгоритм статусов</h3>
+          <div class="grid4">
+            <div class="stat"><div class="label">Зелёный</div><div class="value" id="statusAlgoMoveText">Движение от 3 км/ч</div></div>
+            <div class="stat"><div class="label">Жёлтый</div><div class="value" id="statusAlgoShortStopText">Стоянка до 5 мин</div></div>
+            <div class="stat"><div class="label">Красный</div><div class="value" id="statusAlgoLongStopText">Стоянка после 5 мин</div></div>
+            <div class="stat"><div class="label">Серый</div><div class="value" id="statusAlgoOfflineText">Нет сигнала после 5 мин</div></div>
+          </div>
+          <div class="notice smallMuted">Параметры берутся из текущих настроек ниже и должны совпадать с логикой приложения и live.</div>
         </div>
 
         <div class="card" style="margin-top:12px">
@@ -707,7 +712,6 @@ let adminSettings = {
   toastPosition: "top-right",
   autoRefreshSec: 0,
   offlineMinutes: 5,
-  autoCleanMode: "off",
   storageLimitGb: 1,
   trafficLimitGb: 10,
   gpsAccuracyMax: 100,
@@ -1121,6 +1125,7 @@ function persistUiState(){
       hideJunkToggle: !!qs("hideJunkToggle")?.checked,
       hideStopsToggle: !!qs("hideStopsToggle")?.checked,
       onlyMoveToggle: !!qs("onlyMoveToggle")?.checked,
+      showOnlySelectedOnMapToggle: !!qs("showOnlySelectedOnMapToggle")?.checked,
       viewModeSelect: qs("viewModeSelect")?.value || "selected",
       toastPosition: qs("toastPositionSelect")?.value || "",
       autoRefreshSec: qs("autoRefreshSecSelect")?.value || ""
@@ -1150,6 +1155,7 @@ function restoreUiState(){
     if(qs("hideJunkToggle")) qs("hideJunkToggle").checked = !!state.hideJunkToggle;
     if(qs("hideStopsToggle")) qs("hideStopsToggle").checked = !!state.hideStopsToggle;
     if(qs("onlyMoveToggle")) qs("onlyMoveToggle").checked = !!state.onlyMoveToggle;
+    if(qs("showOnlySelectedOnMapToggle")) qs("showOnlySelectedOnMapToggle").checked = !!state.showOnlySelectedOnMapToggle;
     if(qs("viewModeSelect") && state.viewModeSelect) qs("viewModeSelect").value = state.viewModeSelect;
 
     if(qs("toastPositionSelect") && state.toastPosition) qs("toastPositionSelect").value = state.toastPosition;
@@ -1548,6 +1554,10 @@ const startMarker = L.circleMarker([56.95,24.10], {radius:8,color:"#16a34a",fill
 const endMarker = L.circleMarker([56.95,24.10], {radius:8,color:"#dc2626",fillColor:"#dc2626",fillOpacity:1}).addTo(historyMap);
 let selectedPointMarker = null;
 
+historyMap.on('zoomstart movestart', () => {
+  if(historyMapHasInitialFit) historyMapAutoFit = false;
+});
+
 function clearRouteSegments(){ routeSegments.forEach(s=>historyMap.removeLayer(s)); routeSegments=[]; historyPointMarkers.forEach(m=>historyMap.removeLayer(m)); historyPointMarkers=[]; }
 
 function updateUsage(){
@@ -1657,6 +1667,42 @@ async function loadAllData(){
 
 const historySortState = { field: "timestamp", dir: "desc" };
 
+function getCheckedHistoryPointIds(){
+  return Array.from(document.querySelectorAll('.historyPointCheckbox:checked'))
+    .map(cb=>String(cb.dataset.ts||''))
+    .filter(Boolean);
+}
+
+function getHistoryChronologicalPoints(points = null){
+  const src = Array.isArray(points) ? points : filteredHistory();
+  return [...src].sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+}
+
+function getHistoryMapPoints(points = null){
+  const chrono = getHistoryChronologicalPoints(points);
+  const onlySelected = !!qs("showOnlySelectedOnMapToggle")?.checked;
+  if(!onlySelected) return chrono;
+  const selected = new Set(getCheckedHistoryPointIds());
+  const filtered = chrono.filter(p=>selected.has(String(Number(p.timestamp||0))));
+  return filtered.length ? filtered : chrono;
+}
+
+function clearHistorySelection(){
+  document.querySelectorAll('.historyPointCheckbox').forEach(cb=>cb.checked = false);
+  const allCb = qs('selectAllHistoryPoints');
+  if(allCb) allCb.checked = false;
+}
+
+function updateStatusAlgorithmCard(){
+  const move = Number(adminSettings.moveSpeedThresholdKmh ?? 3);
+  const stopLong = Number(adminSettings.stopLongMinutes ?? 5);
+  const offline = Number(adminSettings.offlineMinutes ?? 5);
+  if(qs("statusAlgoMoveText")) qs("statusAlgoMoveText").textContent = `Движение от ${move.toFixed(move % 1 ? 1 : 0)} км/ч`;
+  if(qs("statusAlgoShortStopText")) qs("statusAlgoShortStopText").textContent = `Стоянка до ${stopLong} мин`;
+  if(qs("statusAlgoLongStopText")) qs("statusAlgoLongStopText").textContent = `Стоянка после ${stopLong} мин`;
+  if(qs("statusAlgoOfflineText")) qs("statusAlgoOfflineText").textContent = `Нет сигнала после ${offline} мин`;
+}
+
 window.toggleHistorySort = function(field){
   if(historySortState.field === field){
     historySortState.dir = historySortState.dir === "desc" ? "asc" : "desc";
@@ -1719,7 +1765,11 @@ async function updateHistoryMap(points){
   if(selectedPointMarker){ historyMap.removeLayer(selectedPointMarker); selectedPointMarker=null; }
   const ordered = [...(points || [])].filter(p=>p && p.latitude!=null && p.longitude!=null).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
   const latlngs=ordered.map(p=>[Number(p.latitude),Number(p.longitude)]);
-  if(!latlngs.length) return;
+  if(!latlngs.length){
+    qs("startAddress").textContent = "—";
+    qs("endAddress").textContent = "—";
+    return;
+  }
   for(let i=1;i<ordered.length;i++){
     const a=[Number(ordered[i-1].latitude), Number(ordered[i-1].longitude)];
     const b=[Number(ordered[i].latitude), Number(ordered[i].longitude)];
@@ -1796,7 +1846,7 @@ async function renderHistory() {
   if (!tbody) return;
   tbody.innerHTML = "";
 
-  const chronological = [...pts].sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+  const chronological = getHistoryChronologicalPoints(pts);
 
   if (!chronological.length) {
     tbody.innerHTML = `<tr><td colspan="7">Нет данных за выбранный период</td></tr>`;
@@ -1895,11 +1945,21 @@ async function renderHistory() {
   const allCb = qs('selectAllHistoryPoints');
   if(allCb){
     allCb.checked = false;
-    allCb.onchange = () => document.querySelectorAll('.historyPointCheckbox').forEach(cb=>cb.checked = allCb.checked);
+    allCb.onchange = () => {
+      document.querySelectorAll('.historyPointCheckbox').forEach(cb=>cb.checked = allCb.checked);
+      if(qs("showOnlySelectedOnMapToggle")?.checked) updateHistoryMap(getHistoryMapPoints(pts));
+    };
   }
+  document.querySelectorAll('.historyPointCheckbox').forEach(cb=>{
+    cb.addEventListener('change', ()=>{
+      const boxes = Array.from(document.querySelectorAll('.historyPointCheckbox'));
+      if(allCb) allCb.checked = boxes.length>0 && boxes.every(x=>x.checked);
+      if(qs("showOnlySelectedOnMapToggle")?.checked) updateHistoryMap(getHistoryMapPoints(pts));
+    });
+  });
 
   updateCharts(chronological);
-  await updateHistoryMap(chronological);
+  await updateHistoryMap(getHistoryMapPoints(pts));
   qs("startAddress").textContent = await reverseGeocode(Number(first.latitude), Number(first.longitude));
   qs("endAddress").textContent = await reverseGeocode(Number(last.latitude), Number(last.longitude));
 }
@@ -2073,7 +2133,7 @@ async function loadAdminSettings(){
     const snap = await get(ref(db,"adminSettings/config"));
     adminSettings = {...adminSettings, ...(snap.val()||{})};
   }catch(e){ recordError("loadAdminSettings", e); }
-  ["toastPositionSelect","autoRefreshSecSelect","offlineMinutesSelect","autoCleanModeSelect"].forEach(id=>{ if(qs(id)) qs(id).value = String(adminSettings[{toastPositionSelect:"toastPosition",autoRefreshSecSelect:"autoRefreshSec",offlineMinutesSelect:"offlineMinutes",autoCleanModeSelect:"autoCleanMode"}[id]]); });
+  ["toastPositionSelect","autoRefreshSecSelect","offlineMinutesSelect"].forEach(id=>{ if(qs(id)) qs(id).value = String(adminSettings[{toastPositionSelect:"toastPosition",autoRefreshSecSelect:"autoRefreshSec",offlineMinutesSelect:"offlineMinutes"}[id]]); });
   if(qs("gpsAccuracyMaxInput")) qs("gpsAccuracyMaxInput").value = adminSettings.gpsAccuracyMax;
   if(qs("gpsImpossibleSpeedInput")) qs("gpsImpossibleSpeedInput").value = adminSettings.gpsImpossibleSpeed;
   if(qs("speedSmoothingSelect")) qs("speedSmoothingSelect").value = adminSettings.speedSmoothing || "off";
@@ -2084,6 +2144,7 @@ async function loadAdminSettings(){
   if(qs("impossibleSpeedKmhInput")) qs("impossibleSpeedKmhInput").value = Number(adminSettings.impossibleSpeedKmh ?? 250);
   if(qs("junkAccuracyMetersInput")) qs("junkAccuracyMetersInput").value = Number(adminSettings.junkAccuracyMeters ?? 100);
   setGpsProfileControlsFromState();
+  updateStatusAlgorithmCard();
   applyToastPosition();
   setupAutoRefresh();
 }
@@ -2091,7 +2152,6 @@ async function saveAdminUiSettings(){
   adminSettings.toastPosition = qs("toastPositionSelect").value;
   adminSettings.autoRefreshSec = Number(qs("autoRefreshSecSelect").value||0);
   adminSettings.offlineMinutes = Number(qs("offlineMinutesSelect").value||5);
-  adminSettings.autoCleanMode = qs("autoCleanModeSelect").value;
   adminSettings.gpsAccuracyMax = Number(qs("gpsAccuracyMaxInput")?.value || adminSettings.gpsAccuracyMax || 100);
   adminSettings.gpsImpossibleSpeed = Number(qs("gpsImpossibleSpeedInput")?.value || adminSettings.gpsImpossibleSpeed || 250);
   adminSettings.speedSmoothing = qs("speedSmoothingSelect")?.value || adminSettings.speedSmoothing || "off";
@@ -2106,7 +2166,6 @@ async function saveAdminUiSettings(){
     toastPosition: adminSettings.toastPosition,
     autoRefreshSec: adminSettings.autoRefreshSec,
     offlineMinutes: adminSettings.offlineMinutes,
-    autoCleanMode: adminSettings.autoCleanMode,
     gpsAccuracyMax: adminSettings.gpsAccuracyMax,
     gpsImpossibleSpeed: adminSettings.gpsImpossibleSpeed,
     speedSmoothing: adminSettings.speedSmoothing,
@@ -2120,6 +2179,7 @@ async function saveAdminUiSettings(){
 
   await update(ref(db,"adminSettings/config"), payload);
   updateUsageBars();
+  updateStatusAlgorithmCard();
   applyToastPosition();
   setupAutoRefresh();
 }
@@ -3083,9 +3143,19 @@ if (qs("weekBtn")) qs("weekBtn").onclick = ()=>{ const now=new Date(), start=new
 if (qs("range1hBtn")) qs("range1hBtn").onclick = ()=>{ const now=new Date(), start=new Date(Date.now()-60*60*1000); setDateTimeRange(start,now); renderHistory(); };
 if (qs("range24hBtn")) qs("range24hBtn").onclick = ()=>{ const now=new Date(), start=new Date(Date.now()-24*60*60*1000); setDateTimeRange(start,now); renderHistory(); };
 if (qs("applyFiltersBtn")) qs("applyFiltersBtn").onclick = renderHistory;
-if (qs("resetFiltersBtn")) qs("resetFiltersBtn").onclick = ()=>{ qs("maxAccuracyFilter").value=""; qs("minSpeedFilter").value=""; qs("maxSpeedFilter").value=""; qs("hideJunkToggle").checked=false; if(qs("hideStopsToggle")) qs("hideStopsToggle").checked=false; if(qs("onlyMoveToggle")) qs("onlyMoveToggle").checked=false; renderHistory(); };
+if (qs("resetFiltersBtn")) qs("resetFiltersBtn").onclick = ()=>{ qs("maxAccuracyFilter").value=""; qs("minSpeedFilter").value=""; qs("maxSpeedFilter").value=""; qs("hideJunkToggle").checked=false; if(qs("hideStopsToggle")) qs("hideStopsToggle").checked=false; if(qs("onlyMoveToggle")) qs("onlyMoveToggle").checked=false; if(qs("showOnlySelectedOnMapToggle")) qs("showOnlySelectedOnMapToggle").checked=false; renderHistory(); };
 if (qs("refreshHistoryBtn")) qs("refreshHistoryBtn").onclick = async()=>{ await loadAllData(); showToast("История обновлена","success"); };
 if (qs("fitRouteBtn")) qs("fitRouteBtn").onclick = ()=>{ historyMapAutoFit = true; const pts=currentFiltered.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]); if(pts.length) historyMap.fitBounds(L.latLngBounds(pts), {padding:[30,30]}); };
+if (qs("clearSelectedPointsBtn")) qs("clearSelectedPointsBtn").onclick = ()=>{
+  clearHistorySelection();
+  if(qs("showOnlySelectedOnMapToggle")?.checked) updateHistoryMap(getHistoryMapPoints(currentFiltered));
+  showToast("Выделение снято","info");
+};
+if (qs("showOnlySelectedOnMapToggle")) qs("showOnlySelectedOnMapToggle").onchange = ()=>{
+  updateHistoryMap(getHistoryMapPoints(currentFiltered));
+  persistUiState();
+};
+
 qs("deleteSelectedPointsBtn").onclick=async()=>{
   if(!selectedUid) return showToast("Нет выбранного пользователя","warn");
   const selectedTs = Array.from(document.querySelectorAll('.historyPointCheckbox:checked')).map(cb=>String(cb.dataset.ts||'')).filter(Boolean);
@@ -3190,7 +3260,7 @@ if (qs("deleteLiveBtn")) qs("deleteLiveBtn").onclick = async()=>{ const c = Obje
 if (qs("deleteAllDbBtn")) qs("deleteAllDbBtn").onclick = async()=>{ const code=prompt("Для полной очистки базы введи DELETE"); if(code!=="DELETE") return showToast("Очистка отменена","warn"); if(!confirm("Это удалит history, live, liveSessions, liveOwners и adminLogs. Продолжить?")) return; try{ await safeAction("Полная очистка базы", async()=>{ await update(ref(db),{history:null,live:null,liveSessions:null,liveOwners:null,adminLogs:null}); }, "База очищена"); }catch(e){} };
 
 
-["fromDate","fromHour","fromMinute","toDate","toHour","toMinute","maxAccuracyFilter","minSpeedFilter","maxSpeedFilter","hideJunkToggle","hideStopsToggle","onlyMoveToggle","viewModeSelect"].forEach(id=>{ if(qs(id)) qs(id).addEventListener("change", persistUiState); });
+["fromDate","fromHour","fromMinute","toDate","toHour","toMinute","maxAccuracyFilter","minSpeedFilter","maxSpeedFilter","hideJunkToggle","hideStopsToggle","onlyMoveToggle","showOnlySelectedOnMapToggle","viewModeSelect"].forEach(id=>{ if(qs(id)) qs(id).addEventListener("change", persistUiState); });
 document.querySelectorAll(".tab-btn").forEach(btn=>btn.addEventListener("click", persistUiState));
 
 qs("renameUserBtn").onclick=async()=>{
@@ -3207,6 +3277,7 @@ qs("renameUserBtn").onclick=async()=>{
 };
 bindGpsSettingsControls();
 setGpsProfileControlsFromState();
+updateStatusAlgorithmCard();
 if (qs("saveAdminUiSettingsBtn")) qs("saveAdminUiSettingsBtn").onclick = async()=>{ await safeAction("Сохранение настроек", saveAdminUiSettings, "Настройки сохранены"); };
 if (qs("saveGpsSettingsBtn")) qs("saveGpsSettingsBtn").onclick = async()=>{ await safeAction("Сохранение настроек GPS", saveGpsSettings, "Настройки GPS сохранены"); };
 if (qs("backupNowBtn")) qs("backupNowBtn").onclick = async()=>{ await safeAction("Создание backup", async()=>{ await createMonthlyBackup(true); await renderBackups(); }, "Backup создан"); };
