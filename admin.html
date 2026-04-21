@@ -1459,7 +1459,7 @@ document.querySelectorAll(".tab-btn").forEach(btn=>{
 async function reverseGeocode(lat, lon){
   const latNum = Number(lat), lonNum = Number(lon);
   if(!Number.isFinite(latNum) || !Number.isFinite(lonNum)) return "Адрес не найден";
-  const key = `${latNum.toFixed(5)},${lonNum.toFixed(5)}:ru`;
+  const key = `${latNum.toFixed(5)},${lonNum.toFixed(5)}`;
   if (geocodeCache[key]) return geocodeCache[key];
 
   const task = async () => {
@@ -1480,39 +1480,6 @@ async function reverseGeocode(lat, lon){
         }
       } catch (e) {
         console.warn("reverseGeocode provider error", e);
-      }
-    }
-    return `${latNum.toFixed(5)}, ${lonNum.toFixed(5)}`;
-  };
-
-  geocodeQueue = geocodeQueue.then(() => new Promise(r => setTimeout(r, 400))).then(task);
-  return geocodeQueue;
-}
-
-async function reverseGeocodeEn(lat, lon){
-  const latNum = Number(lat), lonNum = Number(lon);
-  if(!Number.isFinite(latNum) || !Number.isFinite(lonNum)) return "Address not found";
-  const key = `${latNum.toFixed(5)},${lonNum.toFixed(5)}:en`;
-  if (geocodeCache[key]) return geocodeCache[key];
-
-  const task = async () => {
-    const urls = [
-      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(latNum)}&lon=${encodeURIComponent(lonNum)}&accept-language=en&zoom=18&addressdetails=1`,
-      `https://geocode.maps.co/reverse?lat=${encodeURIComponent(latNum)}&lon=${encodeURIComponent(lonNum)}&accept-language=en`
-    ];
-    for(const url of urls){
-      try {
-        const res = await fetch(url, { headers: { "Accept": "application/json" }, cache: "no-store" });
-        if (!res.ok) continue;
-        const json = await res.json();
-        const addr = json?.display_name || json?.address?.road || "";
-        if(addr){
-          geocodeCache[key] = addr;
-          try { localStorage.setItem("geocodeCache", JSON.stringify(geocodeCache)); } catch (e) {}
-          return addr;
-        }
-      } catch (e) {
-        console.warn("reverseGeocodeEn provider error", e);
       }
     }
     return `${latNum.toFixed(5)}, ${lonNum.toFixed(5)}`;
@@ -2633,39 +2600,11 @@ async function svgToPngDataUrl(svgText, width=440, height=112){
   });
 }
 
-function getPdfAddressEnSync(p){
-  const lat = Number(p?.latitude);
-  const lon = Number(p?.longitude);
-  const coords = `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
-  if(!Number.isFinite(lat) || !Number.isFinite(lon)) return "—";
-
-  const direct = [p?.addressEn, p?.address_en, p?.address, p?.display_name_en, p?.display_name]
-    .find(v => typeof v === "string" && v.trim());
-  if(direct) return direct;
-
-  const enKeys = [
-    `${lat.toFixed(5)},${lon.toFixed(5)}|en`,
-    `${lat.toFixed(6)},${lon.toFixed(6)}|en`,
-    `${lat},${lon}|en`,
-    `${lat.toFixed(5)},${lon.toFixed(5)}`,
-    `${lat.toFixed(6)},${lon.toFixed(6)}`,
-    `${lat},${lon}`
-  ];
-  for(const key of enKeys){
-    const cached = geocodeCache?.[key];
-    if(typeof cached === "string" && cached.trim()) return cached;
-    if(cached && typeof cached.address === "string" && cached.address.trim()) return cached.address;
-    if(cached && typeof cached.display_name === "string" && cached.display_name.trim()) return cached.display_name;
-  }
-
-  return coords;
-}
-
 async function buildPdfBlob(){
   const pts = filteredHistory();
   const s = computeSummary(pts);
   const {jsPDF} = window.jspdf;
-  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+  const doc = new jsPDF();
   doc.setFont("helvetica", "normal");
   let y = 16;
 
@@ -2708,32 +2647,20 @@ async function buildPdfBlob(){
   doc.text(`Average speed: ${s.avgSpeed.toFixed(1)} km/h`, 14, y); y += 6;
   doc.text(`Max speed: ${s.maxSpeed.toFixed(1)} km/h`, 14, y); y += 10;
 
-  const pdfPoints = [...pts]
+  const rows = [...pts]
     .sort((a, b) => Number(a?.timestamp || 0) - Number(b?.timestamp || 0))
-    .slice(0, 250);
-
-  const rows = pdfPoints.map((p) => {
-    const coords = `${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}`;
-    const address = getPdfAddressEnSync(p);
-    return [
+    .slice(0,250)
+    .map(p=>[
       fmtTime(p.timestamp),
-      coords,
-      address,
+      `${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}`,
       p.speed != null ? Number(p.speed).toFixed(1) : "—"
-    ];
-  });
+    ]);
 
   doc.autoTable({
     startY: y,
-    head: [["Time","Coordinates","Address","Speed km/h"]],
+    head: [["Time","Coordinates","Speed km/h"]],
     body: rows,
-    styles: {fontSize: 8, cellWidth: 'wrap'},
-    columnStyles: {
-      0: { cellWidth: 34 },
-      1: { cellWidth: 42 },
-      2: { cellWidth: 170 },
-      3: { cellWidth: 24, halign: 'right' }
-    }
+    styles: {fontSize: 9}
   });
 
   return doc.output("blob");
@@ -2860,20 +2787,14 @@ async function exportPdfReport(){
 
   let tableHtml = "";
   if(options.table){
-    const rows = (await Promise.all(pts.slice(0, 250).map(async p => {
-      const coords = `${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}`;
-      let address = coords;
-      try { address = await reverseGeocodeEn(p.latitude, p.longitude); } catch(e) {}
-      return `
+    const rows = pts.slice(0, 250).map(p => `
       <tr>
         <td>${fmtTime(p.timestamp)}</td>
-        <td>${coords}</td>
-        <td>${address}</td>
+        <td>${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}</td>
         <td>${p.speed != null ? Number(p.speed).toFixed(1) : "—"}</td>
         <td>${p.accuracy != null ? Number(p.accuracy).toFixed(0) : "—"}</td>
         <td>${pointLabelsText(p)}</td>
-      </tr>`;
-    }))).join("");
+      </tr>`).join("");
     tableHtml = `
       <section class="block">
         <h2>${T.table}</h2>
@@ -2883,7 +2804,6 @@ async function exportPdfReport(){
               <th>${T.time}</th>
               <th>${T.coords}</th>
               <th>${T.speedCol}</th>
-              <th>Address</th>
               <th>${T.accuracyCol}</th>
               <th>${T.labelsCol}</th>
             </tr>
@@ -2920,7 +2840,6 @@ async function exportPdfReport(){
   thead th{background:#eff6ff;color:#1d4ed8}
   .actions{position:sticky;top:0;display:flex;justify-content:flex-end;padding:12px 0 0 0}
   .printBtn{border:none;background:#2563eb;color:#fff;border-radius:12px;padding:10px 16px;font-weight:700;cursor:pointer}
-  @page{size:landscape;}
   @media print{
     body{background:#fff}
     .wrap{max-width:none;padding:0}
