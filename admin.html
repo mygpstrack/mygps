@@ -1202,12 +1202,27 @@ function formatRemainingMs(ms){
 
 function getSelectedActiveSessionEntry(){
   const now = Date.now();
-  return Object.entries(allSessions||{}).find(([token,session])=>{
-    if(token === "_init") return false;
-    const root = getSessionRoot(session), meta = root?.meta || {};
-    if(selectedUid && meta.ownerUid && meta.ownerUid !== selectedUid) return false;
-    return !!meta.active && Number(meta.expiresAt||0) > now;
-  }) || null;
+  const uid = selectedUid || (allUsers.length === 1 ? allUsers[0] : "");
+  if(!uid) return null;
+
+  const activeSessionId = String(liveOwners?.[uid]?.activeSessionId || "").trim();
+  if(activeSessionId){
+    const session = allSessions?.[activeSessionId];
+    const root = getSessionRoot(session);
+    const meta = root?.meta || {};
+    if(root && meta.ownerUid === uid && (meta.paused || (!!meta.active && Number(meta.expiresAt||0) > now))){
+      return [activeSessionId, session];
+    }
+  }
+
+  return Object.entries(allSessions||{})
+    .filter(([token,session])=>{
+      if(token === "_init") return false;
+      const root = getSessionRoot(session), meta = root?.meta || {};
+      if(uid && meta.ownerUid && meta.ownerUid !== uid) return false;
+      return meta.paused || (!!meta.active && Number(meta.expiresAt||0) > now);
+    })
+    .sort((a,b)=>Number(getSessionRoot(b[1])?.meta?.createdAt||0)-Number(getSessionRoot(a[1])?.meta?.createdAt||0))[0] || null;
 }
 
 function updateActiveSessionToast(){
@@ -1229,10 +1244,13 @@ function updateActiveSessionToast(){
 
   const [token, session] = entry;
   const meta = getSessionRoot(session)?.meta || {};
-  const leftMs = Math.max(0, Number(meta.expiresAt||0) - Date.now());
+  const paused = !!meta.paused;
+  const leftMs = paused
+    ? Math.max(0, Number(meta.remainingMs||0))
+    : Math.max(0, Number(meta.expiresAt||0) - Date.now());
   const url = buildShareUrl(token);
 
-  if(leftMs <= 0){
+  if(!paused && leftMs <= 0){
     if(el) el.remove();
     const createBtn = qs("createShareBtn");
     if(createBtn){
@@ -1261,17 +1279,21 @@ function updateActiveSessionToast(){
   }
 
   el.innerHTML = `
-    <div style="font-weight:800">Live-сессия активна</div>
-    <div id="activeSessionToastTime" style="font-size:13px;opacity:.95">Осталось: ${formatRemainingMs(leftMs)}</div>
+    <div style="font-weight:800">${paused ? "Live-сессия на паузе" : "Live-сессия активна"}</div>
+    <div id="activeSessionToastTime" style="font-size:13px;opacity:.95">${paused ? "Осталось на паузе" : "Осталось"}: ${formatRemainingMs(leftMs)}</div>
   `;
 
   clearInterval(el._timer);
+  el._paused = paused;
   el._expiresAt = Number(meta.expiresAt||0);
+  el._remainingMs = Number(meta.remainingMs||0);
   el._timer = setInterval(()=>{
-    const left = Math.max(0, el._expiresAt - Date.now());
+    const left = el._paused
+      ? Math.max(0, Number(el._remainingMs||0))
+      : Math.max(0, Number(el._expiresAt||0) - Date.now());
     const timeEl = document.getElementById("activeSessionToastTime");
-    if(timeEl) timeEl.textContent = `Осталось: ${formatRemainingMs(left)}`;
-    if(left <= 0){
+    if(timeEl) timeEl.textContent = `${el._paused ? "Осталось на паузе" : "Осталось"}: ${formatRemainingMs(left)}`;
+    if(!el._paused && left <= 0){
       clearInterval(el._timer);
       el.remove();
       const createBtn = qs("createShareBtn");
@@ -1636,6 +1658,7 @@ function updateCharts(points){
 async function renderHistory() {
   updateHistorySortHeaders();
   const pts = filteredHistory();
+  pts = pts.slice().sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
   currentFiltered = pts;
 
   console.log("renderHistory points:", pts.length);
@@ -1794,10 +1817,9 @@ async function updateNowFromAvailableSources(){
     await updateNowUI(selectedLive.lastPoint, selectedUid ? `live/${selectedUid}` : "live");
     return;
   }
-  const now = Date.now();
-  const active = Object.entries(allSessions).filter(([k,v])=>k!=="_init" && !!getSessionRoot(v).meta?.active && Number(getSessionRoot(v).meta?.expiresAt||0)>now).filter(([,v])=> !selectedUid || !getSessionRoot(v).meta?.ownerUid || getSessionRoot(v).meta.ownerUid===selectedUid);
-  if(active.length){
-    const [token, session] = active.sort((a,b)=>Number((getSessionRoot(b[1]).meta?.createdAt||0))-Number((getSessionRoot(a[1]).meta?.createdAt||0)))[0];
+  const activeEntry = getSelectedActiveSessionEntry();
+  if(activeEntry){
+    const [token, session] = activeEntry;
     const root = getSessionRoot(session);
     const pts = Object.values(root.public?.recentPoints || {}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
     liveTrail.setLatLngs(pts.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]));
@@ -1999,12 +2021,29 @@ async function createLiveSession(){
     durationMinutes = Number(durationVal || 60);
   }
   if(!durationMinutes || durationMinutes <= 0) return showToast("Укажи корректное время","warn");
-  const sourcePoints=getRecentSourcePoints();
+  const sourcePoints=getRecentSourcePoints()
+    .filter(p => p && p.latitude != null && p.longitude != null)
+    .sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
   if(!sourcePoints.length) return showToast("Нет данных выбранного пользователя для создания live-ссылки.","warn");
 
   const token=generateSessionToken(), expiresAt=now+durationMinutes*60*1000, lastPoint=sourcePoints[sourcePoints.length-1], recentPointsObj={};
-  sourcePoints.forEach(p=>recentPointsObj[String(p.timestamp||Date.now()+Math.random())]=p);
-  const payload={meta:{active:true,paused:false,createdAt:now,expiresAt,remainingMs:durationMinutes*60*1000,ownerUid:selectedUid,createdBy:auth.currentUser?.uid||null,createdByEmail:auth.currentUser?.email||null,durationMinutes},public:{lastPoint,recentPoints:recentPointsObj},viewStats:{openCount:0,firstOpenAt:null,lastOpenAt:null}};
+  sourcePoints.forEach((p, idx)=>recentPointsObj[String(p.timestamp || (now + idx))]={
+    latitude: Number(p.latitude),
+    longitude: Number(p.longitude),
+    speed: Number(p.speed || 0),
+    accuracy: Number(p.accuracy || 0),
+    bearing: Number(p.bearing || 0),
+    timestamp: Number(p.timestamp || (now + idx))
+  });
+  const normalizedLastPoint = {
+    latitude: Number(lastPoint.latitude),
+    longitude: Number(lastPoint.longitude),
+    speed: Number(lastPoint.speed || 0),
+    accuracy: Number(lastPoint.accuracy || 0),
+    bearing: Number(lastPoint.bearing || 0),
+    timestamp: Number(lastPoint.timestamp || now)
+  };
+  const payload={meta:{active:true,paused:false,createdAt:now,expiresAt,remainingMs:durationMinutes*60*1000,ownerUid:selectedUid,createdBy:auth.currentUser?.uid||null,createdByEmail:auth.currentUser?.email||null,durationMinutes},public:{lastPoint:normalizedLastPoint,recentPoints:recentPointsObj},viewStats:{openCount:0,firstOpenAt:null,lastOpenAt:null}};
   try{
     await set(ref(db,`liveSessions/${token}`), payload);
     await update(ref(db), { [`liveOwners/${selectedUid}/activeSessionId`]:token, [`liveOwners/${selectedUid}/lastCreatedAt`]:now });
@@ -2033,49 +2072,41 @@ function updateActiveSessionNotice(){
   const box = qs("activeSessionNotice");
   if(!box) return;
 
-  const uid = selectedUid;
-  if(!uid){
+  const entry = getSelectedActiveSessionEntry();
+  if(!entry){
     box.classList.add("hidden");
     box.innerHTML = "";
     return;
   }
 
-  const ownerMeta = liveOwners?.[uid] || {};
-  const activeSessionId = ownerMeta.activeSessionId;
-  if(!activeSessionId){
+  const [token, session] = entry;
+  const meta = getSessionRoot(session).meta || {};
+  const paused = !!meta.paused;
+  const left = paused
+    ? Math.max(0, Number(meta.remainingMs || 0))
+    : Math.max(0, Number(meta.expiresAt || 0) - Date.now());
+  const url = buildShareUrl(token);
+
+  if(!paused && left <= 0){
     box.classList.add("hidden");
     box.innerHTML = "";
     return;
   }
 
-  const session = allSessions?.[activeSessionId];
-  const root = session ? getSessionRoot(session) : null;
-  const meta = root?.meta || {};
-  const expiresAt = Number(meta.expiresAt || 0);
-  const isActive = !!meta.active && expiresAt > Date.now();
-
-  if(!isActive){
-    box.classList.add("hidden");
-    box.innerHTML = "";
-    return;
-  }
-
-  const left = Math.max(0, expiresAt - Date.now());
-  const url = buildShareUrl(activeSessionId);
   createdShareUrl = url;
   box.classList.remove("hidden");
-  box.innerHTML = `<strong>Live-сессия активна</strong><div style="margin-top:6px">Осталось: <b>${fmtRemainingCompact(left)}</b></div><div style="margin-top:6px" class="mono">${url}</div>`;
+  box.innerHTML =
+    `<strong>${paused ? "Live-сессия на паузе" : "Live-сессия активна"}</strong>` +
+    `<div style="margin-top:6px">${paused ? "Осталось на паузе" : "Осталось"}: <b>${fmtRemainingCompact(left)}</b></div>` +
+    `<div style="margin-top:6px" class="mono">${url}</div>`;
 }
 
 async function loadSessions(){
-  const [sessionsSnap, ownersSnap] = await Promise.all([
-    get(ref(db, "liveSessions")),
-    get(ref(db, "liveOwners"))
-  ]);
-  allSessions = sessionsSnap.val() || {};
-  liveOwners = ownersSnap.val() || {};
+  const snap = await get(ref(db, "liveSessions"));
+  allSessions = snap.val() || {};
   updateUsage();
   renderSessions();
+  updateActiveSessionToast();
   updateActiveSessionNotice();
   await updateNowFromAvailableSources();
 }
@@ -2998,7 +3029,8 @@ onAuthStateChanged(auth, async user => {
     });
     updateUsage(); renderHistory(); updateNowFromAvailableSources();
   });
-  onValue(ref(db, "liveSessions"), snap => { allSessions=snap.val()||{}; updateUsage(); renderSessions(); updateActiveSessionToast(); updateNowFromAvailableSources(); });
+  onValue(ref(db, "liveSessions"), snap => { allSessions=snap.val()||{}; updateUsage(); renderSessions(); updateActiveSessionToast(); updateActiveSessionNotice(); updateNowFromAvailableSources(); });
+  onValue(ref(db, "liveOwners"), snap => { liveOwners=snap.val()||{}; updateActiveSessionToast(); updateActiveSessionNotice(); updateNowFromAvailableSources(); });
   onValue(ref(db, "adminLogs/deletions"), snap => { deletionsLog=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0)); renderJournal(); });
   onValue(ref(db, "adminLogs/actions"), snap => { actionLogs=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0)); renderJournal(); });
 
