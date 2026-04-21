@@ -246,6 +246,14 @@ let displayPoint=null;
 let animationFrameId=null;
 let lastPausedState=null;
 let currentSessionMeta=null;
+let currentSessionData=null;
+const DEFAULT_STATUS_CONFIG = {
+  moveSpeedThresholdKmh: 3,
+  stopLongMinutes: 5,
+  offlineMinutes: 5,
+  junkAccuracyMeters: 100,
+  impossibleSpeedKmh: 250
+};
 let topInfoHidden = localStorage.getItem('live_top_info_hidden') === '1';
 let bottomPanelCollapsed = localStorage.getItem('live_bottom_panel_collapsed') === '1';
 
@@ -419,21 +427,87 @@ function getMoveType(points, currentPoint){
   return 'Мото';
 }
 
-function getStatusMeta(p, sessionMeta){
-  if(sessionMeta?.paused){
-    return {status:'Приостановлено', signal:'—', type:'paused'};
-  }
-  const ageMs=(p.ts ? Date.now()-p.ts : 0);
-  const speed = Number(p.speed || 0);
-
-  if(ageMs > 10 * 60 * 1000) return {status:'Нет сигнала', signal:'Потерян', type:'offline'};
-  if(speed > 2) return {status:'Движение', signal:'Хороший', type:'moving'};
-  if(ageMs >= 5 * 60 * 1000) return {status:'Стоянка', signal:'Есть', type:'stop_long'};
-  return {status:'Стоит', signal:'Есть', type:'stop_short'};
+function getStatusConfig(sessionData){
+  const sessionCfg = sessionData?.public?.statusConfig || sessionData?.meta?.statusConfig || sessionData?.statusConfig || {};
+  return {
+    moveSpeedThresholdKmh: Number(sessionCfg.moveSpeedThresholdKmh ?? DEFAULT_STATUS_CONFIG.moveSpeedThresholdKmh),
+    stopLongMinutes: Number(sessionCfg.stopLongMinutes ?? DEFAULT_STATUS_CONFIG.stopLongMinutes),
+    offlineMinutes: Number(sessionCfg.offlineMinutes ?? DEFAULT_STATUS_CONFIG.offlineMinutes),
+    junkAccuracyMeters: Number(sessionCfg.junkAccuracyMeters ?? DEFAULT_STATUS_CONFIG.junkAccuracyMeters),
+    impossibleSpeedKmh: Number(sessionCfg.impossibleSpeedKmh ?? DEFAULT_STATUS_CONFIG.impossibleSpeedKmh)
+  };
 }
 
-function buildIconHtml(p, sessionMeta){
-  const meta=getStatusMeta(p, sessionMeta);
+function isUsableStatusPoint(p, cfg){
+  if(!p) return false;
+  if(!Number.isFinite(Number(p.lat)) || !Number.isFinite(Number(p.lng))) return false;
+  const accuracy = Number(p.accuracy || 0);
+  const speed = Number(p.speed || 0);
+  if(accuracy > Number(cfg.junkAccuracyMeters || 100)) return false;
+  if(speed > Number(cfg.impossibleSpeedKmh || 250)) return false;
+  return true;
+}
+
+function getStationaryMs(points, currentPoint, cfg){
+  const arr = Array.isArray(points) ? [...points] : [];
+  if(!arr.length) return 0;
+  const ordered = arr
+    .filter(Boolean)
+    .sort((a,b)=>Number(a.ts||0)-Number(b.ts||0));
+
+  let lastMovingTs = null;
+  for(let i = ordered.length - 1; i >= 0; i--){
+    const p = ordered[i];
+    if(!isUsableStatusPoint(p, cfg)) continue;
+    const speed = Number(p.speed || 0);
+    if(speed >= Number(cfg.moveSpeedThresholdKmh || 3)){
+      lastMovingTs = Number(p.ts || 0);
+      break;
+    }
+  }
+
+  if(lastMovingTs){
+    return Math.max(0, Number(currentPoint?.ts || 0) - lastMovingTs);
+  }
+
+  const oldestTs = Number(ordered[0]?.ts || currentPoint?.ts || 0);
+  return Math.max(0, Number(currentPoint?.ts || 0) - oldestTs);
+}
+
+function getStatusMeta(p, sessionMeta, routePoints=[], sessionData=null){
+  if(sessionMeta?.paused){
+    return {status:'⏸ Приостановлено', signal:'—', type:'paused', color:'#3b82f6'};
+  }
+
+  const cfg = getStatusConfig(sessionData);
+  const ageMs = (p?.ts ? Date.now() - Number(p.ts) : Number.MAX_SAFE_INTEGER);
+  const offlineMs = Number(cfg.offlineMinutes || 5) * 60 * 1000;
+
+  if(ageMs > offlineMs){
+    return {status:'📡 Нет сигнала', signal:'Потерян', type:'offline', color:'#94a3b8'};
+  }
+
+  if(!isUsableStatusPoint(p, cfg)){
+    return {status:'📡 Нет сигнала', signal:'Слабый GPS', type:'offline', color:'#94a3b8'};
+  }
+
+  const speed = Number(p.speed || 0);
+  if(speed >= Number(cfg.moveSpeedThresholdKmh || 3)){
+    return {status:'🚗 Движение', signal:'Хороший', type:'moving', color:'#22c55e'};
+  }
+
+  const stationaryMs = getStationaryMs(routePoints, p, cfg);
+  const stopLongMs = Number(cfg.stopLongMinutes || 5) * 60 * 1000;
+
+  if(stationaryMs >= stopLongMs){
+    return {status:'🅿 Стоянка', signal:'Есть', type:'stop_long', color:'#ef4444'};
+  }
+
+  return {status:'⏸ Остановка', signal:'Есть', type:'stop_short', color:'#eab308'};
+}
+
+function buildIconHtml(p, sessionMeta, routePoints=[], sessionData=null){
+  const meta=getStatusMeta(p, sessionMeta, routePoints, sessionData);
   if(meta.type==='offline'){
     return `<div class="marker-wrap"><div class="marker-circle" style="background:#94a3b8"></div></div>`;
   }
@@ -447,9 +521,9 @@ function buildIconHtml(p, sessionMeta){
   return `<div class="marker-wrap"><div class="marker-circle" style="background:${color}"></div></div>`;
 }
 
-function setMarkerIcon(p, sessionMeta){
+function setMarkerIcon(p, sessionMeta, routePoints=[], sessionData=null){
   const icon=L.divIcon({
-    html:buildIconHtml(p, sessionMeta),
+    html:buildIconHtml(p, sessionMeta, routePoints, sessionData),
     className:'',
     iconSize:[24,24],
     iconAnchor:[12,12]
@@ -461,11 +535,11 @@ function setMarkerIcon(p, sessionMeta){
   }
 }
 
-function animateMarkerTo(target, sessionMeta){
+function animateMarkerTo(target, sessionMeta, routePoints=[], sessionData=null){
   if(!target) return;
   if(!marker){
     setMarkerIcon(target, sessionMeta);
-    marker=L.marker([target.lat,target.lng],{icon:L.divIcon({html:buildIconHtml(target, sessionMeta), className:''})}).addTo(map);
+    marker=L.marker([target.lat,target.lng],{icon:L.divIcon({html:buildIconHtml(target, sessionMeta, routePoints, sessionData), className:''})}).addTo(map);
     displayPoint = {...target};
     return;
   }
@@ -473,7 +547,7 @@ function animateMarkerTo(target, sessionMeta){
   if(!displayPoint){
     displayPoint = {...target};
     marker.setLatLng([target.lat, target.lng]);
-    marker.setIcon(L.divIcon({html:buildIconHtml(target, sessionMeta), className:'', iconSize:[24,24], iconAnchor:[12,12]}));
+    marker.setIcon(L.divIcon({html:buildIconHtml(target, sessionMeta, routePoints, sessionData), className:'', iconSize:[24,24], iconAnchor:[12,12]}));
     return;
   }
 
@@ -490,7 +564,7 @@ function animateMarkerTo(target, sessionMeta){
     const lat = start.lat + (end.lat - start.lat) * eased;
     const lng = start.lng + (end.lng - start.lng) * eased;
     marker.setLatLng([lat,lng]);
-    marker.setIcon(L.divIcon({html:buildIconHtml(target, sessionMeta), className:'', iconSize:[24,24], iconAnchor:[12,12]}));
+    marker.setIcon(L.divIcon({html:buildIconHtml(target, sessionMeta, routePoints, sessionData), className:'', iconSize:[24,24], iconAnchor:[12,12]}));
     displayPoint = {...target, lat, lng};
     if(t < 1){
       animationFrameId=requestAnimationFrame(step);
@@ -499,14 +573,15 @@ function animateMarkerTo(target, sessionMeta){
   animationFrameId=requestAnimationFrame(step);
 }
 
-function updateUi(p, expiresAt, sessionMeta, moveType){
-  const meta=getStatusMeta(p, sessionMeta);
+function updateUi(p, expiresAt, sessionMeta, moveType, routePoints=[], sessionData=null){
+  const meta=getStatusMeta(p, sessionMeta, routePoints, sessionData);
   const leftMs = sessionMeta?.paused
     ? Math.max(0, Number(sessionMeta?.remainingMs || 0))
     : (expiresAt ? Math.max(0, Number(expiresAt)-Date.now()) : 0);
   const leftText=expiresAt || sessionMeta?.paused ? fmtCountdown(leftMs) : '—';
 
   qs('status').innerText=meta.status;
+  qs('status').style.color = meta.color || '';
   qs('speed').innerText=(Number(p.speed||0)).toFixed(1)+' км/ч';
   qs('updated').innerText=relTime(p.ts);
   qs('time').innerText=leftText;
@@ -521,6 +596,7 @@ function updateUi(p, expiresAt, sessionMeta, moveType){
   else gpsState='OK';
 
   qs('d_status').innerText=meta.status;
+  qs('d_status').style.color = meta.color || '';
   qs('d_speed').innerText=(Number(p.speed||0)).toFixed(1)+' км/ч';
   qs('d_updated').innerText=fmtClock(p.ts)+' ('+relTime(p.ts)+' назад)';
   qs('d_time').innerText=leftText;
@@ -552,6 +628,7 @@ function applySession(data){
   if(!data){ showEnd('Ссылка не найдена или была удалена.'); return; }
   const meta=data.meta||{};
   currentSessionMeta=meta;
+  currentSessionData=data;
 
   if(lastPausedState!==null && lastPausedState!==!!meta.paused){
     showAlert(meta.paused ? '⏸ Трансляция приостановлена' : '▶️ Трансляция продолжена');
@@ -587,19 +664,20 @@ function applySession(data){
   const livePoint = routePoints[routePoints.length - 1];
   lastPoint = {...livePoint};
 
+  window._lastRoutePoints = routePoints.slice(-30);
   tailPoints = routePoints.slice(-30).map(p=>[p.lat,p.lng]);
   tailLine.setLatLngs(tailPoints);
 
-  setMarkerIcon(livePoint, meta);
+  setMarkerIcon(livePoint, meta, routePoints, data);
   if(!marker){
-    marker=L.marker([livePoint.lat,livePoint.lng],{icon:L.divIcon({html:buildIconHtml(livePoint, meta), className:'', iconSize:[24,24], iconAnchor:[12,12]})}).addTo(map);
+    marker=L.marker([livePoint.lat,livePoint.lng],{icon:L.divIcon({html:buildIconHtml(livePoint, meta, routePoints, data), className:'', iconSize:[24,24], iconAnchor:[12,12]})}).addTo(map);
     displayPoint = {...livePoint};
   }else{
-    animateMarkerTo(livePoint, meta);
+    animateMarkerTo(livePoint, meta, routePoints, data);
   }
 
   const moveType = getMoveType(routePoints, livePoint);
-  updateUi(livePoint, meta.expiresAt, meta, moveType);
+  updateUi(livePoint, meta.expiresAt, meta, moveType, routePoints, data);
   fetchWeather(livePoint.lat, livePoint.lng);
 
   if(follow) map.panTo([livePoint.lat, livePoint.lng], {animate:true});
@@ -699,11 +777,13 @@ ${dir} ветер ${wind} м/с`;
 
 setInterval(() => {
   if(!lastPoint) return;
-  const meta = getStatusMeta(lastPoint, currentSessionMeta);
+  const meta = getStatusMeta(lastPoint, currentSessionMeta, window._lastRoutePoints || [lastPoint], currentSessionData);
   qs('updated').innerText = relTime(lastPoint.ts);
   qs('d_updated').innerText = fmtClock(lastPoint.ts)+' ('+relTime(lastPoint.ts)+' назад)';
   qs('status').innerText = meta.status;
+  qs('status').style.color = meta.color || '';
   qs('d_status').innerText = meta.status;
+  qs('d_status').style.color = meta.color || '';
   qs('d_signal').innerText = meta.signal;
 
   const leftMs = currentSessionMeta?.paused
