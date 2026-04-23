@@ -697,10 +697,12 @@
           </div>
           <div class="toolbar" style="margin-top:12px">
             <button id="useNowPointForGeofenceBtn" class="secondary">Взять текущую точку</button>
+            <button id="startGeofenceDrawBtn" class="secondary">Нарисовать на карте</button>
+            <button id="cancelGeofenceDrawBtn" class="secondary">Отмена рисования</button>
             <button id="saveGeofenceBtn" class="success">Сохранить геозону</button>
             <button id="clearGeofenceFormBtn" class="secondary">Очистить форму</button>
           </div>
-          <div class="notice smallMuted" id="geofenceFormStatus">Можно сохранить зону по текущей точке или вручную.</div>
+          <div class="notice smallMuted" id="geofenceFormStatus">Можно сохранить зону по текущей точке, вручную или нарисовать круг на карте.</div>
           <div style="overflow:auto">
             <table>
               <thead><tr><th>Название</th><th>Координаты</th><th>Радиус</th><th>Действия</th></tr></thead>
@@ -1961,6 +1963,11 @@ const liveTrail = L.polyline([], {weight:5}).addTo(liveMap);
 const liveMarker = L.circleMarker([56.95,24.10], {radius:8,color:"#22c55e",fillColor:"#22c55e",fillOpacity:1}).addTo(liveMap);
 const sessionTrail = L.polyline([], {weight:5}).addTo(sessionMap);
 const sessionMarker = L.circleMarker([56.95,24.10], {radius:8,color:"#22c55e",fillColor:"#22c55e",fillOpacity:1}).addTo(sessionMap);
+const geofencePreviewLayer = L.layerGroup().addTo(liveMap);
+const geofenceSavedLayer = L.layerGroup().addTo(liveMap);
+let isGeofenceDrawMode = false;
+let geofencePreviewCircle = null;
+let geofencePreviewCenter = null;
 let routeSegments = [];
 const startMarker = L.circleMarker([56.95,24.10], {radius:8,color:"#16a34a",fillColor:"#16a34a",fillOpacity:1}).addTo(historyMap);
 const endMarker = L.circleMarker([56.95,24.10], {radius:8,color:"#dc2626",fillColor:"#dc2626",fillOpacity:1}).addTo(historyMap);
@@ -2465,6 +2472,80 @@ function getSessionRoot(session){
 
 
 
+function updateGeofenceDrawButtons(){
+  const startBtn = qs("startGeofenceDrawBtn");
+  const cancelBtn = qs("cancelGeofenceDrawBtn");
+  if(startBtn){
+    startBtn.textContent = isGeofenceDrawMode ? "Кликни по карте…" : "Нарисовать на карте";
+    startBtn.className = isGeofenceDrawMode ? "warn" : "secondary";
+  }
+  if(cancelBtn) cancelBtn.disabled = !isGeofenceDrawMode && !geofencePreviewCenter;
+}
+
+function clearGeofencePreview(){
+  geofencePreviewLayer.clearLayers();
+  geofencePreviewCircle = null;
+  geofencePreviewCenter = null;
+  isGeofenceDrawMode = false;
+  updateGeofenceDrawButtons();
+}
+
+function updateGeofencePreviewFromForm(){
+  const lat = Number(qs("geofenceLatInput")?.value || NaN);
+  const lon = Number(qs("geofenceLonInput")?.value || NaN);
+  const radiusM = Math.max(10, Number(qs("geofenceRadiusInput")?.value || 100));
+  geofencePreviewLayer.clearLayers();
+  if(!Number.isFinite(lat) || !Number.isFinite(lon)){
+    geofencePreviewCircle = null;
+    geofencePreviewCenter = null;
+    updateGeofenceDrawButtons();
+    return;
+  }
+  geofencePreviewCenter = { lat, lon };
+  geofencePreviewCircle = L.circle([lat, lon], {
+    radius: radiusM,
+    color: "#f59e0b",
+    weight: 2,
+    fillColor: "#f59e0b",
+    fillOpacity: 0.16
+  }).addTo(geofencePreviewLayer);
+  updateGeofenceDrawButtons();
+}
+
+function renderGeofenceCirclesOnMap(){
+  geofenceSavedLayer.clearLayers();
+  const items = normalizeGeofencesShape(adminSettings.geofences);
+  items.forEach(item => {
+    const circle = L.circle([item.lat, item.lon], {
+      radius: item.radiusM,
+      color: "#2563eb",
+      weight: 2,
+      fillColor: "#2563eb",
+      fillOpacity: 0.10
+    }).addTo(geofenceSavedLayer);
+    circle.bindPopup(`<b>${item.name}</b><br>${item.radiusM} м`);
+  });
+}
+
+function beginGeofenceDrawMode(){
+  isGeofenceDrawMode = true;
+  if(qs("geofenceFormStatus")) qs("geofenceFormStatus").textContent = "Режим рисования: кликни по карте «Сейчас», чтобы поставить центр круга.";
+  updateGeofenceDrawButtons();
+}
+
+liveMap.on("click", e => {
+  if(!isGeofenceDrawMode) return;
+  const lat = Number(e.latlng.lat.toFixed(6));
+  const lon = Number(e.latlng.lng.toFixed(6));
+  if(qs("geofenceLatInput")) qs("geofenceLatInput").value = String(lat);
+  if(qs("geofenceLonInput")) qs("geofenceLonInput").value = String(lon);
+  if(!qs("geofenceRadiusInput")?.value) qs("geofenceRadiusInput").value = "100";
+  isGeofenceDrawMode = false;
+  updateGeofencePreviewFromForm();
+  if(qs("geofenceFormStatus")) qs("geofenceFormStatus").textContent = `Центр геозоны поставлен: ${lat.toFixed(5)}, ${lon.toFixed(5)}. Можно менять радиус и сохранять.`;
+  updateGeofenceDrawButtons();
+});
+
 function normalizeGeofence(item, index = 0){
   return {
     id: String(item?.id || `gf_${index}`),
@@ -2488,8 +2569,9 @@ function resetGeofenceForm(){
   if(qs("geofenceLatInput")) qs("geofenceLatInput").value = "";
   if(qs("geofenceLonInput")) qs("geofenceLonInput").value = "";
   if(qs("geofenceRadiusInput")) qs("geofenceRadiusInput").value = "100";
-  if(qs("geofenceFormStatus")) qs("geofenceFormStatus").textContent = "Можно сохранить зону по текущей точке или вручную.";
+  if(qs("geofenceFormStatus")) qs("geofenceFormStatus").textContent = "Можно сохранить зону по текущей точке, вручную или нарисовать круг на карте.";
   window.__editingGeofenceId = "";
+  clearGeofencePreview();
 }
 
 function readGeofenceForm(){
@@ -2543,6 +2625,7 @@ function renderGeofences(){
     if(qs("geofenceLatInput")) qs("geofenceLatInput").value = String(item.lat);
     if(qs("geofenceLonInput")) qs("geofenceLonInput").value = String(item.lon);
     if(qs("geofenceRadiusInput")) qs("geofenceRadiusInput").value = String(item.radiusM);
+    updateGeofencePreviewFromForm();
     if(qs("geofenceFormStatus")) qs("geofenceFormStatus").textContent = `Редактирование: ${item.name}`;
   });
 
@@ -2564,6 +2647,8 @@ function renderGeofences(){
     if(!item) return;
     window.open(`https://maps.google.com/?q=${encodeURIComponent(item.lat + "," + item.lon)}`, "_blank", "noopener,noreferrer");
   });
+
+  renderGeofenceCirclesOnMap();
 }
 
 async function saveGeofenceFromForm(){
@@ -3940,10 +4025,29 @@ qs("renameUserBtn").onclick=async()=>{
 };
 bindGpsSettingsControls();
 setGpsProfileControlsFromState();
+updateGeofenceDrawButtons();
 if (qs("saveAdminUiSettingsBtn")) qs("saveAdminUiSettingsBtn").onclick = async()=>{ await safeAction("Сохранение настроек", saveAdminUiSettings, "Настройки сохранены"); };
 if (qs("saveGpsSettingsBtn")) qs("saveGpsSettingsBtn").onclick = async()=>{ await safeAction("Сохранение настроек GPS", saveGpsSettings, "Настройки GPS сохранены"); };
-if (qs("useNowPointForGeofenceBtn")) qs("useNowPointForGeofenceBtn").onclick = ()=>fillGeofenceFromNowPoint();
-if (qs("clearGeofenceFormBtn")) qs("clearGeofenceFormBtn").onclick = ()=>resetGeofenceForm();
+if (qs("useNowPointForGeofenceBtn")) qs("useNowPointForGeofenceBtn").onclick = () => {
+  const point = getSelectedLiveData()?.lastPoint || getVisibleHistoryPoints().slice(-1)[0];
+  if(!point || point.latitude == null || point.longitude == null) return showToast("Нет текущей точки для геозоны", "warn");
+  if(qs("geofenceLatInput")) qs("geofenceLatInput").value = String(Number(point.latitude).toFixed(6));
+  if(qs("geofenceLonInput")) qs("geofenceLonInput").value = String(Number(point.longitude).toFixed(6));
+  updateGeofencePreviewFromForm();
+  if(qs("geofenceFormStatus")) qs("geofenceFormStatus").textContent = "Координаты подставлены из текущей точки.";
+};
+if (qs("startGeofenceDrawBtn")) qs("startGeofenceDrawBtn").onclick = () => beginGeofenceDrawMode();
+if (qs("cancelGeofenceDrawBtn")) qs("cancelGeofenceDrawBtn").onclick = () => {
+  clearGeofencePreview();
+  if(qs("geofenceFormStatus")) qs("geofenceFormStatus").textContent = "Рисование отменено.";
+};
+if (qs("saveGeofenceBtn")) qs("saveGeofenceBtn").onclick = async () => {
+  try{ await saveGeofenceFromForm(); }catch(e){ showToast(errText(e), "error", 3200); }
+};
+if (qs("clearGeofenceFormBtn")) qs("clearGeofenceFormBtn").onclick = () => resetGeofenceForm();
+if (qs("geofenceRadiusInput")) qs("geofenceRadiusInput").addEventListener("input", updateGeofencePreviewFromForm);
+if (qs("geofenceLatInput")) qs("geofenceLatInput").addEventListener("input", updateGeofencePreviewFromForm);
+if (qs("geofenceLonInput")) qs("geofenceLonInput").addEventListener("input", updateGeofencePreviewFromForm);
 if (qs("saveGeofenceBtn")) qs("saveGeofenceBtn").onclick = async()=>{ await safeAction("Сохранение геозоны", saveGeofenceFromForm, "Геозона сохранена"); };
 if (qs("backupNowBtn")) qs("backupNowBtn").onclick = async()=>{ await safeAction("Создание backup", async()=>{ await createMonthlyBackup(true); await renderBackups(); }, "Backup создан"); };
 qs("downloadBackupBtn").onclick=async()=>{
