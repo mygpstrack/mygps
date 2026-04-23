@@ -305,6 +305,10 @@
           <div class="stat"><div class="label">Направление</div><div class="value" id="nowBearing">—</div></div>
           <div class="stat"><div class="label">Простой</div><div class="value" id="nowIdle">—</div></div>
           <div class="stat"><div class="label">Адрес</div><div class="value" id="nowAddress">—</div></div>
+          <div class="stat"><div class="label">Батарея</div><div class="value" id="nowBattery">—</div></div>
+          <div class="stat"><div class="label">Питание</div><div class="value" id="nowCharging">—</div></div>
+          <div class="stat"><div class="label">Спутники</div><div class="value" id="nowSatellites">—</div></div>
+          <div class="stat"><div class="label">Качество GPS</div><div class="value" id="nowGpsQuality">—</div></div>
           
         </div>
         <div class="row">
@@ -776,6 +780,71 @@ let gpsProfilesLastSeenJson = null;
 let lastGpsProfilesSnapshot = null;
 let suppressNextGpsProfilesToast = false;
 let suppressHistoryMapInteraction = false;
+let lastAdminAlerts = { offline:null, noGps:null, lowBattery:null };
+
+function pickFirstDefined(obj, keys){
+  if(!obj) return null;
+  for(const key of keys){
+    const value = obj[key];
+    if(value !== undefined && value !== null && value !== "") return value;
+  }
+  return null;
+}
+function toFiniteNumber(value){
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+}
+function extractBatteryLevel(point){
+  return toFiniteNumber(pickFirstDefined(point, ["batteryLevel","batteryPct","batteryPercent","battery"]));
+}
+function extractIsCharging(point){
+  const raw = pickFirstDefined(point, ["isCharging","charging","plugged","powerConnected"]);
+  if(raw === null || raw === undefined || raw === "") return null;
+  if(typeof raw === "boolean") return raw;
+  const normalized = String(raw).toLowerCase();
+  if(["1","true","yes","charging","plugged"].includes(normalized)) return true;
+  if(["0","false","no","not_charging","battery"].includes(normalized)) return false;
+  return null;
+}
+function extractSatellites(point){
+  const used = toFiniteNumber(pickFirstDefined(point, ["satellitesUsed","gnssSatellitesUsed","usedSatellites","satsUsed"]));
+  const visible = toFiniteNumber(pickFirstDefined(point, ["satellitesVisible","gnssSatellitesVisible","visibleSatellites","satsVisible","satellites"]));
+  return { used, visible };
+}
+function inferSignalType(point, sourceLabel){
+  const raw = String(pickFirstDefined(point, ["signalType","sourceType","provider","source","signal","locationSource"]) || sourceLabel || "").toLowerCase();
+  if(raw.includes("gps")) return "gps";
+  if(raw.includes("network") || raw.includes("wifi") || raw.includes("cell")) return "network";
+  if(raw.includes("mixed") || raw.includes("fused") || raw.includes("passive")) return "mixed";
+  return "—";
+}
+function evaluateGpsQuality(point, sourceLabel){
+  const accuracy = toFiniteNumber(point?.accuracy);
+  const sats = extractSatellites(point);
+  const signalType = inferSignalType(point, sourceLabel);
+  if(!point) return { text:"—", color:"#94a3b8", signalType, satsText:"—" };
+  const satsText = (sats.visible != null || sats.used != null)
+    ? `${sats.used != null ? sats.used : "—"} / ${sats.visible != null ? sats.visible : "—"}`
+    : "—";
+  if(signalType === "gps" && ((accuracy != null && accuracy <= 20) || (sats.used != null && sats.used >= 4))) {
+    return { text:"🟢 Нормальный", color:"#22c55e", signalType, satsText };
+  }
+  if(signalType !== "—" || (accuracy != null && accuracy <= 60) || (sats.used != null && sats.used >= 1)) {
+    return { text:"🟡 Слабый", color:"#f59e0b", signalType, satsText };
+  }
+  return { text:"🔴 Плохой", color:"#ef4444", signalType, satsText };
+}
+function maybeToastState(key, active, message, type){
+  if(lastAdminAlerts[key] === active) return;
+  lastAdminAlerts[key] = active;
+  if(active) showToast(message, type || "warn", 3200);
+}
+function updateAdminPointAlerts(point, st, gpsMeta){
+  const batteryLevel = extractBatteryLevel(point);
+  maybeToastState("offline", st?.kind === "offline", "Устройство offline", "warn");
+  maybeToastState("noGps", gpsMeta?.text === "🔴 Плохой", "Плохой GPS / нет уверенного сигнала", "warn");
+  maybeToastState("lowBattery", batteryLevel != null && batteryLevel <= 20, `Низкий заряд: ${batteryLevel}%`, "warn");
+}
 
 function windDirShort(deg){
   const dirs=["С","СВ","В","ЮВ","Ю","ЮЗ","З","СЗ"];
@@ -2041,7 +2110,7 @@ async function renderHistory() {
   qs("endAddress").textContent = await reverseGeocode(Number(last.latitude), Number(last.longitude));
 }
 
-async function updateNowUI(point, sourceLabel){
+async async function updateNowUI(point, sourceLabel){
   currentNowSourceLabel = sourceLabel || "—";
   if(point && point.latitude != null && point.longitude != null){
     const lat=Number(point.latitude), lon=Number(point.longitude);
@@ -2057,14 +2126,22 @@ async function updateNowUI(point, sourceLabel){
     setWeatherChip("headerWeatherDynamic", "По точке", weatherIcon(3), "Ожидание координат…");
   }
   const st = statusByPoint(point);
+  const gpsMeta = evaluateGpsQuality(point, sourceLabel);
+  const batteryLevel = extractBatteryLevel(point);
+  const isCharging = extractIsCharging(point);
   liveMarker.setStyle({ color: st.color, fillColor: st.color, radius: 8, fillOpacity: 1 });
   qs("nowStatus").innerHTML = `<span class="tag ${st.cls}" style="background:${st.color}22;border-color:${st.color};color:${st.color};font-weight:800">${st.text}</span>`;
-  qs("nowSource").textContent = sourceLabel || "—";
+  qs("nowSource").textContent = gpsMeta.signalType !== "—" ? `${sourceLabel || "—"} • ${gpsMeta.signalType}` : (sourceLabel || "—");
   qs("nowSpeed").textContent = point?.speed != null ? `${Number(point.speed).toFixed(1)} км/ч` : "—";
   qs("nowAccuracy").textContent = formatAccuracy(point?.accuracy);
   qs("nowUpdated").textContent = fmtTime(point?.timestamp);
   qs("nowBearing").textContent = point?.bearing != null ? `${Number(point.bearing).toFixed(0)}°` : "—";
   qs("nowIdle").textContent = point?.timestamp ? formatIdle(Date.now()-Number(point.timestamp)) : "—";
+  qs("nowBattery").textContent = batteryLevel != null ? `${Math.round(batteryLevel)}%` : "—";
+  qs("nowCharging").textContent = isCharging == null ? "—" : (isCharging ? "⚡ Заряжается" : "🔋 Не заряжается");
+  qs("nowSatellites").textContent = gpsMeta.satsText;
+  qs("nowGpsQuality").innerHTML = gpsMeta.text === "—" ? "—" : `<span class="tag" style="background:${gpsMeta.color}22;border-color:${gpsMeta.color};color:${gpsMeta.color};font-weight:800">${gpsMeta.text}</span>`;
+  updateAdminPointAlerts(point, st, gpsMeta);
 }
 
 function getSessionRoot(session){
