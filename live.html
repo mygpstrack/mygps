@@ -255,6 +255,9 @@ let runtimeSettings = {
 };
 let topInfoHidden = localStorage.getItem('live_top_info_hidden') === '1';
 let bottomPanelCollapsed = localStorage.getItem('live_bottom_panel_collapsed') === '1';
+let activeAlertTimer = null;
+let activeAlertInterval = null;
+let activeAlertTone = 'default';
 
 function applyTopInfoState(){
   const top = document.getElementById('topInfoGrid');
@@ -313,15 +316,54 @@ applyBottomPanelState();
 }
 window.toggleFollow=toggleFollow;
 
-function showAlert(text, tone='default'){
+function hideAlert(){
   const el=qs('alert');
-  el.innerHTML=text+'<small>Предупреждение по времени ссылки</small>';
-  el.style.display='block';
-  el.style.background = tone === 'danger' ? 'rgba(127,29,29,.92)' : 'rgba(0,0,0,.78)';
-  el.style.borderColor = tone === 'danger' ? 'rgba(248,113,113,.55)' : 'rgba(255,255,255,.12)';
-  clearTimeout(el._t);
-  el._t=setTimeout(()=>el.style.display='none',5000);
+  if(!el) return;
+  clearTimeout(activeAlertTimer);
+  clearInterval(activeAlertInterval);
+  activeAlertTimer=null;
+  activeAlertInterval=null;
+  el.style.display='none';
 }
+
+function renderAlertContent(message, leftMs){
+  const timerText = leftMs == null ? '' : `<div style="margin-top:6px;font-size:18px">${fmtCountdown(leftMs)}</div>`;
+  return `${message}${timerText}<small>Предупреждение по времени ссылки</small>`;
+}
+
+function showAlert(text, tone='default', options={}){
+  const el=qs('alert');
+  if(!el) return;
+
+  const { liveCountdown=false, expiresAt=null } = options || {};
+  activeAlertTone = tone;
+
+  clearTimeout(activeAlertTimer);
+  clearInterval(activeAlertInterval);
+
+  const applyTone = () => {
+    el.style.background = activeAlertTone === 'danger' ? 'rgba(127,29,29,.92)' : 'rgba(0,0,0,.78)';
+    el.style.borderColor = activeAlertTone === 'danger' ? 'rgba(248,113,113,.55)' : 'rgba(255,255,255,.12)';
+  };
+
+  const updateContent = () => {
+    const leftMs = liveCountdown && expiresAt != null ? Math.max(0, Number(expiresAt) - Date.now()) : null;
+    el.innerHTML = renderAlertContent(text, leftMs);
+    applyTone();
+    el.style.display='block';
+  };
+
+  updateContent();
+
+  if(liveCountdown && expiresAt != null){
+    activeAlertInterval = setInterval(updateContent, 250);
+  }
+
+  activeAlertTimer = setTimeout(() => {
+    hideAlert();
+  }, 5000);
+}
+
 
 function showEnd(message){
   qs('endText').textContent=message || 'Эта live-ссылка больше недоступна.';
@@ -373,15 +415,17 @@ function fmtCountdown(ms){
 
 function checkTimeWarnings(leftMs, isPaused){
   if(isPaused) return;
+  const expiresAt = currentSessionMeta?.expiresAt ? Number(currentSessionMeta.expiresAt) : null;
   if(leftMs<=5*60*1000 && !warnedFive && leftMs>60*1000){
     warnedFive=true;
-    showAlert('Время действия ссылки заканчивается через '+fmtCountdown(leftMs));
+    showAlert('Время действия ссылки заканчивается через', 'default', { liveCountdown:true, expiresAt });
   }
   if(leftMs<=60*1000 && !warnedOne && leftMs>0){
     warnedOne=true;
-    showAlert('Время действия ссылки заканчивается через '+fmtCountdown(leftMs), 'danger');
+    showAlert('Время действия ссылки заканчивается через', 'danger', { liveCountdown:true, expiresAt });
   }
 }
+
 function distanceMeters(a,b){
   const toRad=v=>v*Math.PI/180,R=6371000;
   const dLat=toRad(b.lat-a.lat), dLon=toRad(b.lng-a.lng), lat1=toRad(a.lat), lat2=toRad(b.lat);
