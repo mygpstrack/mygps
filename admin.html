@@ -305,8 +305,14 @@
           <div class="stat"><div class="label">Направление</div><div class="value" id="nowBearing">—</div></div>
           <div class="stat"><div class="label">Простой</div><div class="value" id="nowIdle">—</div></div>
           <div class="stat"><div class="label">Адрес</div><div class="value" id="nowAddress">—</div></div>
+          <div class="stat"><div class="label">Батарея</div><div class="value" id="nowBattery">—</div></div>
+          <div class="stat"><div class="label">Питание</div> <div class="value" id="nowCharging">—</div></div>
+          <div class="stat"><div class="label">Спутники</div> <div class="value" id="nowSatellites">—</div></div>
+          <div class="stat"><div class="label">GPS качество</div> <div class="value" id="nowGpsQuality">—</div></div>
           
         </div>
+
+        
         <div class="row">
           <button id="liveAutoCenterBtn">Автоцентр: вкл</button>
           <button id="refreshNowBtn" class="secondary">Обновить сейчас</button>
@@ -2065,6 +2071,46 @@ async function updateNowUI(point, sourceLabel){
   qs("nowUpdated").textContent = fmtTime(point?.timestamp);
   qs("nowBearing").textContent = point?.bearing != null ? `${Number(point.bearing).toFixed(0)}°` : "—";
   qs("nowIdle").textContent = point?.timestamp ? formatIdle(Date.now()-Number(point.timestamp)) : "—";
+  
+  const ageMs = Date.now() - (data?.timestamp || 0);
+const offlineMs = adminSettings.offlineMinutes * 60 * 1000;
+if (!data || ageMs > offlineMs) {
+  qs("nowBattery").innerText = "—";
+  qs("nowCharging").innerText = "—";
+  qs("nowSatellites").innerText = "—";
+  qs("nowGpsQuality").innerText = "📡 Нет сигнала";
+} else {
+
+  // Батарея
+  qs("nowBattery").innerText =
+    data.batteryLevel != null ? data.batteryLevel + "%" : "—";
+
+  // Питание
+  qs("nowCharging").innerText =
+    data.isCharging === true ? "⚡ Зарядка" :
+    data.isCharging === false ? "🔋 Разряд" : "—";
+
+  // Спутники
+  if (data.satellitesVisible != null && data.satellitesUsed != null) {
+    qs("nowSatellites").innerText =
+      data.satellitesUsed + " / " + data.satellitesVisible;
+  } else {
+    qs("nowSatellites").innerText = "—";
+  }
+
+  // GPS качество
+  const acc = Number(data.accuracy || 0);
+
+  if (acc === 0) {
+    qs("nowGpsQuality").innerText = "—";
+  } else if (acc < 10) {
+    qs("nowGpsQuality").innerText = "🟢 Отличный";
+  } else if (acc < 30) {
+    qs("nowGpsQuality").innerText = "🟡 Нормальный";
+  } else {
+    qs("nowGpsQuality").innerText = "🔴 Плохой";
+  }
+}
 }
 
 function getSessionRoot(session){
