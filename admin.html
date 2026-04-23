@@ -411,22 +411,29 @@
         <div id="historyMap"></div>
       </div>
 
+
       <div class="card">
         <h2>Проигрыватель маршрута</h2>
         <div class="toolbar">
-          <button id="replayStartBtn">▶ Старт</button>
+          <button id="replayStartBtn" class="success">▶ Старт</button>
           <button id="replayPauseBtn" class="secondary">⏸ Пауза</button>
           <button id="replayResetBtn" class="secondary">⏹ Сброс</button>
           <button id="replaySlowerBtn" class="secondary">⏪ Медленнее</button>
           <button id="replayFasterBtn" class="secondary">⏩ Быстрее</button>
         </div>
-        <div class="grid4">
-          <div class="stat"><div class="label">Скорость replay</div><div class="value" id="replaySpeedValue">1x</div></div>
-          <div class="stat"><div class="label">Время точки</div><div class="value" id="replayTimeValue">—</div></div>
-          <div class="stat"><div class="label">Скорость точки</div><div class="value" id="replayPointSpeedValue">—</div></div>
-          <div class="stat"><div class="label">Точность точки</div><div class="value" id="replayPointAccuracyValue">—</div></div>
+        <div class="row">
+          <input id="replaySeekRange" type="range" min="0" max="0" value="0" style="width:100%">
         </div>
-        <div class="notice" id="replayCoordsValue" style="margin-top:12px">Координаты: —</div>
+        <div class="grid4">
+          <div class="stat"><div class="label">Точка</div><div class="value" id="replayIndexText">0 / 0</div></div>
+          <div class="stat"><div class="label">Время</div><div class="value" id="replayTimeText">—</div></div>
+          <div class="stat"><div class="label">Скорость</div><div class="value" id="replaySpeedText">—</div></div>
+          <div class="stat"><div class="label">Точность</div><div class="value" id="replayAccuracyText">—</div></div>
+          <div class="stat"><div class="label">Координаты</div><div class="value" id="replayCoordsText">—</div></div>
+          <div class="stat"><div class="label">Режим</div><div class="value" id="replayStateText">Ожидание</div></div>
+          <div class="stat"><div class="label">Шаг</div><div class="value" id="replayStepMsText">700 мс</div></div>
+          <div class="stat"><div class="label">Источник</div><div class="value" id="replaySourceText">Отфильтрованная история</div></div>
+        </div>
       </div>
 
       <div class="card">
@@ -2015,79 +2022,174 @@ let routeSegments = [];
 const startMarker = L.circleMarker([56.95,24.10], {radius:8,color:"#16a34a",fillColor:"#16a34a",fillOpacity:1}).addTo(historyMap);
 const endMarker = L.circleMarker([56.95,24.10], {radius:8,color:"#dc2626",fillColor:"#dc2626",fillOpacity:1}).addTo(historyMap);
 let selectedPointMarker = null;
-let replayTimer = null;
-let replayIndex = 0;
-let replaySpeed = 1;
-let replayPoints = [];
-const replayMarker = L.circleMarker([56.95,24.10], {radius:7,color:"#f59e0b",fillColor:"#f59e0b",fillOpacity:1, weight:2});
 
-function clearRouteSegments(){ routeSegments.forEach(s=>historyMap.removeLayer(s)); routeSegments=[]; historyPointMarkers.forEach(m=>historyMap.removeLayer(m)); historyPointMarkers=[]; }
+let replayMarker = null;
+let replayTrail = null;
+const replayState = {
+  points: [],
+  index: 0,
+  timer: null,
+  playing: false,
+  stepMs: 700
+};
+
+function clearReplayTimer(){
+  if(replayState.timer){
+    clearTimeout(replayState.timer);
+    replayState.timer = null;
+  }
+}
+
+function normalizeReplayPoint(p){
+  if(!p) return null;
+  const lat = Number(p.latitude ?? p.lat);
+  const lon = Number(p.longitude ?? p.lon);
+  if(!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  return { ...p, latitude: lat, longitude: lon };
+}
+
+function getReplayPoints(){
+  return [...(currentFiltered || [])]
+    .map(normalizeReplayPoint)
+    .filter(Boolean)
+    .sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+}
+
+function ensureReplayLayers(){
+  if(!replayMarker){
+    replayMarker = L.circleMarker([56.95,24.10], {
+      radius: 7,
+      color: "#f59e0b",
+      fillColor: "#f59e0b",
+      fillOpacity: 1,
+      weight: 2
+    }).addTo(historyMap);
+  }
+  if(!replayTrail){
+    replayTrail = L.polyline([], {weight:4, color:"#f59e0b", opacity:0.85}).addTo(historyMap);
+  }
+}
 
 function setReplayInfo(point){
-  qs("replaySpeedValue").textContent = `${replaySpeed}x`;
-  qs("replayTimeValue").textContent = point ? fmtTime(point.timestamp) : "—";
-  qs("replayPointSpeedValue").textContent = point?.speed != null ? `${Number(point.speed).toFixed(1)} км/ч` : "—";
-  qs("replayPointAccuracyValue").textContent = point?.accuracy != null ? `${Number(point.accuracy).toFixed(0)} м` : "—";
-  qs("replayCoordsValue").textContent = point ? `Координаты: ${Number(point.latitude).toFixed(5)}, ${Number(point.longitude).toFixed(5)}` : "Координаты: —";
+  const total = replayState.points.length;
+  const idx = total ? replayState.index + 1 : 0;
+  if(qs("replayIndexText")) qs("replayIndexText").textContent = `${idx} / ${total}`;
+  if(qs("replayStepMsText")) qs("replayStepMsText").textContent = `${replayState.stepMs} мс`;
+  if(qs("replayStateText")) qs("replayStateText").textContent = replayState.playing ? "Проигрывается" : (total ? "Пауза" : "Нет данных");
+  if(qs("replayTimeText")) qs("replayTimeText").textContent = point ? fmtTime(point.timestamp) : "—";
+  if(qs("replaySpeedText")) qs("replaySpeedText").textContent = point?.speed != null ? `${Number(point.speed).toFixed(1)} км/ч` : "—";
+  if(qs("replayAccuracyText")) qs("replayAccuracyText").textContent = formatAccuracy(point?.accuracy);
+  if(qs("replayCoordsText")) qs("replayCoordsText").textContent = point ? `${Number(point.latitude).toFixed(5)}, ${Number(point.longitude).toFixed(5)}` : "—";
 }
 
-function resetReplayState(removeMarker=false){
-  if(replayTimer){ clearInterval(replayTimer); replayTimer = null; }
-  replayIndex = 0;
-  replayPoints = [...currentFiltered].filter(p=>p && p.latitude!=null && p.longitude!=null).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
-  if(removeMarker && historyMap.hasLayer(replayMarker)) historyMap.removeLayer(replayMarker);
-  setReplayInfo(replayPoints[0] || null);
+function updateReplaySeek(){
+  const seek = qs("replaySeekRange");
+  if(!seek) return;
+  const total = replayState.points.length;
+  seek.max = String(Math.max(0, total - 1));
+  seek.value = String(Math.min(replayState.index, Math.max(0, total - 1)));
 }
 
-function moveReplayToIndex(index, pan=true){
-  if(!replayPoints.length) return;
-  replayIndex = Math.max(0, Math.min(index, replayPoints.length - 1));
-  const p = replayPoints[replayIndex];
-  const latlng = [Number(p.latitude), Number(p.longitude)];
-  if(!historyMap.hasLayer(replayMarker)) replayMarker.addTo(historyMap);
+function renderReplayPoint(centerMap = true){
+  ensureReplayLayers();
+  const point = replayState.points[replayState.index] || null;
+  setReplayInfo(point);
+  updateReplaySeek();
+
+  if(!point){
+    replayMarker.setStyle({opacity:0, fillOpacity:0});
+    replayTrail.setLatLngs([]);
+    return;
+  }
+
+  replayMarker.setStyle({opacity:1, fillOpacity:1});
+  const latlng = [Number(point.latitude), Number(point.longitude)];
   replayMarker.setLatLng(latlng);
-  if(pan) historyMap.panTo(latlng, {animate:true, duration:0.4});
-  setReplayInfo(p);
-}
 
-function startReplay(){
-  if(!replayPoints.length){
-    resetReplayState(true);
-  }
-  if(!replayPoints.length) return showToast("Нет точек для replay", "warn");
-  if(replayTimer) return;
-  moveReplayToIndex(replayIndex, true);
-  const interval = Math.max(120, Math.round(900 / replaySpeed));
-  replayTimer = setInterval(()=>{
-    if(replayIndex >= replayPoints.length - 1){
-      clearInterval(replayTimer);
-      replayTimer = null;
-      return;
-    }
-    moveReplayToIndex(replayIndex + 1, true);
-  }, interval);
-}
+  const played = replayState.points.slice(0, replayState.index + 1).map(p => [Number(p.latitude), Number(p.longitude)]);
+  replayTrail.setLatLngs(played);
 
-function pauseReplay(){
-  if(replayTimer){
-    clearInterval(replayTimer);
-    replayTimer = null;
+  if(centerMap){
+    suppressHistoryMapInteraction = true;
+    historyMap.setView(latlng, Math.max(historyMap.getZoom(), 15));
+    setTimeout(()=>{ suppressHistoryMapInteraction = false; }, 250);
   }
 }
 
-function resetReplay(){
-  pauseReplay();
-  resetReplayState(true);
+function replayStopInternal(resetIndex = false){
+  clearReplayTimer();
+  replayState.playing = false;
+  if(resetIndex) replayState.index = 0;
+  renderReplayPoint(false);
 }
 
-function updateReplaySpeed(next){
-  replaySpeed = Math.max(0.25, Math.min(16, next));
-  qs("replaySpeedValue").textContent = `${replaySpeed}x`;
-  if(replayTimer){
-    pauseReplay();
-    startReplay();
+function replayTick(){
+  if(!replayState.playing) return;
+  if(replayState.index >= replayState.points.length - 1){
+    replayState.playing = false;
+    renderReplayPoint(false);
+    showToast("Replay завершён", "info");
+    return;
+  }
+  replayState.index += 1;
+  renderReplayPoint(true);
+  replayState.timer = setTimeout(replayTick, replayState.stepMs);
+}
+
+function replayLoad(resetIndex = false){
+  const oldTs = replayState.points[replayState.index]?.timestamp;
+  replayState.points = getReplayPoints();
+  if(resetIndex || !replayState.points.length){
+    replayState.index = 0;
+  }else{
+    const keepIdx = replayState.points.findIndex(p => Number(p.timestamp||0) === Number(oldTs||0));
+    replayState.index = keepIdx >= 0 ? keepIdx : Math.min(replayState.index, replayState.points.length - 1);
+  }
+  renderReplayPoint(false);
+}
+
+function replayStart(){
+  replayLoad(false);
+  if(!replayState.points.length){
+    showToast("Нет точек для replay", "warn");
+    return;
+  }
+  clearReplayTimer();
+  replayState.playing = true;
+  renderReplayPoint(true);
+  replayState.timer = setTimeout(replayTick, replayState.stepMs);
+}
+
+function replayPause(){
+  clearReplayTimer();
+  replayState.playing = false;
+  renderReplayPoint(false);
+}
+
+function replayReset(){
+  replayStopInternal(true);
+}
+
+function replayFaster(){
+  replayState.stepMs = Math.max(120, Math.round(replayState.stepMs * 0.7));
+  renderReplayPoint(false);
+  if(replayState.playing){
+    clearReplayTimer();
+    replayState.timer = setTimeout(replayTick, replayState.stepMs);
   }
 }
+
+function replaySlower(){
+  replayState.stepMs = Math.min(4000, Math.round(replayState.stepMs * 1.4));
+  renderReplayPoint(false);
+  if(replayState.playing){
+    clearReplayTimer();
+    replayState.timer = setTimeout(replayTick, replayState.stepMs);
+  }
+}
+
+
+function clearRouteSegments(){ routeSegments.forEach(s=>historyMap.removeLayer(s)); routeSegments=[]; historyPointMarkers.forEach(m=>historyMap.removeLayer(m)); historyPointMarkers=[]; }
 
 function updateUsage(){
   const visibleHistory = getVisibleHistoryPoints();
@@ -2440,7 +2542,6 @@ async function renderHistory() {
   tbody.innerHTML = "";
 
   const chronological = [...pts].sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
-  resetReplayState(true);
 
   if (!chronological.length) {
     tbody.innerHTML = `<tr><td colspan="7">Нет данных за выбранный период</td></tr>`;
@@ -2547,6 +2648,7 @@ async function renderHistory() {
 
   updateCharts(chronological);
   await refreshHistoryMapFromCurrentSelection();
+  replayLoad(false);
   qs("startAddress").textContent = await reverseGeocode(Number(first.latitude), Number(first.longitude));
   qs("endAddress").textContent = await reverseGeocode(Number(last.latitude), Number(last.longitude));
 }
@@ -4219,11 +4321,6 @@ if (qs("liveAutoCenterBtn")) qs("liveAutoCenterBtn").onclick = ()=>{
 };
 updateLiveAutoCenterButton();
 if (qs("btnDiag")) qs("btnDiag").onclick = showDiag;
-if (qs("replayStartBtn")) qs("replayStartBtn").onclick = ()=>startReplay();
-if (qs("replayPauseBtn")) qs("replayPauseBtn").onclick = ()=>pauseReplay();
-if (qs("replayResetBtn")) qs("replayResetBtn").onclick = ()=>resetReplay();
-if (qs("replayFasterBtn")) qs("replayFasterBtn").onclick = ()=>updateReplaySpeed(replaySpeed >= 16 ? 16 : replaySpeed * 2);
-if (qs("replaySlowerBtn")) qs("replaySlowerBtn").onclick = ()=>updateReplaySpeed(replaySpeed <= 0.25 ? 0.25 : replaySpeed / 2);
 
 if (qs("createShareBtn")) qs("createShareBtn").onclick = ()=>createLiveSession();
 if (qs("shareDurationPreset")) { qs("shareDurationPreset").addEventListener("change", toggleCustomDuration); toggleCustomDuration(); }
