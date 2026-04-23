@@ -686,6 +686,29 @@
           </div>
         </div>
 
+
+        <div class="card" style="margin-top:12px">
+          <h3>Геозоны</h3>
+          <div class="grid4">
+            <div><div class="label">Название зоны</div><input id="geofenceNameInput" placeholder="Например: Дом"></div>
+            <div><div class="label">Широта</div><input id="geofenceLatInput" type="number" step="0.000001" placeholder="56.9496"></div>
+            <div><div class="label">Долгота</div><input id="geofenceLonInput" type="number" step="0.000001" placeholder="24.1052"></div>
+            <div><div class="label">Радиус, м</div><input id="geofenceRadiusInput" type="number" min="10" step="1" value="100"></div>
+          </div>
+          <div class="toolbar" style="margin-top:12px">
+            <button id="useNowPointForGeofenceBtn" class="secondary">Взять текущую точку</button>
+            <button id="saveGeofenceBtn" class="success">Сохранить геозону</button>
+            <button id="clearGeofenceFormBtn" class="secondary">Очистить форму</button>
+          </div>
+          <div class="notice smallMuted" id="geofenceFormStatus">Можно сохранить зону по текущей точке или вручную.</div>
+          <div style="overflow:auto">
+            <table>
+              <thead><tr><th>Название</th><th>Координаты</th><th>Радиус</th><th>Действия</th></tr></thead>
+              <tbody id="geofencesTbody"></tbody>
+            </table>
+          </div>
+        </div>
+
         <div class="card" style="margin-top:12px">
           <h3>Backup / Restore</h3>
           <div class="toolbar">
@@ -769,7 +792,8 @@ let adminSettings = {
   gpsProfiles: {
     normal: { intervalMs: 5000, minDistanceM: 3 },
     live: { intervalMs: 3000, minDistanceM: 2 }
-  }
+  },
+  geofences: []
 };
 let errorLogs = [];
 let autoRefreshTimer = null;
@@ -2440,6 +2464,141 @@ function getSessionRoot(session){
 }
 
 
+
+function normalizeGeofence(item, index = 0){
+  return {
+    id: String(item?.id || `gf_${index}`),
+    name: String(item?.name || item?.title || `Зона ${index + 1}`),
+    lat: Number(item?.lat ?? item?.latitude ?? 0),
+    lon: Number(item?.lon ?? item?.longitude ?? 0),
+    radiusM: Math.max(10, Number(item?.radiusM ?? item?.radius ?? 100))
+  };
+}
+
+function normalizeGeofencesShape(value){
+  if(Array.isArray(value)) return value.map((item, index) => normalizeGeofence(item, index)).filter(item => Number.isFinite(item.lat) && Number.isFinite(item.lon));
+  if(value && typeof value === "object"){
+    return Object.values(value).map((item, index) => normalizeGeofence(item, index)).filter(item => Number.isFinite(item.lat) && Number.isFinite(item.lon));
+  }
+  return [];
+}
+
+function resetGeofenceForm(){
+  if(qs("geofenceNameInput")) qs("geofenceNameInput").value = "";
+  if(qs("geofenceLatInput")) qs("geofenceLatInput").value = "";
+  if(qs("geofenceLonInput")) qs("geofenceLonInput").value = "";
+  if(qs("geofenceRadiusInput")) qs("geofenceRadiusInput").value = "100";
+  if(qs("geofenceFormStatus")) qs("geofenceFormStatus").textContent = "Можно сохранить зону по текущей точке или вручную.";
+  window.__editingGeofenceId = "";
+}
+
+function readGeofenceForm(){
+  const name = (qs("geofenceNameInput")?.value || "").trim();
+  const lat = Number(qs("geofenceLatInput")?.value || NaN);
+  const lon = Number(qs("geofenceLonInput")?.value || NaN);
+  const radiusM = Number(qs("geofenceRadiusInput")?.value || 100);
+
+  if(!name) throw new Error("Укажи название геозоны");
+  if(!Number.isFinite(lat) || !Number.isFinite(lon)) throw new Error("Укажи корректные координаты");
+  if(!Number.isFinite(radiusM) || radiusM < 10) throw new Error("Радиус должен быть не меньше 10 м");
+
+  return {
+    id: window.__editingGeofenceId || `gf_${Date.now()}`,
+    name,
+    lat,
+    lon,
+    radiusM: Math.round(radiusM)
+  };
+}
+
+function renderGeofences(){
+  adminSettings.geofences = normalizeGeofencesShape(adminSettings.geofences);
+  const tbody = qs("geofencesTbody");
+  if(!tbody) return;
+  const items = adminSettings.geofences;
+  tbody.innerHTML = items.length ? "" : `<tr><td colspan="4" class="smallMuted">Геозон пока нет.</td></tr>`;
+
+  items.forEach(item => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${item.name}</td>
+      <td class="mono">${item.lat.toFixed(5)}, ${item.lon.toFixed(5)}</td>
+      <td>${item.radiusM} м</td>
+      <td>
+        <div class="row">
+          <button class="secondary small" data-geofence-edit="${item.id}">Изменить</button>
+          <button class="secondary small" data-geofence-maps="${item.id}">Maps</button>
+          <button class="danger small" data-geofence-delete="${item.id}">Удалить</button>
+        </div>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  tbody.querySelectorAll("[data-geofence-edit]").forEach(btn => btn.onclick = () => {
+    const item = adminSettings.geofences.find(x => x.id === btn.dataset.geofenceEdit);
+    if(!item) return;
+    window.__editingGeofenceId = item.id;
+    if(qs("geofenceNameInput")) qs("geofenceNameInput").value = item.name;
+    if(qs("geofenceLatInput")) qs("geofenceLatInput").value = String(item.lat);
+    if(qs("geofenceLonInput")) qs("geofenceLonInput").value = String(item.lon);
+    if(qs("geofenceRadiusInput")) qs("geofenceRadiusInput").value = String(item.radiusM);
+    if(qs("geofenceFormStatus")) qs("geofenceFormStatus").textContent = `Редактирование: ${item.name}`;
+  });
+
+  tbody.querySelectorAll("[data-geofence-delete]").forEach(btn => btn.onclick = async () => {
+    const id = btn.dataset.geofenceDelete;
+    const item = adminSettings.geofences.find(x => x.id === id);
+    if(!item) return;
+    if(!confirm(`Удалить геозону «${item.name}»?`)) return;
+    adminSettings.geofences = adminSettings.geofences.filter(x => x.id !== id);
+    await update(ref(db, "adminSettings/config"), { geofences: adminSettings.geofences });
+    await logAction("geofence_delete", `Удалена геозона ${item.name}`);
+    renderGeofences();
+    resetGeofenceForm();
+    showToast("Геозона удалена", "success");
+  });
+
+  tbody.querySelectorAll("[data-geofence-maps]").forEach(btn => btn.onclick = () => {
+    const item = adminSettings.geofences.find(x => x.id === btn.dataset.geofenceMaps);
+    if(!item) return;
+    window.open(`https://maps.google.com/?q=${encodeURIComponent(item.lat + "," + item.lon)}`, "_blank", "noopener,noreferrer");
+  });
+}
+
+async function saveGeofenceFromForm(){
+  const item = readGeofenceForm();
+  const list = normalizeGeofencesShape(adminSettings.geofences);
+  const idx = list.findIndex(x => x.id === item.id);
+  if(idx >= 0) list[idx] = item; else list.push(item);
+  adminSettings.geofences = list;
+  await update(ref(db, "adminSettings/config"), { geofences: list });
+  await logAction(idx >= 0 ? "geofence_update" : "geofence_create", `${idx >= 0 ? "Обновлена" : "Создана"} геозона ${item.name}`);
+  renderGeofences();
+  resetGeofenceForm();
+  showToast(idx >= 0 ? "Геозона обновлена" : "Геозона сохранена", "success");
+}
+
+function fillGeofenceFromNowPoint(){
+  const point =
+    getSelectedLiveData()?.lastPoint ||
+    getVisibleHistoryPoints().slice(-1)[0] ||
+    null;
+
+  const lat = Number(point?.latitude ?? point?.lat ?? NaN);
+  const lon = Number(point?.longitude ?? point?.lon ?? NaN);
+
+  if(!Number.isFinite(lat) || !Number.isFinite(lon)){
+    showToast("Нет текущей точки для геозоны", "warn");
+    return;
+  }
+
+  if(qs("geofenceLatInput")) qs("geofenceLatInput").value = String(lat);
+  if(qs("geofenceLonInput")) qs("geofenceLonInput").value = String(lon);
+  if(qs("geofenceNameInput") && !qs("geofenceNameInput").value.trim()) qs("geofenceNameInput").value = "Новая зона";
+  if(qs("geofenceFormStatus")) qs("geofenceFormStatus").textContent = "Координаты взяты из текущей точки.";
+}
+
 const gpsIntervalValues = [1000,3000,5000,10000,15000,30000,60000];
 const gpsIntervalLabels = ["1 сек","3 сек","5 сек","10 сек","15 сек","30 сек","60 сек"];
 const gpsDistanceValues = [1,2,3,5,10,20,50];
@@ -2622,7 +2781,9 @@ async function loadAdminSettings(){
   if(qs("stopLongMinutesInput")) qs("stopLongMinutesInput").value = Number(adminSettings.stopLongMinutes ?? 5);
   if(qs("impossibleSpeedKmhInput")) qs("impossibleSpeedKmhInput").value = Number(adminSettings.impossibleSpeedKmh ?? 250);
   if(qs("junkAccuracyMetersInput")) qs("junkAccuracyMetersInput").value = Number(adminSettings.junkAccuracyMeters ?? 100);
+  adminSettings.geofences = normalizeGeofencesShape(adminSettings.geofences);
   setGpsProfileControlsFromState();
+  renderGeofences();
   lastGpsProfilesSnapshot = normalizeGpsProfilesShape(adminSettings.gpsProfiles);
   gpsProfilesLastSeenJson = JSON.stringify(lastGpsProfilesSnapshot);
   gpsProfilesLastSeenJson = JSON.stringify(lastGpsProfilesSnapshot);
@@ -3781,6 +3942,9 @@ bindGpsSettingsControls();
 setGpsProfileControlsFromState();
 if (qs("saveAdminUiSettingsBtn")) qs("saveAdminUiSettingsBtn").onclick = async()=>{ await safeAction("Сохранение настроек", saveAdminUiSettings, "Настройки сохранены"); };
 if (qs("saveGpsSettingsBtn")) qs("saveGpsSettingsBtn").onclick = async()=>{ await safeAction("Сохранение настроек GPS", saveGpsSettings, "Настройки GPS сохранены"); };
+if (qs("useNowPointForGeofenceBtn")) qs("useNowPointForGeofenceBtn").onclick = ()=>fillGeofenceFromNowPoint();
+if (qs("clearGeofenceFormBtn")) qs("clearGeofenceFormBtn").onclick = ()=>resetGeofenceForm();
+if (qs("saveGeofenceBtn")) qs("saveGeofenceBtn").onclick = async()=>{ await safeAction("Сохранение геозоны", saveGeofenceFromForm, "Геозона сохранена"); };
 if (qs("backupNowBtn")) qs("backupNowBtn").onclick = async()=>{ await safeAction("Создание backup", async()=>{ await createMonthlyBackup(true); await renderBackups(); }, "Backup создан"); };
 qs("downloadBackupBtn").onclick=async()=>{
   const payload = {history:historyByUid, live:liveByUid, liveSessions:allSessions, users:usersMeta, adminSettings};
