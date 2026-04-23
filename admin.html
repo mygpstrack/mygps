@@ -1398,24 +1398,6 @@ function notifyDeviceAlerts(point){
   }
   deviceAlertState.poorGps = flags.poorGps;
 }
-  const speed = Number(point.speed || 0);
-  const ts = Number(point.timestamp || 0);
-  const age = Math.max(0, Date.now() - ts);
-  const accuracy = Number(point.accuracy || 9999);
-  const stopLongMs = stopLongMinutes * 60 * 1000;
-
-  if(age > offlineMs){
-    return { text:"📡 Нет сигнала", cls:"offline", color:"#9ca3af", kind:"offline" };
-  }
-  if(accuracy <= junkAccuracy && speed >= moveThreshold){
-    return { text:"🚗 Движение", cls:"online", color:"#22c55e", kind:"moving" };
-  }
-  if(age >= stopLongMs){
-    return { text:"🅿 Стоянка", cls:"offline", color:"#ef4444", kind:"stop_long" };
-  }
-  return { text:"⏸ Остановка", cls:"idle", color:"#eab308", kind:"stop_short" };
-}
-
 function updateLiveAutoCenterButton(){
   const btn = qs("liveAutoCenterBtn");
   if(!btn) return;
