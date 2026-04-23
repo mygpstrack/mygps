@@ -821,6 +821,25 @@ function detectCurrentGpsMode(point){
   return sessionActive ? "Live" : "Обычный";
 }
 
+function getCurrentPointForGpsProfiles(){
+  if(qs("viewModeSelect")?.value === "all"){
+    const points = getAllLastPoints();
+    return points.length ? points[points.length - 1].point : null;
+  }
+  const selectedLive = getSelectedLiveData();
+  if(selectedLive?.lastPoint) return selectedLive.lastPoint;
+  const now = Date.now();
+  const active = Object.entries(allSessions || {})
+    .filter(([k,v]) => k !== "_init" && !!getSessionRoot(v).meta?.active && Number(getSessionRoot(v).meta?.expiresAt||0) > now)
+    .filter(([,v]) => !selectedUid || !getSessionRoot(v).meta?.ownerUid || getSessionRoot(v).meta.ownerUid === selectedUid);
+  if(active.length){
+    const [, session] = active.sort((a,b)=>Number(getSessionRoot(b[1]).meta?.createdAt||0)-Number(getSessionRoot(a[1]).meta?.createdAt||0))[0];
+    return getSessionRoot(session).public?.lastPoint || null;
+  }
+  const points = getVisibleHistoryPoints();
+  return points.length ? points[points.length - 1] : null;
+}
+
 function updateGpsProfilesUiFromData(point){
   const profiles = adminSettings?.gpsProfiles || {};
   const normal = profiles.normal || {};
@@ -836,23 +855,40 @@ function updateGpsProfilesUiFromData(point){
   const normalLine = formatGpsProfileLine(normal);
   const liveLine = formatGpsProfileLine(live);
 
+  const deviceNormal = (
+    point?.appliedGpsProfile?.normal ||
+    (point?.appliedGpsNormalIntervalMs != null || point?.appliedGpsNormalDistanceM != null)
+  );
+  const deviceLive = (
+    point?.appliedGpsProfile?.live ||
+    (point?.appliedGpsLiveIntervalMs != null || point?.appliedGpsLiveDistanceM != null)
+  );
+
+  const normalApplied = deviceNormal
+    ? formatGpsProfileLine({
+        intervalMs: point?.appliedGpsProfile?.normal?.intervalMs ?? point?.appliedGpsNormalIntervalMs ?? normal.intervalMs,
+        minDistanceM: point?.appliedGpsProfile?.normal?.minDistanceM ?? point?.appliedGpsNormalDistanceM ?? normal.minDistanceM
+      })
+    : normalLine;
+
+  const liveApplied = deviceLive
+    ? formatGpsProfileLine({
+        intervalMs: point?.appliedGpsProfile?.live?.intervalMs ?? point?.appliedGpsLiveIntervalMs ?? live.intervalMs,
+        minDistanceM: point?.appliedGpsProfile?.live?.minDistanceM ?? point?.appliedGpsLiveDistanceM ?? live.minDistanceM
+      })
+    : liveLine;
+
   if(modeEl) modeEl.textContent = currentMode;
-  if(normalEl) normalEl.textContent = normalLine;
-  if(liveEl) liveEl.textContent = liveLine;
+  if(normalEl) normalEl.textContent = normalApplied;
+  if(liveEl) liveEl.textContent = liveApplied;
 
-  const hasDeviceApplied =
-    point?.appliedGpsProfile ||
-    point?.appliedGpsNormalIntervalMs != null ||
-    point?.appliedGpsNormalDistanceM != null ||
-    point?.appliedGpsLiveIntervalMs != null ||
-    point?.appliedGpsLiveDistanceM != null;
-
+  const hasDeviceApplied = !!(deviceNormal || deviceLive);
   if(sourceEl){
     sourceEl.textContent = hasDeviceApplied ? "Устройство" : "Админка";
   }
 
   if(currentEl){
-    currentEl.textContent = `Сейчас: обычный ${normalLine} • live ${liveLine}`;
+    currentEl.textContent = `Сейчас: обычный ${normalApplied} • live ${liveApplied}`;
   }
 }
   
@@ -2438,6 +2474,7 @@ function setGpsProfileControlsFromState(){
   if(qs('gpsLiveIntervalSelect')) qs('gpsLiveIntervalSelect').value = String(adminSettings.gpsProfiles.live.intervalMs || 3000);
   if(qs('gpsLiveDistanceSelect')) qs('gpsLiveDistanceSelect').value = String(adminSettings.gpsProfiles.live.minDistanceM || 2);
   refreshGpsProfileCurrentText();
+  updateGpsProfilesUiFromData(getCurrentPointForGpsProfiles());
 }
 function readGpsProfilesFromControls(){
   return {
@@ -2456,6 +2493,7 @@ function refreshGpsProfileCurrentText(){
   if(!box) return;
   const profiles = readGpsProfilesFromControls();
   box.textContent = `Сейчас: обычный ${profiles.normal.intervalMs / 1000}s / ${profiles.normal.minDistanceM}м • live ${profiles.live.intervalMs / 1000}s / ${profiles.live.minDistanceM}м`;
+  updateGpsProfilesUiFromData(getCurrentPointForGpsProfiles());
 }
 function applyGpsPreset(kind){
   initGpsSettingsControls();
@@ -2476,6 +2514,7 @@ function applyGpsPreset(kind){
     qs('gpsLiveDistanceSelect').value = '10';
   }
   refreshGpsProfileCurrentText();
+  updateGpsProfilesUiFromData(getCurrentPointForGpsProfiles());
 }
 function bindGpsSettingsControls(){
   ['gpsNormalIntervalSelect','gpsNormalDistanceSelect','gpsLiveIntervalSelect','gpsLiveDistanceSelect'].forEach(id=>{
