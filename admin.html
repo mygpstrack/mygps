@@ -1273,7 +1273,7 @@ function getGpsQualityMeta(point){
   if(acc <= 35) return { text: "🟡 Нормальный", level: "ok" };
   return { text: "🔴 Плохой", level: "poor" };
 }
-async function captureDeviceJournalEvents(point){
+  async function captureDeviceJournalEvents(point){
   const st = statusByPoint(point);
   const gps = getGpsQualityMeta(point);
 
@@ -1325,7 +1325,7 @@ async function captureDeviceJournalEvents(point){
     const eventText = point?.geofenceEvent === "enter"
       ? "Вход в геозону"
       : point?.geofenceEvent === "exit"
-      ? "Выход из геозоны"
+      ? "Выход из геозону"
       : "Событие геозоны";
     const zoneName = point?.geofenceName ? `: ${point.geofenceName}` : "";
     await logDeviceEvent("geofence", `${eventText}${zoneName}`);
