@@ -662,6 +662,24 @@
             <div><div class="label">Live — дистанция</div><select id="gpsLiveDistanceSelect"></select></div>
           </div>
           <div class="notice" id="gpsProfileCurrentText" style="margin-top:12px">Сейчас: обычный 5s / 3м • live 3s / 2м</div>
+          <div class="grid4" style="margin-top:12px">
+  <div class="stat">
+    <div class="label">Текущий профиль</div>
+    <div class="value" id="gpsProfileModeText">—</div>
+  </div>
+  <div class="stat">
+    <div class="label">Обычный применён</div>
+    <div class="value" id="gpsAppliedNormalText">—</div>
+  </div>
+  <div class="stat">
+    <div class="label">Live применён</div>
+    <div class="value" id="gpsAppliedLiveText">—</div>
+  </div>
+  <div class="stat">
+    <div class="label">Источник профиля</div>
+    <div class="value" id="gpsProfileSourceText">—</div>
+  </div>
+</div>
           <div class="toolbar">
             <button id="gpsResetDefaultsBtn" class="secondary">Сбросить GPS по умолчанию</button>
             <button id="saveGpsSettingsBtn" class="success">Сохранить настройки GPS</button>
@@ -781,6 +799,63 @@ const fmtRemainingCompact = ms => {
   if(h > 0) return `${h}ч ${m}м`;
   return `${m}м ${String(s).padStart(2,"0")}с`;
 };
+
+  function formatGpsProfileLine(profile){
+  const intervalSec = Math.round(Number(profile?.intervalMs || 0) / 1000);
+  const distanceM = Math.round(Number(profile?.minDistanceM || 0));
+  return `${intervalSec || 0}s / ${distanceM || 0}м`;
+}
+
+function detectCurrentGpsMode(point){
+  const raw = String(
+    point?.gpsMode ??
+    point?.trackingMode ??
+    point?.profileMode ??
+    ""
+  ).toLowerCase();
+
+  if(raw === "live") return "Live";
+  if(raw === "normal") return "Обычный";
+
+  const sessionActive = !!point?.liveSessionActive || !!point?.sessionActive;
+  return sessionActive ? "Live" : "Обычный";
+}
+
+function updateGpsProfilesUiFromData(point){
+  const profiles = adminSettings?.gpsProfiles || {};
+  const normal = profiles.normal || {};
+  const live = profiles.live || {};
+
+  const modeEl = qs("gpsProfileModeText");
+  const normalEl = qs("gpsAppliedNormalText");
+  const liveEl = qs("gpsAppliedLiveText");
+  const sourceEl = qs("gpsProfileSourceText");
+  const currentEl = qs("gpsProfileCurrentText");
+
+  const currentMode = detectCurrentGpsMode(point);
+  const normalLine = formatGpsProfileLine(normal);
+  const liveLine = formatGpsProfileLine(live);
+
+  if(modeEl) modeEl.textContent = currentMode;
+  if(normalEl) normalEl.textContent = normalLine;
+  if(liveEl) liveEl.textContent = liveLine;
+
+  const hasDeviceApplied =
+    point?.appliedGpsProfile ||
+    point?.appliedGpsNormalIntervalMs != null ||
+    point?.appliedGpsNormalDistanceM != null ||
+    point?.appliedGpsLiveIntervalMs != null ||
+    point?.appliedGpsLiveDistanceM != null;
+
+  if(sourceEl){
+    sourceEl.textContent = hasDeviceApplied ? "Устройство" : "Админка";
+  }
+
+  if(currentEl){
+    currentEl.textContent = `Сейчас: обычный ${normalLine} • live ${liveLine}`;
+  }
+}
+  
 const errText = e => e?.message || e?.code || String(e);
 let nowWeatherCache = null;
 let nowWeatherFetchedAt = 0;
@@ -1125,8 +1200,6 @@ function statusByPoint(point){
   const junkAccuracy = Number(adminSettings?.junkAccuracyMeters ?? 100);
 
   async function captureDeviceJournalEvents(point){
-  const st = statusByPoint(point);
-  const gps = getGpsQualityMeta(point);
 
   const offlineNow = st.kind === "offline";
   const poorGpsNow = gps.level === "poor";
@@ -2015,21 +2088,88 @@ async function loadAllData(){
   updateUsage();
   updateTodaySummary();
   renderHistory();
-  await updateNowFromAvailableSources();
-}
+async function updateNowFromAvailableSources(){
+  if(qs("viewModeSelect").value === "all"){
+    const points = getAllLastPoints();
+    if(points.length){
+      const currentPoint = points[points.length - 1].point;
+      const latlngs = points.map(item => [Number(item.point.latitude), Number(item.point.longitude)]);
+      liveTrail.setLatLngs(latlngs);
+      liveMarker.setLatLng(latlngs[latlngs.length - 1]);
 
-
-const historySortState = { field: "timestamp", dir: "desc" };
-
-window.toggleHistorySort = function(field){
-  if(historySortState.field === field){
-    historySortState.dir = historySortState.dir === "desc" ? "asc" : "desc";
-  }else{
-    historySortState.field = field;
-    historySortState.dir = "desc";
+      await updateNowUI(currentPoint, `Все пользователи (${points.length})`);
+      updateGpsProfilesUiFromData(currentPoint);
+      await captureDeviceJournalEvents(currentPoint);
+      notifyDeviceAlerts(currentPoint);
+      return;
+    }
   }
-  renderHistory();
-};
+
+  const selectedLive = getSelectedLiveData();
+  if(selectedLive && selectedLive.lastPoint){
+    const currentPoint = selectedLive.lastPoint;
+    const pts = Object.values(selectedLive.recentPoints || {})
+      .filter(Boolean)
+      .sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+
+    liveTrail.setLatLngs(
+      pts.filter(p=>p.latitude!=null&&p.longitude!=null)
+         .map(p=>[Number(p.latitude),Number(p.longitude)])
+    );
+
+    await updateNowUI(currentPoint, selectedUid ? `live/${selectedUid}` : "live");
+    updateGpsProfilesUiFromData(currentPoint);
+    await captureDeviceJournalEvents(currentPoint);
+    notifyDeviceAlerts(currentPoint);
+    return;
+  }
+
+  const now = Date.now();
+  const active = Object.entries(allSessions)
+    .filter(([k,v]) =>
+      k !== "_init" &&
+      !!getSessionRoot(v).meta?.active &&
+      Number(getSessionRoot(v).meta?.expiresAt || 0) > now
+    )
+    .filter(([,v]) =>
+      !selectedUid ||
+      !getSessionRoot(v).meta?.ownerUid ||
+      getSessionRoot(v).meta.ownerUid === selectedUid
+    );
+
+  if(active.length){
+    const [token, session] = active.sort((a,b)=>
+      Number(getSessionRoot(b[1]).meta?.createdAt || 0) -
+      Number(getSessionRoot(a[1]).meta?.createdAt || 0)
+    )[0];
+
+    const root = getSessionRoot(session);
+    const sessionPoint = root.public?.lastPoint || null;
+    const pts = Object.values(root.public?.recentPoints || {})
+      .filter(Boolean)
+      .sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+
+    liveTrail.setLatLngs(
+      pts.filter(p=>p.latitude!=null&&p.longitude!=null)
+         .map(p=>[Number(p.latitude),Number(p.longitude)])
+    );
+
+    await updateNowUI(sessionPoint, `liveSessions/${token}`);
+    updateGpsProfilesUiFromData(sessionPoint);
+    await captureDeviceJournalEvents(sessionPoint);
+    notifyDeviceAlerts(sessionPoint);
+    return;
+  }
+
+  const points = getVisibleHistoryPoints();
+  const point = points.length ? points[points.length - 1] : null;
+  liveTrail.setLatLngs([]);
+
+  await updateNowUI(point, selectedUid ? `history/${selectedUid}` : "history");
+  updateGpsProfilesUiFromData(point);
+  await captureDeviceJournalEvents(point);
+  notifyDeviceAlerts(point);
+}
 
 function updateHistorySortHeaders(){
   const map = {
@@ -2326,45 +2466,6 @@ async function updateNowUI(point, sourceLabel){
   qs("nowBearing").textContent = point?.bearing != null ? `${Number(point.bearing).toFixed(0)}°` : "—";
   qs("nowIdle").textContent = point?.timestamp ? formatIdle(Date.now()-Number(point.timestamp)) : "—";
   
-  const ageMs = Date.now() - (data?.timestamp || 0);
-const offlineMs = adminSettings.offlineMinutes * 60 * 1000;
-if (!data || ageMs > offlineMs) {
-  qs("nowBattery").innerText = "—";
-  qs("nowCharging").innerText = "—";
-  qs("nowSatellites").innerText = "—";
-  qs("nowGpsQuality").innerText = "📡 Нет сигнала";
-} else {
-
-  // Батарея
-  qs("nowBattery").innerText =
-    data.batteryLevel != null ? data.batteryLevel + "%" : "—";
-
-  // Питание
-  qs("nowCharging").innerText =
-    data.isCharging === true ? "⚡ Зарядка" :
-    data.isCharging === false ? "🔋 Разряд" : "—";
-
-  // Спутники
-  if (data.satellitesVisible != null && data.satellitesUsed != null) {
-    qs("nowSatellites").innerText =
-      data.satellitesUsed + " / " + data.satellitesVisible;
-  } else {
-    qs("nowSatellites").innerText = "—";
-  }
-
-  // GPS качество
-  const acc = Number(data.accuracy || 0);
-
-  if (acc === 0) {
-    qs("nowGpsQuality").innerText = "—";
-  } else if (acc < 10) {
-    qs("nowGpsQuality").innerText = "🟢 Отличный";
-  } else if (acc < 30) {
-    qs("nowGpsQuality").innerText = "🟡 Нормальный";
-  } else {
-    qs("nowGpsQuality").innerText = "🔴 Плохой";
-  }
-}
 }
 
 function getSessionRoot(session){
@@ -2392,6 +2493,7 @@ async function updateNowFromAvailableSources(){
     const pts = Object.values(selectedLive.recentPoints || {}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
     liveTrail.setLatLngs(pts.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]));
     await updateNowUI(selectedLive.lastPoint, selectedUid ? `live/${selectedUid}` : "live");
+    
     await captureDeviceJournalEvents(selectedLive.lastPoint);
     await captureDeviceJournalEvents(ТОЧКА);
     return;
