@@ -755,6 +755,11 @@ let adminSettings = {
 };
 let errorLogs = [];
 let autoRefreshTimer = null;
+const deviceAlertState = {
+  offline: false,
+  lowBattery: false,
+  poorGps: false
+};
 const geocodeCache = JSON.parse(localStorage.getItem("geocodeCache") || "{}");
 let geocodeQueue = Promise.resolve();
 
@@ -1115,7 +1120,123 @@ function statusByPoint(point){
   if(!point || !Number.isFinite(Number(point.timestamp || 0))){
     return { text:"📡 Нет сигнала", cls:"offline", color:"#9ca3af", kind:"offline" };
   }
+function getNowOfflineMs(){
+  return Number(adminSettings?.offlineMinutes ?? 5) * 60 * 1000;
+}
 
+function getGpsQualityMeta(point){
+  if(!point || !Number.isFinite(Number(point.timestamp || 0))){
+    return { text: "📡 Нет сигнала", level: "offline" };
+  }
+
+  const ageMs = Math.max(0, Date.now() - Number(point.timestamp || 0));
+  if(ageMs > getNowOfflineMs()){
+    return { text: "📡 Нет сигнала", level: "offline" };
+  }
+
+  const acc = Number(point.accuracy || 9999);
+  const visible = Number(point.satellitesVisible ?? point.satellites_visible ?? NaN);
+  const used = Number(point.satellitesUsed ?? point.satellites_used ?? NaN);
+  const source = String(
+    point.signalType ??
+    point.sourceType ??
+    point.source ??
+    point.provider ??
+    ""
+  ).toLowerCase();
+
+  if(Number.isFinite(used) && used > 0){
+    if(used >= 6 && acc <= 15) return { text: `🟢 Отличный`, level: "good" };
+    if(used >= 4 && acc <= 35) return { text: `🟡 Нормальный`, level: "ok" };
+    return { text: `🔴 Плохой`, level: "poor" };
+  }
+
+  if(source.includes("gps")){
+    if(acc <= 15) return { text: "🟢 Отличный", level: "good" };
+    if(acc <= 35) return { text: "🟡 Нормальный", level: "ok" };
+    return { text: "🔴 Плохой", level: "poor" };
+  }
+
+  if(source.includes("network") || source.includes("mixed")){
+    if(acc <= 25) return { text: "🟡 Нормальный", level: "ok" };
+    return { text: "🔴 Плохой", level: "poor" };
+  }
+
+  if(acc <= 15) return { text: "🟢 Отличный", level: "good" };
+  if(acc <= 35) return { text: "🟡 Нормальный", level: "ok" };
+  return { text: "🔴 Плохой", level: "poor" };
+}
+
+function updateNowExtraFields(point){
+  const offlineMs = getNowOfflineMs();
+  const ts = Number(point?.timestamp || 0);
+  const ageMs = ts ? Math.max(0, Date.now() - ts) : Number.POSITIVE_INFINITY;
+  const offline = !point || !Number.isFinite(ts) || ageMs > offlineMs;
+
+  const batteryEl = qs("nowBattery");
+  const chargingEl = qs("nowCharging");
+  const satellitesEl = qs("nowSatellites");
+  const gpsQualityEl = qs("nowGpsQuality");
+
+  if(offline){
+    if(batteryEl) batteryEl.textContent = "—";
+    if(chargingEl) chargingEl.textContent = "—";
+    if(satellitesEl) satellitesEl.textContent = "—";
+    if(gpsQualityEl) gpsQualityEl.textContent = "📡 Нет сигнала";
+    return { offline: true, lowBattery: false, poorGps: false };
+  }
+
+  const battery = point?.batteryLevel ?? point?.battery ?? null;
+  const isCharging = point?.isCharging ?? point?.charging ?? null;
+  const visible = point?.satellitesVisible ?? point?.satellites_visible ?? null;
+  const used = point?.satellitesUsed ?? point?.satellites_used ?? null;
+
+  if(batteryEl){
+    batteryEl.textContent =
+      battery == null || battery === "" ? "—" : `${Number(battery)}%`;
+  }
+
+  if(chargingEl){
+    chargingEl.textContent =
+      isCharging === true ? "⚡ Зарядка" :
+      isCharging === false ? "🔋 От батареи" : "—";
+  }
+
+  if(satellitesEl){
+    satellitesEl.textContent =
+      (visible == null && used == null) ? "—" :
+      `${used ?? "—"} / ${visible ?? "—"}`;
+  }
+
+  const gpsMeta = getGpsQualityMeta(point);
+  if(gpsQualityEl) gpsQualityEl.textContent = gpsMeta.text;
+
+  return {
+    offline: false,
+    lowBattery: Number.isFinite(Number(battery)) && Number(battery) <= 20,
+    poorGps: gpsMeta.level === "poor"
+  };
+}
+
+function notifyDeviceAlerts(point){
+  const flags = updateNowExtraFields(point);
+
+  if(flags.offline && !deviceAlertState.offline){
+    showToast("📡 Устройство оффлайн / нет свежей точки", "warn", 3200);
+  }
+  deviceAlertState.offline = flags.offline;
+
+  if(flags.lowBattery && !deviceAlertState.lowBattery){
+    const battery = Number(point?.batteryLevel ?? point?.battery ?? 0);
+    showToast(`🔋 Низкий заряд: ${battery}%`, "warn", 3200);
+  }
+  deviceAlertState.lowBattery = flags.lowBattery;
+
+  if(flags.poorGps && !deviceAlertState.poorGps){
+    showToast("📍 Плохое качество GPS", "warn", 3200);
+  }
+  deviceAlertState.poorGps = flags.poorGps;
+}
   const speed = Number(point.speed || 0);
   const ts = Number(point.timestamp || 0);
   const age = Math.max(0, Date.now() - ts);
