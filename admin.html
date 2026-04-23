@@ -305,14 +305,8 @@
           <div class="stat"><div class="label">Направление</div><div class="value" id="nowBearing">—</div></div>
           <div class="stat"><div class="label">Простой</div><div class="value" id="nowIdle">—</div></div>
           <div class="stat"><div class="label">Адрес</div><div class="value" id="nowAddress">—</div></div>
-          <div class="stat"><div class="label">Батарея</div><div class="value" id="nowBattery">—</div></div>
-          <div class="stat"><div class="label">Питание</div> <div class="value" id="nowCharging">—</div></div>
-          <div class="stat"><div class="label">Спутники</div> <div class="value" id="nowSatellites">—</div></div>
-          <div class="stat"><div class="label">GPS качество</div> <div class="value" id="nowGpsQuality">—</div></div>
           
         </div>
-
-        
         <div class="row">
           <button id="liveAutoCenterBtn">Автоцентр: вкл</button>
           <button id="refreshNowBtn" class="secondary">Обновить сейчас</button>
@@ -782,6 +776,12 @@ let gpsProfilesLastSeenJson = null;
 let lastGpsProfilesSnapshot = null;
 let suppressNextGpsProfilesToast = false;
 let suppressHistoryMapInteraction = false;
+let adminAlertState = {
+  offlineKey: null,
+  gpsKey: null,
+  batteryKey: null
+};
+
 
 function windDirShort(deg){
   const dirs=["С","СВ","В","ЮВ","Ю","ЮЗ","З","СЗ"];
@@ -1132,6 +1132,126 @@ function statusByPoint(point){
     return { text:"🅿 Стоянка", cls:"offline", color:"#ef4444", kind:"stop_long" };
   }
   return { text:"⏸ Остановка", cls:"idle", color:"#eab308", kind:"stop_short" };
+}
+
+function isPointOffline(point){
+  if(!point || !Number.isFinite(Number(point.timestamp || 0))) return true;
+  const offlineMs = Number(adminSettings?.offlineMinutes ?? 5) * 60 * 1000;
+  return Math.max(0, Date.now() - Number(point.timestamp || 0)) > offlineMs;
+}
+
+function getSatInfo(point){
+  const visible = point?.satellitesVisible;
+  const used = point?.satellitesUsed;
+  const hasVisible = visible != null && Number.isFinite(Number(visible));
+  const hasUsed = used != null && Number.isFinite(Number(used));
+  return {
+    visible: hasVisible ? Number(visible) : null,
+    used: hasUsed ? Number(used) : null,
+    text: hasVisible && hasUsed ? `${Number(used)} / ${Number(visible)}` : "—"
+  };
+}
+
+function getGpsQuality(point){
+  if(isPointOffline(point)){
+    return { text:"📡 Нет сигнала", level:"offline" };
+  }
+  if(!point) return { text:"—", level:"unknown" };
+
+  const accuracy = Number(point.accuracy || 9999);
+  const signalType = String(point.signalType || point.sourceType || point.provider || "").toLowerCase();
+  const sat = getSatInfo(point);
+  const used = sat.used;
+
+  if(used != null){
+    if(used >= 6 && accuracy <= 15 && !signalType.includes("network")){
+      return { text:"🟢 Отличный", level:"good" };
+    }
+    if(used >= 4 && accuracy <= 35){
+      return { text:"🟡 Нормальный", level:"fair" };
+    }
+    return { text:"🔴 Плохой", level:"bad" };
+  }
+
+  if(signalType.includes("network")){
+    return accuracy <= 50 ? { text:"🟡 Сетевой", level:"fair" } : { text:"🔴 Слабый GPS", level:"bad" };
+  }
+  if(signalType.includes("mixed")){
+    return accuracy <= 25 ? { text:"🟡 Смешанный", level:"fair" } : { text:"🔴 Слабый GPS", level:"bad" };
+  }
+  if(accuracy <= 10){
+    return { text:"🟢 Отличный", level:"good" };
+  }
+  if(accuracy <= 30){
+    return { text:"🟡 Нормальный", level:"fair" };
+  }
+  return { text:"🔴 Плохой", level:"bad" };
+}
+
+function fillNowExtraFields(point){
+  if(isPointOffline(point)){
+    qs("nowBattery").textContent = "—";
+    qs("nowCharging").textContent = "—";
+    qs("nowSatellites").textContent = "—";
+    qs("nowGpsQuality").textContent = "📡 Нет сигнала";
+    return;
+  }
+
+  const batteryLevel = point?.batteryLevel;
+  const isCharging = point?.isCharging;
+  const sat = getSatInfo(point);
+  const gpsQuality = getGpsQuality(point);
+
+  qs("nowBattery").textContent =
+    batteryLevel != null && Number.isFinite(Number(batteryLevel))
+      ? `${Math.max(0, Math.min(100, Math.round(Number(batteryLevel))))}%`
+      : "—";
+
+  qs("nowCharging").textContent =
+    isCharging === true ? "⚡ Зарядка" :
+    isCharging === false ? "🔋 От батареи" : "—";
+
+  qs("nowSatellites").textContent = sat.text;
+  qs("nowGpsQuality").textContent = gpsQuality.text;
+}
+
+function maybeNotifyPointIssues(point, sourceLabel){
+  const sourceKey = sourceLabel || "—";
+
+  if(isPointOffline(point)){
+    const offlineKey = `${sourceKey}:offline`;
+    if(adminAlertState.offlineKey !== offlineKey){
+      adminAlertState.offlineKey = offlineKey;
+      showToast(`Нет сигнала: ${sourceKey}`, "warn", 4200);
+    }
+    adminAlertState.gpsKey = null;
+    adminAlertState.batteryKey = null;
+    return;
+  }
+
+  adminAlertState.offlineKey = null;
+
+  const gpsQuality = getGpsQuality(point);
+  if(gpsQuality.level === "bad"){
+    const gpsKey = `${sourceKey}:gpsbad:${Number(point?.timestamp || 0)}`;
+    if(adminAlertState.gpsKey !== gpsKey){
+      adminAlertState.gpsKey = gpsKey;
+      showToast(`Плохой GPS: ${sourceKey}`, "warn", 4200);
+    }
+  } else {
+    adminAlertState.gpsKey = null;
+  }
+
+  const batteryLevel = point?.batteryLevel;
+  if(batteryLevel != null && Number.isFinite(Number(batteryLevel)) && Number(batteryLevel) <= 15){
+    const batteryKey = `${sourceKey}:battery:${Math.round(Number(batteryLevel))}`;
+    if(adminAlertState.batteryKey !== batteryKey){
+      adminAlertState.batteryKey = batteryKey;
+      showToast(`Низкий заряд: ${Math.round(Number(batteryLevel))}%`, "warn", 4200);
+    }
+  } else {
+    adminAlertState.batteryKey = null;
+  }
 }
 
 function updateLiveAutoCenterButton(){
@@ -2071,47 +2191,11 @@ async function updateNowUI(point, sourceLabel){
   qs("nowUpdated").textContent = fmtTime(point?.timestamp);
   qs("nowBearing").textContent = point?.bearing != null ? `${Number(point.bearing).toFixed(0)}°` : "—";
   qs("nowIdle").textContent = point?.timestamp ? formatIdle(Date.now()-Number(point.timestamp)) : "—";
-  
-  const ageMs = Date.now() - (data?.timestamp || 0);
-const offlineMs = adminSettings.offlineMinutes * 60 * 1000;
-if (!data || ageMs > offlineMs) {
-  qs("nowBattery").innerText = "—";
-  qs("nowCharging").innerText = "—";
-  qs("nowSatellites").innerText = "—";
-  qs("nowGpsQuality").innerText = "📡 Нет сигнала";
-} else {
-
-  // Батарея
-  qs("nowBattery").innerText =
-    data.batteryLevel != null ? data.batteryLevel + "%" : "—";
-
-  // Питание
-  qs("nowCharging").innerText =
-    data.isCharging === true ? "⚡ Зарядка" :
-    data.isCharging === false ? "🔋 Разряд" : "—";
-
-  // Спутники
-  if (data.satellitesVisible != null && data.satellitesUsed != null) {
-    qs("nowSatellites").innerText =
-      data.satellitesUsed + " / " + data.satellitesVisible;
-  } else {
-    qs("nowSatellites").innerText = "—";
-  }
-
-  // GPS качество
-  const acc = Number(data.accuracy || 0);
-
-  if (acc === 0) {
-    qs("nowGpsQuality").innerText = "—";
-  } else if (acc < 10) {
-    qs("nowGpsQuality").innerText = "🟢 Отличный";
-  } else if (acc < 30) {
-    qs("nowGpsQuality").innerText = "🟡 Нормальный";
-  } else {
-    qs("nowGpsQuality").innerText = "🔴 Плохой";
-  }
+  fillNowExtraFields(point);
+  maybeNotifyPointIssues(point, sourceLabel);
 }
-}
+
+function getSessionRoot
 
 function getSessionRoot(session){
   if(!session) return {};
