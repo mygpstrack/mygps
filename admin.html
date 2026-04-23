@@ -1199,6 +1199,28 @@ function statusByPoint(point){
   const offlineMs = Number(adminSettings?.offlineMinutes ?? 5) * 60 * 1000;
   const junkAccuracy = Number(adminSettings?.junkAccuracyMeters ?? 100);
 
+  if(!point || !Number.isFinite(Number(point.timestamp || 0))){
+    return { text:"📡 Нет сигнала", cls:"offline", color:"#9ca3af", kind:"offline" };
+  }
+
+  const speed = Number(point.speed || 0);
+  const ts = Number(point.timestamp || 0);
+  const age = Math.max(0, Date.now() - ts);
+  const accuracy = Number(point.accuracy || 9999);
+  const stopLongMs = stopLongMinutes * 60 * 1000;
+
+  if(age > offlineMs){
+    return { text:"📡 Нет сигнала", cls:"offline", color:"#9ca3af", kind:"offline" };
+  }
+  if(accuracy <= junkAccuracy && speed >= moveThreshold){
+    return { text:"🚗 Движение", cls:"online", color:"#22c55e", kind:"moving" };
+  }
+  if(age >= stopLongMs){
+    return { text:"🅿 Стоянка", cls:"offline", color:"#ef4444", kind:"stop_long" };
+  }
+  return { text:"⏸ Остановка", cls:"idle", color:"#eab308", kind:"stop_short" };
+}
+
   async function captureDeviceJournalEvents(point){
 
   const offlineNow = st.kind === "offline";
@@ -1267,70 +1289,11 @@ function getNowOfflineMs(){
   return Number(adminSettings?.offlineMinutes ?? 5) * 60 * 1000;
 }
 
-function getGpsQualityMeta(point){
-  async function captureDeviceJournalEvents(point){
-  const st = statusByPoint(point);
-  const gps = getGpsQualityMeta(point);
-
-  const offlineNow = st.kind === "offline";
-  const poorGpsNow = gps.level === "poor";
-  const battery = Number(point?.batteryLevel ?? point?.battery ?? NaN);
-  const lowBatteryNow = Number.isFinite(battery) && battery <= 20;
-
-  // 1. Переходы движения / остановки / offline
-  if(deviceJournalState.lastStatusKind !== st.kind){
-    if(st.kind === "moving"){
-      await logDeviceEvent("move_start", "Началось движение");
-    }else if(st.kind === "stop_short" || st.kind === "stop_long"){
-      await logDeviceEvent("stop", st.kind === "stop_long" ? "Долгая стоянка" : "Остановка");
-    }else if(st.kind === "offline"){
-      await logDeviceEvent("offline", "Нет сигнала / устройство оффлайн");
-    }
-    deviceJournalState.lastStatusKind = st.kind;
-  }
-
-  // 2. Потеря / восстановление сигнала
-  if(deviceJournalState.lastOffline !== offlineNow){
-    if(offlineNow){
-      await logDeviceEvent("signal_lost", "Потеря сигнала GPS / нет свежей точки");
-    }else if(deviceJournalState.lastOffline === true && !offlineNow){
-      await logDeviceEvent("signal_restored", "Сигнал восстановлен");
-    }
-    deviceJournalState.lastOffline = offlineNow;
-  }
-
-  // 3. Плохой GPS
-  if(deviceJournalState.lastPoorGps !== poorGpsNow){
-    if(poorGpsNow){
-      await logDeviceEvent("gps_poor", "Плохое качество GPS");
-    }else if(deviceJournalState.lastPoorGps === true && !poorGpsNow){
-      await logDeviceEvent("gps_ok", "Качество GPS восстановилось");
-    }
-    deviceJournalState.lastPoorGps = poorGpsNow;
-  }
-
-  // 4. Низкий заряд
-  if(deviceJournalState.lastLowBattery !== lowBatteryNow){
-    if(lowBatteryNow){
-      await logDeviceEvent("battery_low", `Низкий заряд: ${battery}%`);
-    }else if(deviceJournalState.lastLowBattery === true && !lowBatteryNow){
-      await logDeviceEvent("battery_ok", "Заряд снова в норме");
-    }
-    deviceJournalState.lastLowBattery = lowBatteryNow;
-  }
-
-  // 5. Геозоны (заготовка на будущее, если приложение начнёт присылать geofenceEvent/geofenceName)
-  const geofenceKey = `${point?.geofenceEvent || ""}|${point?.geofenceName || ""}`;
-  if(geofenceKey && geofenceKey !== "|" && geofenceKey !== deviceJournalState.lastGeofenceKey){
-    const eventText = point?.geofenceEvent === "enter" ? "Вход в геозону" :
-                      point?.geofenceEvent === "exit" ? "Выход из геозоны" :
-                      "Событие геозоны";
-    const zoneName = point?.geofenceName ? `: ${point.geofenceName}` : "";
-    await logDeviceEvent("geofence", `${eventText}${zoneName}`);
-    deviceJournalState.lastGeofenceKey = geofenceKey;
-  }
+function getNowOfflineMs(){
+  return Number(adminSettings?.offlineMinutes ?? 5) * 60 * 1000;
 }
-  
+
+function getGpsQualityMeta(point){
   if(!point || !Number.isFinite(Number(point.timestamp || 0))){
     return { text: "📡 Нет сигнала", level: "offline" };
   }
@@ -1352,9 +1315,9 @@ function getGpsQualityMeta(point){
   ).toLowerCase();
 
   if(Number.isFinite(used) && used > 0){
-    if(used >= 6 && acc <= 15) return { text: `🟢 Отличный`, level: "good" };
-    if(used >= 4 && acc <= 35) return { text: `🟡 Нормальный`, level: "ok" };
-    return { text: `🔴 Плохой`, level: "poor" };
+    if(used >= 6 && acc <= 15) return { text: "🟢 Отличный", level: "good" };
+    if(used >= 4 && acc <= 35) return { text: "🟡 Нормальный", level: "ok" };
+    return { text: "🔴 Плохой", level: "poor" };
   }
 
   if(source.includes("gps")){
@@ -2077,17 +2040,28 @@ function updateTodaySummary(){
 
 
 async function loadAllData(){
-  const [historySnap, liveSnap, usersSnap] = await Promise.all([get(ref(db,"history")), get(ref(db,"live")), get(ref(db,"users"))]);
+  const [historySnap, liveSnap, usersSnap] = await Promise.all([
+    get(ref(db,"history")),
+    get(ref(db,"live")),
+    get(ref(db,"users"))
+  ]);
+
   usersMeta = usersSnap.val() || {};
   historyByUid = {};
   liveByUid = liveSnap.val() || {};
+
   const histRaw = historySnap.val() || {};
   Object.entries(histRaw).forEach(([uid, pointsObj])=>{
-    historyByUid[uid] = Object.values(pointsObj||{}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+    historyByUid[uid] = Object.values(pointsObj || {})
+      .filter(Boolean)
+      .sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
   });
+
   updateUsage();
   updateTodaySummary();
   renderHistory();
+  await updateNowFromAvailableSources();
+}
 async function updateNowFromAvailableSources(){
   if(qs("viewModeSelect").value === "all"){
     const points = getAllLastPoints();
@@ -2482,8 +2456,7 @@ async function updateNowFromAvailableSources(){
       liveTrail.setLatLngs(latlngs);
       liveMarker.setLatLng(latlngs[latlngs.length-1]);
       await updateNowUI(points[points.length-1].point, `Все пользователи (${points.length})`);
-      await captureDeviceJournalEvents(points[points.length-1].point);
-     await captureDeviceJournalEvents(ТОЧКА);
+      await captureDeviceJournalEvents(points[points.length-1].point);  
       return;
       
     }
@@ -2495,7 +2468,6 @@ async function updateNowFromAvailableSources(){
     await updateNowUI(selectedLive.lastPoint, selectedUid ? `live/${selectedUid}` : "live");
     
     await captureDeviceJournalEvents(selectedLive.lastPoint);
-    await captureDeviceJournalEvents(ТОЧКА);
     return;
   }
   const now = Date.now();
@@ -2509,14 +2481,12 @@ async function updateNowFromAvailableSources(){
     const sessionPoint = root.public?.lastPoint || null;
 await updateNowUI(sessionPoint, `liveSessions/${token}`);
 await captureDeviceJournalEvents(sessionPoint);
-    await captureDeviceJournalEvents(ТОЧКА);
     return;
   }
   const points = getVisibleHistoryPoints(), point = points.length ? points[points.length-1] : null;
   liveTrail.setLatLngs([]);
   await updateNowUI(point, selectedUid ? `history/${selectedUid}` : "history");
   await captureDeviceJournalEvents(point);
-  await captureDeviceJournalEvents(ТОЧКА);
 }
 
 
@@ -2857,8 +2827,17 @@ async function importDataFile(){
   }
 }
 async function logAction(kind, description){
+  const entryRef = push(ref(db, "adminLogs/actions"));
+  await set(entryRef, {
+    ts: Date.now(),
+    kind,
+    description,
+    uid: auth.currentUser?.uid || null,
+    email: auth.currentUser?.email || null
+  });
+}
 
-  async function logDeviceEvent(kind, description, extra = {}){
+async function logDeviceEvent(kind, description, extra = {}){
   try{
     const entryRef = push(ref(db, "adminLogs/actions"));
     await set(entryRef, {
@@ -2874,10 +2853,6 @@ async function logAction(kind, description){
   }catch(e){
     console.warn("logDeviceEvent error", e);
   }
-}
-  
-  const entryRef = push(ref(db, "adminLogs/actions"));
-  await set(entryRef, { ts:Date.now(), kind, description, uid:auth.currentUser?.uid||null, email:auth.currentUser?.email||null });
 }
 
 function buildShareUrl(token){ return `https://mygpstrack.github.io/mygps/live.html?session=${encodeURIComponent(token)}`; }
@@ -3919,7 +3894,11 @@ onAuthStateChanged(auth, async user => {
   setDefaultPeriodToday();
   await ensureUserMeta(user);
 
-  onValue(ref(db, "live"), snap => { liveByUid=snap.val()||{}; updateUsage(); updateNowFromAvailableSources();notifyDeviceAlerts(point); });
+  onValue(ref(db, "live"), snap => {
+  liveByUid = snap.val() || {};
+  updateUsage();
+  updateNowFromAvailableSources();
+});
   onValue(ref(db, "history"), snap => {
     const raw=snap.val()||{};
     historyByUid={};
