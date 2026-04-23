@@ -3655,7 +3655,7 @@ onAuthStateChanged(auth, async user => {
   setDefaultPeriodToday();
   await ensureUserMeta(user);
 
-  onValue(ref(db, "live"), snap => { liveByUid=snap.val()||{}; updateUsage(); updateNowFromAvailableSources(); });
+  onValue(ref(db, "live"), snap => { liveByUid=snap.val()||{}; updateUsage(); updateNowFromAvailableSources();notifyDeviceAlerts(point); });
   onValue(ref(db, "history"), snap => {
     const raw=snap.val()||{};
     historyByUid={};
