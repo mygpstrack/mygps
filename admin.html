@@ -305,8 +305,14 @@
           <div class="stat"><div class="label">Направление</div><div class="value" id="nowBearing">—</div></div>
           <div class="stat"><div class="label">Простой</div><div class="value" id="nowIdle">—</div></div>
           <div class="stat"><div class="label">Адрес</div><div class="value" id="nowAddress">—</div></div>
+          <div class="stat"><div class="label">Батарея</div><div class="value" id="nowBattery">—</div></div>
+          <div class="stat"><div class="label">Питание</div> <div class="value" id="nowCharging">—</div></div>
+          <div class="stat"><div class="label">Спутники</div> <div class="value" id="nowSatellites">—</div></div>
+          <div class="stat"><div class="label">GPS качество</div> <div class="value" id="nowGpsQuality">—</div></div>
           
         </div>
+
+        
         <div class="row">
           <button id="liveAutoCenterBtn">Автоцентр: вкл</button>
           <button id="refreshNowBtn" class="secondary">Обновить сейчас</button>
@@ -656,6 +662,24 @@
             <div><div class="label">Live — дистанция</div><select id="gpsLiveDistanceSelect"></select></div>
           </div>
           <div class="notice" id="gpsProfileCurrentText" style="margin-top:12px">Сейчас: обычный 5s / 3м • live 3s / 2м</div>
+          <div class="grid4" style="margin-top:12px">
+  <div class="stat">
+    <div class="label">Текущий профиль</div>
+    <div class="value" id="gpsProfileModeText">—</div>
+  </div>
+  <div class="stat">
+    <div class="label">Обычный применён</div>
+    <div class="value" id="gpsAppliedNormalText">—</div>
+  </div>
+  <div class="stat">
+    <div class="label">Live применён</div>
+    <div class="value" id="gpsAppliedLiveText">—</div>
+  </div>
+  <div class="stat">
+    <div class="label">Источник профиля</div>
+    <div class="value" id="gpsProfileSourceText">—</div>
+  </div>
+</div>
           <div class="toolbar">
             <button id="gpsResetDefaultsBtn" class="secondary">Сбросить GPS по умолчанию</button>
             <button id="saveGpsSettingsBtn" class="success">Сохранить настройки GPS</button>
@@ -749,6 +773,18 @@ let adminSettings = {
 };
 let errorLogs = [];
 let autoRefreshTimer = null;
+const deviceJournalState = {
+  lastStatusKind: "",
+  lastOffline: null,
+  lastPoorGps: null,
+  lastLowBattery: null,
+  lastGeofenceKey: ""
+};
+  const deviceAlertState = {
+  offline: false,
+  lowBattery: false,
+  poorGps: false
+};
 const geocodeCache = JSON.parse(localStorage.getItem("geocodeCache") || "{}");
 let geocodeQueue = Promise.resolve();
 
@@ -763,6 +799,63 @@ const fmtRemainingCompact = ms => {
   if(h > 0) return `${h}ч ${m}м`;
   return `${m}м ${String(s).padStart(2,"0")}с`;
 };
+
+  function formatGpsProfileLine(profile){
+  const intervalSec = Math.round(Number(profile?.intervalMs || 0) / 1000);
+  const distanceM = Math.round(Number(profile?.minDistanceM || 0));
+  return `${intervalSec || 0}s / ${distanceM || 0}м`;
+}
+
+function detectCurrentGpsMode(point){
+  const raw = String(
+    point?.gpsMode ??
+    point?.trackingMode ??
+    point?.profileMode ??
+    ""
+  ).toLowerCase();
+
+  if(raw === "live") return "Live";
+  if(raw === "normal") return "Обычный";
+
+  const sessionActive = !!point?.liveSessionActive || !!point?.sessionActive;
+  return sessionActive ? "Live" : "Обычный";
+}
+
+function updateGpsProfilesUiFromData(point){
+  const profiles = adminSettings?.gpsProfiles || {};
+  const normal = profiles.normal || {};
+  const live = profiles.live || {};
+
+  const modeEl = qs("gpsProfileModeText");
+  const normalEl = qs("gpsAppliedNormalText");
+  const liveEl = qs("gpsAppliedLiveText");
+  const sourceEl = qs("gpsProfileSourceText");
+  const currentEl = qs("gpsProfileCurrentText");
+
+  const currentMode = detectCurrentGpsMode(point);
+  const normalLine = formatGpsProfileLine(normal);
+  const liveLine = formatGpsProfileLine(live);
+
+  if(modeEl) modeEl.textContent = currentMode;
+  if(normalEl) normalEl.textContent = normalLine;
+  if(liveEl) liveEl.textContent = liveLine;
+
+  const hasDeviceApplied =
+    point?.appliedGpsProfile ||
+    point?.appliedGpsNormalIntervalMs != null ||
+    point?.appliedGpsNormalDistanceM != null ||
+    point?.appliedGpsLiveIntervalMs != null ||
+    point?.appliedGpsLiveDistanceM != null;
+
+  if(sourceEl){
+    sourceEl.textContent = hasDeviceApplied ? "Устройство" : "Админка";
+  }
+
+  if(currentEl){
+    currentEl.textContent = `Сейчас: обычный ${normalLine} • live ${liveLine}`;
+  }
+}
+  
 const errText = e => e?.message || e?.code || String(e);
 let nowWeatherCache = null;
 let nowWeatherFetchedAt = 0;
@@ -1128,83 +1221,200 @@ function statusByPoint(point){
   return { text:"⏸ Остановка", cls:"idle", color:"#eab308", kind:"stop_short" };
 }
 
-
-function getPointAgeMs(point){
-  if(!point || !Number.isFinite(Number(point.timestamp || 0))) return Number.POSITIVE_INFINITY;
-  return Math.max(0, Date.now() - Number(point.timestamp || 0));
+function getNowOfflineMs(){
+  return Number(adminSettings?.offlineMinutes ?? 5) * 60 * 1000;
 }
-function getSignalType(point){
-  const raw = String(
-    point?.signalType ??
-    point?.sourceType ??
-    point?.provider ??
-    point?.source ??
-    point?.locationSource ??
+
+function getGpsQualityMeta(point){
+  if(!point || !Number.isFinite(Number(point.timestamp || 0))){
+    return { text: "📡 Нет сигнала", level: "offline" };
+  }
+
+  const ageMs = Math.max(0, Date.now() - Number(point.timestamp || 0));
+  if(ageMs > getNowOfflineMs()){
+    return { text: "📡 Нет сигнала", level: "offline" };
+  }
+
+  const acc = Number(point.accuracy || 9999);
+  const visible = Number(point.satellitesVisible ?? point.satellites_visible ?? NaN);
+  const used = Number(point.satellitesUsed ?? point.satellites_used ?? NaN);
+  const source = String(
+    point.signalType ??
+    point.sourceType ??
+    point.source ??
+    point.provider ??
     ""
-  ).trim().toLowerCase();
-  if(!raw) return "";
-  if(raw.includes("gps")) return "gps";
-  if(raw.includes("network")) return "network";
-  if(raw.includes("wifi")) return "network";
-  if(raw.includes("mixed")) return "mixed";
-  if(raw.includes("fused")) return "mixed";
-  if(raw.includes("passive")) return "mixed";
-  return raw;
-}
-function getSatellitesVisible(point){
-  const vals = [
-    point?.satellitesVisible,
-    point?.visibleSatellites,
-    point?.satellites_visible,
-    point?.gpsSatellitesVisible
-  ].map(v=>Number(v));
-  return vals.find(v=>Number.isFinite(v) && v >= 0);
-}
-function getSatellitesUsed(point){
-  const vals = [
-    point?.satellitesUsed,
-    point?.usedSatellites,
-    point?.satellites_used,
-    point?.gpsSatellitesUsed
-  ].map(v=>Number(v));
-  return vals.find(v=>Number.isFinite(v) && v >= 0);
-}
-function getBatteryLevel(point){
-  const vals = [
-    point?.batteryLevel,
-    point?.battery,
-    point?.deviceBatteryLevel,
-    point?.batteryPct
-  ].map(v=>Number(v));
-  return vals.find(v=>Number.isFinite(v) && v >= 0 && v <= 100);
-}
-function getChargingState(point){
-  const vals = [point?.isCharging, point?.charging, point?.deviceCharging];
-  for(const v of vals){
-    if(typeof v === "boolean") return v;
-    if(v === 1 || v === "1" || v === "true") return true;
-    if(v === 0 || v === "0" || v === "false") return false;
-  }
-  return null;
-}
-function getGpsQualityInfo(point, status){
-  if(!point || status?.kind === "offline"){
-    return { text:"📡 Нет сигнала", cls:"offline", color:"#9ca3af", level:"offline" };
-  }
-  const accuracy = Number(point?.accuracy || 9999);
-  const signalType = getSignalType(point);
-  const satsUsed = getSatellitesUsed(point);
-  const satsVisible = getSatellitesVisible(point);
+  ).toLowerCase();
 
-  if((Number.isFinite(satsUsed) && satsUsed >= 5 && accuracy <= 20) || (signalType === "gps" && accuracy <= 20)){
-    return { text:"🟢 Нормальный", cls:"online", color:"#22c55e", level:"normal" };
+  if(Number.isFinite(used) && used > 0){
+    if(used >= 6 && acc <= 15) return { text: "🟢 Отличный", level: "good" };
+    if(used >= 4 && acc <= 35) return { text: "🟡 Нормальный", level: "ok" };
+    return { text: "🔴 Плохой", level: "poor" };
   }
-  if((Number.isFinite(satsUsed) && satsUsed >= 3) || (Number.isFinite(satsVisible) && satsVisible >= 5) || accuracy <= 35 || signalType === "mixed"){
-    return { text:"🟡 Слабый", cls:"idle", color:"#eab308", level:"weak" };
+
+  if(source.includes("gps")){
+    if(acc <= 15) return { text: "🟢 Отличный", level: "good" };
+    if(acc <= 35) return { text: "🟡 Нормальный", level: "ok" };
+    return { text: "🔴 Плохой", level: "poor" };
   }
-  return { text:"🔴 Плохой", cls:"offline", color:"#ef4444", level:"poor" };
+
+  if(source.includes("network") || source.includes("mixed")){
+    if(acc <= 25) return { text: "🟡 Нормальный", level: "ok" };
+    return { text: "🔴 Плохой", level: "poor" };
+  }
+
+  if(acc <= 15) return { text: "🟢 Отличный", level: "good" };
+  if(acc <= 35) return { text: "🟡 Нормальный", level: "ok" };
+  return { text: "🔴 Плохой", level: "poor" };
 }
-let lastNowAlertState = { offline:false, weakGps:false, lowBattery:false };
+
+async function captureDeviceJournalEvents(point){
+  const st = statusByPoint(point);
+  const gps = getGpsQualityMeta(point);
+
+  const offlineNow = st.kind === "offline";
+  const poorGpsNow = gps.level === "poor";
+  const battery = Number(point?.batteryLevel ?? point?.battery ?? NaN);
+  const lowBatteryNow = Number.isFinite(battery) && battery <= 20;
+
+  if(deviceJournalState.lastStatusKind !== st.kind){
+    if(st.kind === "moving"){
+      await logDeviceEvent("move_start", "Началось движение");
+    }else if(st.kind === "stop_short" || st.kind === "stop_long"){
+      await logDeviceEvent("stop", st.kind === "stop_long" ? "Долгая стоянка" : "Остановка");
+    }else if(st.kind === "offline"){
+      await logDeviceEvent("offline", "Нет сигнала / устройство оффлайн");
+    }
+    deviceJournalState.lastStatusKind = st.kind;
+  }
+
+  if(deviceJournalState.lastOffline !== offlineNow){
+    if(offlineNow){
+      await logDeviceEvent("signal_lost", "Потеря сигнала GPS / нет свежей точки");
+    }else if(deviceJournalState.lastOffline === true && !offlineNow){
+      await logDeviceEvent("signal_restored", "Сигнал восстановлен");
+    }
+    deviceJournalState.lastOffline = offlineNow;
+  }
+
+  if(deviceJournalState.lastPoorGps !== poorGpsNow){
+    if(poorGpsNow){
+      await logDeviceEvent("gps_poor", "Плохое качество GPS");
+    }else if(deviceJournalState.lastPoorGps === true && !poorGpsNow){
+      await logDeviceEvent("gps_ok", "Качество GPS восстановилось");
+    }
+    deviceJournalState.lastPoorGps = poorGpsNow;
+  }
+
+  if(deviceJournalState.lastLowBattery !== lowBatteryNow){
+    if(lowBatteryNow){
+      await logDeviceEvent("battery_low", `Низкий заряд: ${battery}%`);
+    }else if(deviceJournalState.lastLowBattery === true && !lowBatteryNow){
+      await logDeviceEvent("battery_ok", "Заряд снова в норме");
+    }
+    deviceJournalState.lastLowBattery = lowBatteryNow;
+  }
+
+  const geofenceKey = `${point?.geofenceEvent || ""}|${point?.geofenceName || ""}`;
+  if(geofenceKey && geofenceKey !== "|" && geofenceKey !== deviceJournalState.lastGeofenceKey){
+    const eventText = point?.geofenceEvent === "enter"
+      ? "Вход в геозону"
+      : point?.geofenceEvent === "exit"
+      ? "Выход из геозоны"
+      : "Событие геозоны";
+    const zoneName = point?.geofenceName ? `: ${point.geofenceName}` : "";
+    await logDeviceEvent("geofence", `${eventText}${zoneName}`);
+    deviceJournalState.lastGeofenceKey = geofenceKey;
+  }
+}
+
+function updateNowExtraFields(point){
+  const offlineMs = getNowOfflineMs();
+  const ts = Number(point?.timestamp || 0);
+  const ageMs = ts ? Math.max(0, Date.now() - ts) : Number.POSITIVE_INFINITY;
+  const offline = !point || !Number.isFinite(ts) || ageMs > offlineMs;
+
+  const batteryEl = qs("nowBattery");
+  const chargingEl = qs("nowCharging");
+  const satellitesEl = qs("nowSatellites");
+  const gpsQualityEl = qs("nowGpsQuality");
+
+  if(offline){
+    if(batteryEl) batteryEl.textContent = "—";
+    if(chargingEl) chargingEl.textContent = "—";
+    if(satellitesEl) satellitesEl.textContent = "—";
+    if(gpsQualityEl) gpsQualityEl.textContent = "📡 Нет сигнала";
+    return { offline: true, lowBattery: false, poorGps: false };
+  }
+
+  const battery = point?.batteryLevel ?? point?.battery ?? null;
+  const isCharging = point?.isCharging ?? point?.charging ?? null;
+  const visible = point?.satellitesVisible ?? point?.satellites_visible ?? null;
+  const used = point?.satellitesUsed ?? point?.satellites_used ?? null;
+
+  if(batteryEl){
+    batteryEl.textContent =
+      battery == null || battery === "" ? "—" : `${Number(battery)}%`;
+  }
+
+  if(chargingEl){
+    chargingEl.textContent =
+      isCharging === true ? "⚡ Зарядка" :
+      isCharging === false ? "🔋 От батареи" : "—";
+  }
+
+  if(satellitesEl){
+    satellitesEl.textContent =
+      (visible == null && used == null) ? "—" :
+      `${used ?? "—"} / ${visible ?? "—"}`;
+  }
+
+  const gpsMeta = getGpsQualityMeta(point);
+  if(gpsQualityEl) gpsQualityEl.textContent = gpsMeta.text;
+
+  return {
+    offline: false,
+    lowBattery: Number.isFinite(Number(battery)) && Number(battery) <= 20,
+    poorGps: gpsMeta.level === "poor"
+  };
+}
+
+function notifyDeviceAlerts(point){
+  const flags = updateNowExtraFields(point);
+
+  if(flags.offline && !deviceAlertState.offline){
+    showToast("📡 Устройство оффлайн / нет свежей точки", "warn", 3200);
+  }
+  deviceAlertState.offline = flags.offline;
+
+  if(flags.lowBattery && !deviceAlertState.lowBattery){
+    const battery = Number(point?.batteryLevel ?? point?.battery ?? 0);
+    showToast(`🔋 Низкий заряд: ${battery}%`, "warn", 3200);
+  }
+  deviceAlertState.lowBattery = flags.lowBattery;
+
+  if(flags.poorGps && !deviceAlertState.poorGps){
+    showToast("📍 Плохое качество GPS", "warn", 3200);
+  }
+  deviceAlertState.poorGps = flags.poorGps;
+}
+  const speed = Number(point.speed || 0);
+  const ts = Number(point.timestamp || 0);
+  const age = Math.max(0, Date.now() - ts);
+  const accuracy = Number(point.accuracy || 9999);
+  const stopLongMs = stopLongMinutes * 60 * 1000;
+
+  if(age > offlineMs){
+    return { text:"📡 Нет сигнала", cls:"offline", color:"#9ca3af", kind:"offline" };
+  }
+  if(accuracy <= junkAccuracy && speed >= moveThreshold){
+    return { text:"🚗 Движение", cls:"online", color:"#22c55e", kind:"moving" };
+  }
+  if(age >= stopLongMs){
+    return { text:"🅿 Стоянка", cls:"offline", color:"#ef4444", kind:"stop_long" };
+  }
+  return { text:"⏸ Остановка", cls:"idle", color:"#eab308", kind:"stop_short" };
+}
 
 function updateLiveAutoCenterButton(){
   const btn = qs("liveAutoCenterBtn");
@@ -1822,7 +2032,11 @@ function updateTodaySummary(){
 
 
 async function loadAllData(){
-  const [historySnap, liveSnap, usersSnap] = await Promise.all([get(ref(db,"history")), get(ref(db,"live")), get(ref(db,"users"))]);
+  const [historySnap, liveSnap, usersSnap] = await Promise.all([
+    get(ref(db,"history")),
+    get(ref(db,"live")),
+    get(ref(db,"users"))
+  ]);
   usersMeta = usersSnap.val() || {};
   historyByUid = {};
   liveByUid = liveSnap.val() || {};
@@ -1836,7 +2050,6 @@ async function loadAllData(){
   await updateNowFromAvailableSources();
 }
 
-
 const historySortState = { field: "timestamp", dir: "desc" };
 
 window.toggleHistorySort = function(field){
@@ -1848,6 +2061,61 @@ window.toggleHistorySort = function(field){
   }
   renderHistory();
 };
+
+async function updateNowFromAvailableSources(){
+  if(qs("viewModeSelect").value === "all"){
+    const points = getAllLastPoints();
+    if(points.length){
+      const currentPoint = points[points.length - 1].point;
+      const latlngs = points.map(item => [Number(item.point.latitude), Number(item.point.longitude)]);
+      liveTrail.setLatLngs(latlngs);
+      liveMarker.setLatLng(latlngs[latlngs.length - 1]);
+      await updateNowUI(currentPoint, `Все пользователи (${points.length})`);
+      updateGpsProfilesUiFromData(currentPoint);
+      await captureDeviceJournalEvents(currentPoint);
+      notifyDeviceAlerts(currentPoint);
+      return;
+    }
+  }
+
+  const selectedLive = getSelectedLiveData();
+  if(selectedLive && selectedLive.lastPoint){
+    const currentPoint = selectedLive.lastPoint;
+    const pts = Object.values(selectedLive.recentPoints || {}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+    liveTrail.setLatLngs(pts.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]));
+    await updateNowUI(currentPoint, selectedUid ? `live/${selectedUid}` : "live");
+    updateGpsProfilesUiFromData(currentPoint);
+    await captureDeviceJournalEvents(currentPoint);
+    notifyDeviceAlerts(currentPoint);
+    return;
+  }
+
+  const now = Date.now();
+  const active = Object.entries(allSessions)
+    .filter(([k,v]) => k !== "_init" && !!getSessionRoot(v).meta?.active && Number(getSessionRoot(v).meta?.expiresAt||0) > now)
+    .filter(([,v]) => !selectedUid || !getSessionRoot(v).meta?.ownerUid || getSessionRoot(v).meta.ownerUid === selectedUid);
+
+  if(active.length){
+    const [token, session] = active.sort((a,b)=>Number(getSessionRoot(b[1]).meta?.createdAt||0)-Number(getSessionRoot(a[1]).meta?.createdAt||0))[0];
+    const root = getSessionRoot(session);
+    const sessionPoint = root.public?.lastPoint || null;
+    const pts = Object.values(root.public?.recentPoints || {}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+    liveTrail.setLatLngs(pts.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]));
+    await updateNowUI(sessionPoint, `liveSessions/${token}`);
+    updateGpsProfilesUiFromData(sessionPoint);
+    await captureDeviceJournalEvents(sessionPoint);
+    notifyDeviceAlerts(sessionPoint);
+    return;
+  }
+
+  const points = getVisibleHistoryPoints();
+  const point = points.length ? points[points.length - 1] : null;
+  liveTrail.setLatLngs([]);
+  await updateNowUI(point, selectedUid ? `history/${selectedUid}` : "history");
+  updateGpsProfilesUiFromData(point);
+  await captureDeviceJournalEvents(point);
+  notifyDeviceAlerts(point);
+}
 
 function updateHistorySortHeaders(){
   const map = {
@@ -2143,6 +2411,7 @@ async function updateNowUI(point, sourceLabel){
   qs("nowUpdated").textContent = fmtTime(point?.timestamp);
   qs("nowBearing").textContent = point?.bearing != null ? `${Number(point.bearing).toFixed(0)}°` : "—";
   qs("nowIdle").textContent = point?.timestamp ? formatIdle(Date.now()-Number(point.timestamp)) : "—";
+  
 }
 
 function getSessionRoot(session){
@@ -2150,40 +2419,6 @@ function getSessionRoot(session){
   if(session.meta || session.public || session.viewStats) return session;
   return {};
 }
-
-async function updateNowFromAvailableSources(){
-  if(qs("viewModeSelect").value === "all"){
-    const points = getAllLastPoints();
-    if(points.length){
-      const latlngs = points.map(item => [Number(item.point.latitude), Number(item.point.longitude)]);
-      liveTrail.setLatLngs(latlngs);
-      liveMarker.setLatLng(latlngs[latlngs.length-1]);
-      await updateNowUI(points[points.length-1].point, `Все пользователи (${points.length})`);
-      return;
-    }
-  }
-  const selectedLive = getSelectedLiveData();
-  if(selectedLive && selectedLive.lastPoint){
-    const pts = Object.values(selectedLive.recentPoints || {}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
-    liveTrail.setLatLngs(pts.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]));
-    await updateNowUI(selectedLive.lastPoint, selectedUid ? `live/${selectedUid}` : "live");
-    return;
-  }
-  const now = Date.now();
-  const active = Object.entries(allSessions).filter(([k,v])=>k!=="_init" && !!getSessionRoot(v).meta?.active && Number(getSessionRoot(v).meta?.expiresAt||0)>now).filter(([,v])=> !selectedUid || !getSessionRoot(v).meta?.ownerUid || getSessionRoot(v).meta.ownerUid===selectedUid);
-  if(active.length){
-    const [token, session] = active.sort((a,b)=>Number((getSessionRoot(b[1]).meta?.createdAt||0))-Number((getSessionRoot(a[1]).meta?.createdAt||0)))[0];
-    const root = getSessionRoot(session);
-    const pts = Object.values(root.public?.recentPoints || {}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
-    liveTrail.setLatLngs(pts.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]));
-    await updateNowUI(root.public?.lastPoint || null, `liveSessions/${token}`);
-    return;
-  }
-  const points = getVisibleHistoryPoints(), point = points.length ? points[points.length-1] : null;
-  liveTrail.setLatLngs([]);
-  await updateNowUI(point, selectedUid ? `history/${selectedUid}` : "history");
-}
-
 
 
 const gpsIntervalValues = [1000,3000,5000,10000,15000,30000,60000];
@@ -2522,9 +2757,32 @@ async function importDataFile(){
   }
 }
 async function logAction(kind, description){
-
   const entryRef = push(ref(db, "adminLogs/actions"));
-  await set(entryRef, { ts:Date.now(), kind, description, uid:auth.currentUser?.uid||null, email:auth.currentUser?.email||null });
+  await set(entryRef, {
+    ts: Date.now(),
+    kind,
+    description,
+    uid: auth.currentUser?.uid || null,
+    email: auth.currentUser?.email || null
+  });
+}
+
+async function logDeviceEvent(kind, description, extra = {}){
+  try{
+    const entryRef = push(ref(db, "adminLogs/actions"));
+    await set(entryRef, {
+      ts: Date.now(),
+      kind,
+      description,
+      uid: auth.currentUser?.uid || null,
+      email: auth.currentUser?.email || null,
+      selectedUid: selectedUid || null,
+      source: "device",
+      ...extra
+    });
+  }catch(e){
+    console.warn("logDeviceEvent error", e);
+  }
 }
 
 function buildShareUrl(token){ return `https://mygpstrack.github.io/mygps/live.html?session=${encodeURIComponent(token)}`; }
