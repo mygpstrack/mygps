@@ -621,7 +621,7 @@
         <h2>Журнал действий</h2>
         <div style="overflow:auto">
           <table>
-            <thead><tr><th>Время</th><th>Тип</th><th>Описание</th><th>Кто</th></tr></thead>
+            <thead><tr><th>Время</th><th>Тип</th><th>Описание</th><th>Кто</th><th>Геозона</th><th>Данные</th></tr></thead>
             <tbody id="journalTbody"></tbody>
           </table>
         </div>
@@ -820,7 +820,7 @@ const provider = new GoogleAuthProvider();
 const qs = (id) => document.getElementById(id);
 
 let historyByUid = {}, liveByUid = {}, allSessions = {}, selectedUid = "", allUsers = [];
-let currentFiltered = [], deletionsLog = [], actionLogs = [];
+let currentFiltered = [], deletionsLog = [], actionLogs = [], appEventLogs = [];
 let liveAutoCenter = true, createdShareUrl = "", speedChart = null, distanceChart = null, currentNowSourceLabel = "—";
 let usersMeta = {};
 let adminSettings = {
@@ -3658,12 +3658,75 @@ function renderErrors(){
     tbody.appendChild(tr);
   });
 }
+
+function getJournalActor(item){
+  if(item?.uid) return getDisplayName(item.uid) || item.uid || "—";
+  return item?.email || item?.actor || "—";
+}
+function getJournalZoneLabel(item){
+  return item?.geofenceName || item?.meta?.geofenceName || item?.geofenceId || item?.meta?.geofenceId || "—";
+}
+function getJournalDataHtml(item){
+  const parts = [];
+  const accuracy = item?.accuracy ?? item?.meta?.accuracy;
+  const speed = item?.speed ?? item?.meta?.speed;
+  const bearing = item?.bearing ?? item?.meta?.bearing;
+  const batteryLevel = item?.batteryLevel ?? item?.meta?.batteryLevel;
+  const trackingMode = item?.trackingMode ?? item?.meta?.trackingMode;
+  const source = item?.source ?? item?.meta?.source;
+  if(accuracy != null && accuracy !== "") parts.push(`accuracy: ${Number(accuracy).toFixed(1)} м`);
+  if(speed != null && speed !== "") parts.push(`speed: ${Number(speed).toFixed(1)} км/ч`);
+  if(bearing != null && bearing !== "") parts.push(`bearing: ${Math.round(Number(bearing))}°`);
+  if(batteryLevel != null && batteryLevel !== "") parts.push(`battery: ${Math.round(Number(batteryLevel))}%`);
+  if(trackingMode) parts.push(`режим: ${trackingMode}`);
+  if(source) parts.push(`source: ${source}`);
+  if(item?.latitude != null && item?.longitude != null) parts.push(`${Number(item.latitude).toFixed(5)}, ${Number(item.longitude).toFixed(5)}`);
+  return parts.length ? parts.join("<br>") : "—";
+}
+function getJournalDescription(item){
+  if(item?._type === "geofence_enter") return `Вход в геозону: ${item?.geofenceName || item?.description || "—"}`;
+  if(item?._type === "geofence_exit") return `Выход из геозоны: ${item?.geofenceName || item?.description || "—"}`;
+  return item?.description || "—";
+}
+function normalizeEventJournalSnapshot(data){
+  const out = [];
+  Object.entries(data || {}).forEach(([uid, events]) => {
+    Object.entries(events || {}).forEach(([eventId, item]) => {
+      if(!item || typeof item !== "object") return;
+      const rawType = String(item.type || item.kind || "event");
+      out.push({
+        ...item,
+        uid,
+        eventId,
+        ts: Number(item.timestamp || item.ts || 0),
+        _type: rawType,
+        actor: getDisplayName(uid) || uid || "—",
+        description: item.description || item.geofenceName || rawType
+      });
+    });
+  });
+  return out.sort((a,b)=>Number(b.ts||0)-Number(a.ts||0));
+}
 function renderJournal(){
-  const tbody=qs("journalTbody"); tbody.innerHTML="";
-  const combined=[...deletionsLog.map(item=>({...item,_type:item.kind||"deletion"})),...actionLogs.map(item=>({...item,_type:item.kind||"action"}))].sort((a,b)=>Number(b.ts||0)-Number(a.ts||0));
+  const tbody=qs("journalTbody");
+  if(!tbody) return;
+  tbody.innerHTML="";
+  const selectedOnly = qs("viewModeSelect")?.value !== "all";
+  const selectedUser = selectedUid || "";
+  const filteredAppEvents = (appEventLogs || []).filter(item => !selectedOnly || !selectedUser || item.uid === selectedUser);
+  const combined=[
+    ...deletionsLog.map(item=>({...item,_type:item.kind||"deletion"})),
+    ...actionLogs.map(item=>({...item,_type:item.kind||"action"})),
+    ...filteredAppEvents
+  ].sort((a,b)=>Number(b.ts||0)-Number(a.ts||0));
+  if(!combined.length){
+    tbody.innerHTML=`<tr><td colspan="6">Событий пока нет</td></tr>`;
+    return;
+  }
   combined.slice(0,500).forEach(item=>{
     const tr=document.createElement("tr");
-    tr.innerHTML=`<td>${fmtTime(item.ts)}</td><td>${item._type||"—"}</td><td>${item.description||"—"}</td><td>${item.email||item.uid||"—"}</td>`;
+    const typeTag = String(item._type || "—");
+    tr.innerHTML=`<td>${fmtTime(item.ts)}</td><td><span class="tag ${typeTag.startsWith("geofence_") ? "admin" : ""}">${typeTag}</span></td><td>${getJournalDescription(item)}</td><td>${getJournalActor(item)}</td><td>${typeTag.startsWith("geofence_") ? getJournalZoneLabel(item) : "—"}</td><td>${typeTag.startsWith("geofence_") ? getJournalDataHtml(item) : "—"}</td>`;
     tbody.appendChild(tr);
   });
 }
@@ -4468,6 +4531,7 @@ onAuthStateChanged(auth, async user => {
   onValue(ref(db, "liveSessions"), snap => { allSessions=snap.val()||{}; updateUsage(); renderSessions(); updateActiveSessionToast(); updateNowFromAvailableSources(); });
   onValue(ref(db, "adminLogs/deletions"), snap => { deletionsLog=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0)); renderJournal(); });
   onValue(ref(db, "adminLogs/actions"), snap => { actionLogs=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0)); renderJournal(); });
+  onValue(ref(db, "eventJournal"), snap => { appEventLogs = normalizeEventJournalSnapshot(snap.val()||{}); renderJournal(); });
 
   await loadAdminSettings();
   startGpsProfilesRealtimeSync();
