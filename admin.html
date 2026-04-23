@@ -305,10 +305,7 @@
           <div class="stat"><div class="label">Направление</div><div class="value" id="nowBearing">—</div></div>
           <div class="stat"><div class="label">Простой</div><div class="value" id="nowIdle">—</div></div>
           <div class="stat"><div class="label">Адрес</div><div class="value" id="nowAddress">—</div></div>
-          <div class="stat"><div class="label">Батарея</div><div class="value" id="nowBattery">—</div></div>
-          <div class="stat"><div class="label">Питание</div><div class="value" id="nowPower">—</div></div>
-          <div class="stat"><div class="label">Спутники</div><div class="value" id="nowSatellites">—</div></div>
-          <div class="stat"><div class="label">Качество GPS</div><div class="value" id="nowGpsQuality">📡 Нет сигнала</div></div>
+          
         </div>
         <div class="row">
           <button id="liveAutoCenterBtn">Автоцентр: вкл</button>
@@ -2044,73 +2041,6 @@ async function renderHistory() {
   qs("endAddress").textContent = await reverseGeocode(Number(last.latitude), Number(last.longitude));
 }
 
-function firstFiniteNumber(...values){
-  for(const value of values){
-    const num = Number(value);
-    if(Number.isFinite(num)) return num;
-  }
-  return null;
-}
-
-function getBatteryLevelFromPoint(point){
-  if(!point) return null;
-  const direct = firstFiniteNumber(
-    point.batteryLevel, point.battery, point.batteryPct, point.batteryPercent,
-    point.deviceBatteryLevel, point.deviceBattery, point.chargeLevel
-  );
-  if(direct != null) return Math.max(0, Math.min(100, Math.round(direct)));
-  const nested = point.device || point.meta || {};
-  const nestedValue = firstFiniteNumber(
-    nested.batteryLevel, nested.battery, nested.batteryPct, nested.batteryPercent, nested.chargeLevel
-  );
-  return nestedValue != null ? Math.max(0, Math.min(100, Math.round(nestedValue))) : null;
-}
-
-function getChargingStateFromPoint(point){
-  if(!point) return null;
-  const nested = point.device || point.meta || {};
-  const raw = [
-    point.isCharging, point.charging, point.powerConnected, point.isPlugged,
-    nested.isCharging, nested.charging, nested.powerConnected, nested.isPlugged
-  ].find(v => typeof v === 'boolean');
-  return typeof raw === 'boolean' ? raw : null;
-}
-
-function getSatellitesFromPoint(point){
-  if(!point) return { visible:null, used:null };
-  const nested = point.device || point.meta || {};
-  return {
-    visible: firstFiniteNumber(point.satellitesVisible, point.satsVisible, point.visibleSatellites, nested.satellitesVisible, nested.satsVisible, nested.visibleSatellites),
-    used: firstFiniteNumber(point.satellitesUsed, point.satsUsed, point.usedSatellites, nested.satellitesUsed, nested.satsUsed, nested.usedSatellites)
-  };
-}
-
-function getGpsQualityMeta(point, sourceLabel){
-  const st = statusByPoint(point);
-  if(st.kind === 'offline'){
-    return { text:'📡 Нет сигнала', color:'#94a3b8' };
-  }
-  if(!point){
-    return { text:'📡 Нет сигнала', color:'#94a3b8' };
-  }
-  const accuracy = Number(point.accuracy || 9999);
-  const sats = getSatellitesFromPoint(point);
-  const source = String(point.signalType || point.provider || point.source || sourceLabel || '').toLowerCase();
-  const used = Number.isFinite(sats.used) ? Number(sats.used) : null;
-  const visible = Number.isFinite(sats.visible) ? Number(sats.visible) : null;
-
-  if(source.includes('network') || source.includes('mixed')){
-    return { text:'🟡 Слабый', color:'#f59e0b' };
-  }
-  if((used != null && used < 4) || (visible != null && visible < 4) || accuracy > 50){
-    return { text:'🔴 Плохой', color:'#ef4444' };
-  }
-  if((used != null && used < 7) || accuracy > 20){
-    return { text:'🟡 Нормальный', color:'#f59e0b' };
-  }
-  return { text:'🟢 Нормальный', color:'#22c55e' };
-}
-
 async function updateNowUI(point, sourceLabel){
   currentNowSourceLabel = sourceLabel || "—";
   if(point && point.latitude != null && point.longitude != null){
@@ -2135,25 +2065,6 @@ async function updateNowUI(point, sourceLabel){
   qs("nowUpdated").textContent = fmtTime(point?.timestamp);
   qs("nowBearing").textContent = point?.bearing != null ? `${Number(point.bearing).toFixed(0)}°` : "—";
   qs("nowIdle").textContent = point?.timestamp ? formatIdle(Date.now()-Number(point.timestamp)) : "—";
-
-  const st = statusByPoint(point);
-  const isOffline = st.kind === "offline";
-  const batteryLevel = !isOffline ? getBatteryLevelFromPoint(point) : null;
-  const isCharging = !isOffline ? getChargingStateFromPoint(point) : null;
-  const sats = !isOffline ? getSatellitesFromPoint(point) : { visible:null, used:null };
-  const gpsQuality = getGpsQualityMeta(point, sourceLabel);
-
-  qs("nowBattery").textContent = batteryLevel != null ? `${batteryLevel}%` : "—";
-  qs("nowPower").textContent = isCharging == null ? "—" : (isCharging ? "⚡ Зарядка" : "🔋 Без зарядки");
-  qs("nowSatellites").textContent = (sats.visible != null || sats.used != null)
-    ? `${sats.visible != null ? sats.visible : '—'} / ${sats.used != null ? sats.used : '—'}`
-    : "—";
-  const gpsEl = qs("nowGpsQuality");
-  if(gpsEl){
-    gpsEl.textContent = gpsQuality.text;
-    gpsEl.style.color = gpsQuality.color;
-    gpsEl.style.fontWeight = "800";
-  }
 }
 
 function getSessionRoot(session){
