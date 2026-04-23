@@ -755,7 +755,14 @@ let adminSettings = {
 };
 let errorLogs = [];
 let autoRefreshTimer = null;
-const deviceAlertState = {
+const deviceJournalState = {
+  lastStatusKind: "",
+  lastOffline: null,
+  lastPoorGps: null,
+  lastLowBattery: null,
+  lastGeofenceKey: ""
+};
+  const deviceAlertState = {
   offline: false,
   lowBattery: false,
   poorGps: false
@@ -1117,6 +1124,69 @@ function statusByPoint(point){
   const offlineMs = Number(adminSettings?.offlineMinutes ?? 5) * 60 * 1000;
   const junkAccuracy = Number(adminSettings?.junkAccuracyMeters ?? 100);
 
+  async function captureDeviceJournalEvents(point){
+  const st = statusByPoint(point);
+  const gps = getGpsQualityMeta(point);
+
+  const offlineNow = st.kind === "offline";
+  const poorGpsNow = gps.level === "poor";
+  const battery = Number(point?.batteryLevel ?? point?.battery ?? NaN);
+  const lowBatteryNow = Number.isFinite(battery) && battery <= 20;
+
+  // 1. Переходы движения / остановки / offline
+  if(deviceJournalState.lastStatusKind !== st.kind){
+    if(st.kind === "moving"){
+      await logDeviceEvent("move_start", "Началось движение");
+    }else if(st.kind === "stop_short" || st.kind === "stop_long"){
+      await logDeviceEvent("stop", st.kind === "stop_long" ? "Долгая стоянка" : "Остановка");
+    }else if(st.kind === "offline"){
+      await logDeviceEvent("offline", "Нет сигнала / устройство оффлайн");
+    }
+    deviceJournalState.lastStatusKind = st.kind;
+  }
+
+  // 2. Потеря / восстановление сигнала
+  if(deviceJournalState.lastOffline !== offlineNow){
+    if(offlineNow){
+      await logDeviceEvent("signal_lost", "Потеря сигнала GPS / нет свежей точки");
+    }else if(deviceJournalState.lastOffline === true && !offlineNow){
+      await logDeviceEvent("signal_restored", "Сигнал восстановлен");
+    }
+    deviceJournalState.lastOffline = offlineNow;
+  }
+
+  // 3. Плохой GPS
+  if(deviceJournalState.lastPoorGps !== poorGpsNow){
+    if(poorGpsNow){
+      await logDeviceEvent("gps_poor", "Плохое качество GPS");
+    }else if(deviceJournalState.lastPoorGps === true && !poorGpsNow){
+      await logDeviceEvent("gps_ok", "Качество GPS восстановилось");
+    }
+    deviceJournalState.lastPoorGps = poorGpsNow;
+  }
+
+  // 4. Низкий заряд
+  if(deviceJournalState.lastLowBattery !== lowBatteryNow){
+    if(lowBatteryNow){
+      await logDeviceEvent("battery_low", `Низкий заряд: ${battery}%`);
+    }else if(deviceJournalState.lastLowBattery === true && !lowBatteryNow){
+      await logDeviceEvent("battery_ok", "Заряд снова в норме");
+    }
+    deviceJournalState.lastLowBattery = lowBatteryNow;
+  }
+
+  // 5. Геозоны (заготовка на будущее, если приложение начнёт присылать geofenceEvent/geofenceName)
+  const geofenceKey = `${point?.geofenceEvent || ""}|${point?.geofenceName || ""}`;
+  if(geofenceKey && geofenceKey !== "|" && geofenceKey !== deviceJournalState.lastGeofenceKey){
+    const eventText = point?.geofenceEvent === "enter" ? "Вход в геозону" :
+                      point?.geofenceEvent === "exit" ? "Выход из геозоны" :
+                      "Событие геозоны";
+    const zoneName = point?.geofenceName ? `: ${point.geofenceName}` : "";
+    await logDeviceEvent("geofence", `${eventText}${zoneName}`);
+    deviceJournalState.lastGeofenceKey = geofenceKey;
+  }
+}
+  
   if(!point || !Number.isFinite(Number(point.timestamp || 0))){
     return { text:"📡 Нет сигнала", cls:"offline", color:"#9ca3af", kind:"offline" };
   }
@@ -1125,6 +1195,69 @@ function getNowOfflineMs(){
 }
 
 function getGpsQualityMeta(point){
+  async function captureDeviceJournalEvents(point){
+  const st = statusByPoint(point);
+  const gps = getGpsQualityMeta(point);
+
+  const offlineNow = st.kind === "offline";
+  const poorGpsNow = gps.level === "poor";
+  const battery = Number(point?.batteryLevel ?? point?.battery ?? NaN);
+  const lowBatteryNow = Number.isFinite(battery) && battery <= 20;
+
+  // 1. Переходы движения / остановки / offline
+  if(deviceJournalState.lastStatusKind !== st.kind){
+    if(st.kind === "moving"){
+      await logDeviceEvent("move_start", "Началось движение");
+    }else if(st.kind === "stop_short" || st.kind === "stop_long"){
+      await logDeviceEvent("stop", st.kind === "stop_long" ? "Долгая стоянка" : "Остановка");
+    }else if(st.kind === "offline"){
+      await logDeviceEvent("offline", "Нет сигнала / устройство оффлайн");
+    }
+    deviceJournalState.lastStatusKind = st.kind;
+  }
+
+  // 2. Потеря / восстановление сигнала
+  if(deviceJournalState.lastOffline !== offlineNow){
+    if(offlineNow){
+      await logDeviceEvent("signal_lost", "Потеря сигнала GPS / нет свежей точки");
+    }else if(deviceJournalState.lastOffline === true && !offlineNow){
+      await logDeviceEvent("signal_restored", "Сигнал восстановлен");
+    }
+    deviceJournalState.lastOffline = offlineNow;
+  }
+
+  // 3. Плохой GPS
+  if(deviceJournalState.lastPoorGps !== poorGpsNow){
+    if(poorGpsNow){
+      await logDeviceEvent("gps_poor", "Плохое качество GPS");
+    }else if(deviceJournalState.lastPoorGps === true && !poorGpsNow){
+      await logDeviceEvent("gps_ok", "Качество GPS восстановилось");
+    }
+    deviceJournalState.lastPoorGps = poorGpsNow;
+  }
+
+  // 4. Низкий заряд
+  if(deviceJournalState.lastLowBattery !== lowBatteryNow){
+    if(lowBatteryNow){
+      await logDeviceEvent("battery_low", `Низкий заряд: ${battery}%`);
+    }else if(deviceJournalState.lastLowBattery === true && !lowBatteryNow){
+      await logDeviceEvent("battery_ok", "Заряд снова в норме");
+    }
+    deviceJournalState.lastLowBattery = lowBatteryNow;
+  }
+
+  // 5. Геозоны (заготовка на будущее, если приложение начнёт присылать geofenceEvent/geofenceName)
+  const geofenceKey = `${point?.geofenceEvent || ""}|${point?.geofenceName || ""}`;
+  if(geofenceKey && geofenceKey !== "|" && geofenceKey !== deviceJournalState.lastGeofenceKey){
+    const eventText = point?.geofenceEvent === "enter" ? "Вход в геозону" :
+                      point?.geofenceEvent === "exit" ? "Выход из геозоны" :
+                      "Событие геозоны";
+    const zoneName = point?.geofenceName ? `: ${point.geofenceName}` : "";
+    await logDeviceEvent("geofence", `${eventText}${zoneName}`);
+    deviceJournalState.lastGeofenceKey = geofenceKey;
+  }
+}
+  
   if(!point || !Number.isFinite(Number(point.timestamp || 0))){
     return { text: "📡 Нет сигнала", level: "offline" };
   }
@@ -2248,7 +2381,10 @@ async function updateNowFromAvailableSources(){
       liveTrail.setLatLngs(latlngs);
       liveMarker.setLatLng(latlngs[latlngs.length-1]);
       await updateNowUI(points[points.length-1].point, `Все пользователи (${points.length})`);
+      await captureDeviceJournalEvents(points[points.length-1].point);
+     await captureDeviceJournalEvents(ТОЧКА);
       return;
+      
     }
   }
   const selectedLive = getSelectedLiveData();
@@ -2256,6 +2392,8 @@ async function updateNowFromAvailableSources(){
     const pts = Object.values(selectedLive.recentPoints || {}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
     liveTrail.setLatLngs(pts.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]));
     await updateNowUI(selectedLive.lastPoint, selectedUid ? `live/${selectedUid}` : "live");
+    await captureDeviceJournalEvents(selectedLive.lastPoint);
+    await captureDeviceJournalEvents(ТОЧКА);
     return;
   }
   const now = Date.now();
@@ -2266,11 +2404,17 @@ async function updateNowFromAvailableSources(){
     const pts = Object.values(root.public?.recentPoints || {}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
     liveTrail.setLatLngs(pts.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]));
     await updateNowUI(root.public?.lastPoint || null, `liveSessions/${token}`);
+    const sessionPoint = root.public?.lastPoint || null;
+await updateNowUI(sessionPoint, `liveSessions/${token}`);
+await captureDeviceJournalEvents(sessionPoint);
+    await captureDeviceJournalEvents(ТОЧКА);
     return;
   }
   const points = getVisibleHistoryPoints(), point = points.length ? points[points.length-1] : null;
   liveTrail.setLatLngs([]);
   await updateNowUI(point, selectedUid ? `history/${selectedUid}` : "history");
+  await captureDeviceJournalEvents(point);
+  await captureDeviceJournalEvents(ТОЧКА);
 }
 
 
@@ -2612,6 +2756,24 @@ async function importDataFile(){
 }
 async function logAction(kind, description){
 
+  async function logDeviceEvent(kind, description, extra = {}){
+  try{
+    const entryRef = push(ref(db, "adminLogs/actions"));
+    await set(entryRef, {
+      ts: Date.now(),
+      kind,
+      description,
+      uid: auth.currentUser?.uid || null,
+      email: auth.currentUser?.email || null,
+      selectedUid: selectedUid || null,
+      source: "device",
+      ...extra
+    });
+  }catch(e){
+    console.warn("logDeviceEvent error", e);
+  }
+}
+  
   const entryRef = push(ref(db, "adminLogs/actions"));
   await set(entryRef, { ts:Date.now(), kind, description, uid:auth.currentUser?.uid||null, email:auth.currentUser?.email||null });
 }
