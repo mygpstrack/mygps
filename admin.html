@@ -1225,10 +1225,6 @@ function getNowOfflineMs(){
   return Number(adminSettings?.offlineMinutes ?? 5) * 60 * 1000;
 }
 
-function getNowOfflineMs(){
-  return Number(adminSettings?.offlineMinutes ?? 5) * 60 * 1000;
-}
-
 function getGpsQualityMeta(point){
   if(!point || !Number.isFinite(Number(point.timestamp || 0))){
     return { text: "📡 Нет сигнала", level: "offline" };
