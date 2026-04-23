@@ -1347,26 +1347,26 @@ function updateNowExtraFields(point){
     return { offline: true, lowBattery: false, poorGps: false };
   }
 
-  const battery = point?.batteryLevel ?? point?.battery ?? null;
-  const isCharging = point?.isCharging ?? point?.charging ?? null;
-  const visible = point?.satellitesVisible ?? point?.satellites_visible ?? null;
-  const used = point?.satellitesUsed ?? point?.satellites_used ?? null;
+  const battery = point?.batteryLevel ?? point?.battery ?? point?.batteryPercent ?? point?.battery_percent ?? null;
+  const isCharging = point?.isCharging ?? point?.charging ?? point?.plugged ?? null;
+  const visible = point?.satellitesVisible ?? point?.satellites_visible ?? point?.satVisible ?? null;
+  const used = point?.satellitesUsed ?? point?.satellites_used ?? point?.satUsed ?? null;
 
   if(batteryEl){
     batteryEl.textContent =
-      battery == null || battery === "" ? "—" : `${Number(battery)}%`;
+      battery == null || battery === "" || !Number.isFinite(Number(battery)) ? "—" : `${Math.round(Number(battery))}%`;
   }
 
   if(chargingEl){
-    chargingEl.textContent =
-      isCharging === true ? "⚡ Зарядка" :
-      isCharging === false ? "🔋 От батареи" : "—";
+    let chargingText = "—";
+    if(isCharging === true || String(isCharging).toLowerCase() === 'charging') chargingText = "⚡ Зарядка";
+    else if(isCharging === false || String(isCharging).toLowerCase() === 'battery' || String(isCharging).toLowerCase() === 'discharging') chargingText = "🔋 От батареи";
+    chargingEl.textContent = chargingText;
   }
 
   if(satellitesEl){
     satellitesEl.textContent =
-      (visible == null && used == null) ? "—" :
-      `${used ?? "—"} / ${visible ?? "—"}`;
+      (visible == null && used == null) ? "—" : `${used ?? "—"} / ${visible ?? "—"}`;
   }
 
   const gpsMeta = getGpsQualityMeta(point);
@@ -2377,11 +2377,11 @@ async function updateNowUI(point, sourceLabel){
     if(liveAutoCenter) liveMap.setView([lat,lon],16);
     qs("nowAddress").textContent = await reverseGeocode(lat,lon);
     window.currentPointForHeader = {lat, lon};
-    
     updateHeaderWeather();
     updateRigaWeather();
   } else {
     qs("nowAddress").textContent = "—";
+    window.currentPointForHeader = null;
     setWeatherChip("headerWeatherDynamic", "По точке", weatherIcon(3), "Ожидание координат…");
   }
   const st = statusByPoint(point);
@@ -2393,8 +2393,9 @@ async function updateNowUI(point, sourceLabel){
   qs("nowUpdated").textContent = fmtTime(point?.timestamp);
   qs("nowBearing").textContent = point?.bearing != null ? `${Number(point.bearing).toFixed(0)}°` : "—";
   qs("nowIdle").textContent = point?.timestamp ? formatIdle(Date.now()-Number(point.timestamp)) : "—";
-  
+  updateNowExtraFields(point);
 }
+
 
 function getSessionRoot(session){
   if(!session) return {};
