@@ -1220,69 +1220,7 @@ function statusByPoint(point){
   }
   return { text:"⏸ Остановка", cls:"idle", color:"#eab308", kind:"stop_short" };
 }
-
-  async function captureDeviceJournalEvents(point){
-
-  const offlineNow = st.kind === "offline";
-  const poorGpsNow = gps.level === "poor";
-  const battery = Number(point?.batteryLevel ?? point?.battery ?? NaN);
-  const lowBatteryNow = Number.isFinite(battery) && battery <= 20;
-
-  // 1. Переходы движения / остановки / offline
-  if(deviceJournalState.lastStatusKind !== st.kind){
-    if(st.kind === "moving"){
-      await logDeviceEvent("move_start", "Началось движение");
-    }else if(st.kind === "stop_short" || st.kind === "stop_long"){
-      await logDeviceEvent("stop", st.kind === "stop_long" ? "Долгая стоянка" : "Остановка");
-    }else if(st.kind === "offline"){
-      await logDeviceEvent("offline", "Нет сигнала / устройство оффлайн");
-    }
-    deviceJournalState.lastStatusKind = st.kind;
-  }
-
-  // 2. Потеря / восстановление сигнала
-  if(deviceJournalState.lastOffline !== offlineNow){
-    if(offlineNow){
-      await logDeviceEvent("signal_lost", "Потеря сигнала GPS / нет свежей точки");
-    }else if(deviceJournalState.lastOffline === true && !offlineNow){
-      await logDeviceEvent("signal_restored", "Сигнал восстановлен");
-    }
-    deviceJournalState.lastOffline = offlineNow;
-  }
-
-  // 3. Плохой GPS
-  if(deviceJournalState.lastPoorGps !== poorGpsNow){
-    if(poorGpsNow){
-      await logDeviceEvent("gps_poor", "Плохое качество GPS");
-    }else if(deviceJournalState.lastPoorGps === true && !poorGpsNow){
-      await logDeviceEvent("gps_ok", "Качество GPS восстановилось");
-    }
-    deviceJournalState.lastPoorGps = poorGpsNow;
-  }
-
-  // 4. Низкий заряд
-  if(deviceJournalState.lastLowBattery !== lowBatteryNow){
-    if(lowBatteryNow){
-      await logDeviceEvent("battery_low", `Низкий заряд: ${battery}%`);
-    }else if(deviceJournalState.lastLowBattery === true && !lowBatteryNow){
-      await logDeviceEvent("battery_ok", "Заряд снова в норме");
-    }
-    deviceJournalState.lastLowBattery = lowBatteryNow;
-  }
-
-  // 5. Геозоны (заготовка на будущее, если приложение начнёт присылать geofenceEvent/geofenceName)
-  const geofenceKey = `${point?.geofenceEvent || ""}|${point?.geofenceName || ""}`;
-  if(geofenceKey && geofenceKey !== "|" && geofenceKey !== deviceJournalState.lastGeofenceKey){
-    const eventText = point?.geofenceEvent === "enter" ? "Вход в геозону" :
-                      point?.geofenceEvent === "exit" ? "Выход из геозоны" :
-                      "Событие геозоны";
-    const zoneName = point?.geofenceName ? `: ${point.geofenceName}` : "";
-    await logDeviceEvent("geofence", `${eventText}${zoneName}`);
-    deviceJournalState.lastGeofenceKey = geofenceKey;
-  }
-}
-  
-  if(!point || !Number.isFinite(Number(point.timestamp || 0))){
+    if(!point || !Number.isFinite(Number(point.timestamp || 0))){
     return { text:"📡 Нет сигнала", cls:"offline", color:"#9ca3af", kind:"offline" };
   }
 function getNowOfflineMs(){
@@ -1335,7 +1273,66 @@ function getGpsQualityMeta(point){
   if(acc <= 35) return { text: "🟡 Нормальный", level: "ok" };
   return { text: "🔴 Плохой", level: "poor" };
 }
+async function captureDeviceJournalEvents(point){
+  const st = statusByPoint(point);
+  const gps = getGpsQualityMeta(point);
 
+  const offlineNow = st.kind === "offline";
+  const poorGpsNow = gps.level === "poor";
+  const battery = Number(point?.batteryLevel ?? point?.battery ?? NaN);
+  const lowBatteryNow = Number.isFinite(battery) && battery <= 20;
+
+  if(deviceJournalState.lastStatusKind !== st.kind){
+    if(st.kind === "moving"){
+      await logDeviceEvent("move_start", "Началось движение");
+    }else if(st.kind === "stop_short" || st.kind === "stop_long"){
+      await logDeviceEvent("stop", st.kind === "stop_long" ? "Долгая стоянка" : "Остановка");
+    }else if(st.kind === "offline"){
+      await logDeviceEvent("offline", "Нет сигнала / устройство оффлайн");
+    }
+    deviceJournalState.lastStatusKind = st.kind;
+  }
+
+  if(deviceJournalState.lastOffline !== offlineNow){
+    if(offlineNow){
+      await logDeviceEvent("signal_lost", "Потеря сигнала GPS / нет свежей точки");
+    }else if(deviceJournalState.lastOffline === true && !offlineNow){
+      await logDeviceEvent("signal_restored", "Сигнал восстановлен");
+    }
+    deviceJournalState.lastOffline = offlineNow;
+  }
+
+  if(deviceJournalState.lastPoorGps !== poorGpsNow){
+    if(poorGpsNow){
+      await logDeviceEvent("gps_poor", "Плохое качество GPS");
+    }else if(deviceJournalState.lastPoorGps === true && !poorGpsNow){
+      await logDeviceEvent("gps_ok", "Качество GPS восстановилось");
+    }
+    deviceJournalState.lastPoorGps = poorGpsNow;
+  }
+
+  if(deviceJournalState.lastLowBattery !== lowBatteryNow){
+    if(lowBatteryNow){
+      await logDeviceEvent("battery_low", `Низкий заряд: ${battery}%`);
+    }else if(deviceJournalState.lastLowBattery === true && !lowBatteryNow){
+      await logDeviceEvent("battery_ok", "Заряд снова в норме");
+    }
+    deviceJournalState.lastLowBattery = lowBatteryNow;
+  }
+
+  const geofenceKey = `${point?.geofenceEvent || ""}|${point?.geofenceName || ""}`;
+  if(geofenceKey && geofenceKey !== "|" && geofenceKey !== deviceJournalState.lastGeofenceKey){
+    const eventText = point?.geofenceEvent === "enter"
+      ? "Вход в геозону"
+      : point?.geofenceEvent === "exit"
+      ? "Выход из геозоны"
+      : "Событие геозоны";
+    const zoneName = point?.geofenceName ? `: ${point.geofenceName}` : "";
+    await logDeviceEvent("geofence", `${eventText}${zoneName}`);
+    deviceJournalState.lastGeofenceKey = geofenceKey;
+  }
+}
+  
 function updateNowExtraFields(point){
   const offlineMs = getNowOfflineMs();
   const ts = Number(point?.timestamp || 0);
