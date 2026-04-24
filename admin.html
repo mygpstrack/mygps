@@ -184,8 +184,8 @@
   
     /* GPS/admin settings layout fix */
     .settings-actions-card{overflow:hidden}
-    .settings-tools-layout{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(360px,.65fr);gap:16px;align-items:start;margin-top:12px}
-    .settings-side-column{display:grid;gap:16px;align-items:start}
+    .settings-tools-layout{display:grid;grid-template-columns:1fr;gap:16px;align-items:start;margin-top:12px}
+    .settings-side-column{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start}
     .gpsCardClean{margin:0!important;background:linear-gradient(180deg,rgba(17,24,39,.98),rgba(15,23,42,.96));border-radius:24px;padding:18px;border-color:rgba(148,163,184,.16)}
     .gpsCardClean h3,.backupCardClean h3,.importCardClean h3{margin-bottom:10px;font-size:20px}
     .gpsHelpText{color:var(--muted);font-size:13px;line-height:1.5;margin:0 0 14px}
@@ -205,12 +205,12 @@
     .gpsActionsClean{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px!important}
     .gpsActionsClean button{border-radius:14px;padding:11px 14px;font-weight:800}
     .backupCardClean,.importCardClean{margin:0!important;border-radius:24px;padding:18px;background:rgba(17,24,39,.88)}
-    .backupCardClean .toolbar,.importCardClean .toolbar{display:flex;flex-direction:column;align-items:stretch;gap:10px;margin-top:10px}
-    .backupCardClean button,.importCardClean button{width:100%;border-radius:14px;justify-content:center}
+    .backupCardClean .toolbar,.importCardClean .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px}
+    .backupCardClean button,.importCardClean button{border-radius:14px;justify-content:center}
     .backupCardClean .notice{font-size:12px;margin-top:12px}
     .importCardClean input[type=file]{width:100%;max-width:100%;background:#0b1220;border-radius:14px}
-    @media (max-width:1180px){.settings-tools-layout{grid-template-columns:1fr}.settings-side-column{grid-template-columns:1fr 1fr}.gpsStatusGrid{grid-template-columns:repeat(4,minmax(0,1fr))}}
-    @media (max-width:900px){.gpsPresetInfoGrid,.gpsStatusGrid,.settings-side-column{grid-template-columns:1fr 1fr}}
+    @media (max-width:1180px){.settings-tools-layout{grid-template-columns:1fr}.settings-side-column{grid-template-columns:repeat(2,minmax(0,1fr))}.gpsStatusGrid{grid-template-columns:repeat(4,minmax(0,1fr))}}
+    @media (max-width:900px){.gpsPresetInfoGrid,.gpsStatusGrid{grid-template-columns:1fr 1fr}.settings-side-column{grid-template-columns:1fr}}
     @media (max-width:640px){.gpsPresetInfoGrid,.gpsStatusGrid,.settings-side-column{grid-template-columns:1fr}.gpsPresetButtons button{flex:1;min-width:0}}
 
   </style>
@@ -990,6 +990,7 @@ function updateGpsProfilesUiFromData(point){
   if(currentEl){
     currentEl.textContent = `Сейчас: обычный ${normalApplied} • live ${liveApplied}`;
   }
+  syncGpsPresetButtons?.();
 }
   
 const errText = e => e?.message || e?.code || String(e);
@@ -3065,17 +3066,59 @@ function setGpsProfileControlsFromState(){
   setGpsPresetButtonsActive(getGpsPresetKind(p)); refreshGpsProfileCurrentText(); updateGpsProfilesUiFromData(getCurrentPointForGpsProfiles());
 }
 function readGpsProfilesFromControls(){ return normalizeGpsProfilesShape({ normal: { intervalMs: Number(qs('gpsNormalIntervalSelect')?.value || 2000), minDistanceM: Number(qs('gpsNormalDistanceSelect')?.value || 5) }, live: { intervalMs: Number(qs('gpsLiveIntervalSelect')?.value || 2000), minDistanceM: Number(qs('gpsLiveDistanceSelect')?.value || 3) } }); }
-function refreshGpsProfileCurrentText(){ const box = qs('gpsProfileCurrentText'); if(!box) return; const profiles = readGpsProfilesFromControls(); box.textContent = `Сейчас: обычный ${formatGpsProfileLine(profiles.normal)} • live ${formatGpsProfileLine(profiles.live)}`; updateGpsProfilesUiFromData(getCurrentPointForGpsProfiles()); }
+function detectGpsPresetKeyFromProfiles(profiles){
+  const p = normalizeGpsProfilesShape(profiles);
+  for(const [key, preset] of Object.entries(GPS_PRESETS)){
+    const pp = normalizeGpsProfilesShape(preset.profiles);
+    if(p.normal.intervalMs === pp.normal.intervalMs &&
+       p.normal.minDistanceM === pp.normal.minDistanceM &&
+       p.live.intervalMs === pp.live.intervalMs &&
+       p.live.minDistanceM === pp.live.minDistanceM){
+      return key;
+    }
+  }
+  return "";
+}
+function syncGpsPresetButtons(){
+  const activeKey = detectGpsPresetKeyFromProfiles(readGpsProfilesFromControls());
+  [["gpsPresetFastBtn","fast"],["gpsPresetBalancedBtn","balanced"],["gpsPresetEcoBtn","eco"]].forEach(([id,key])=>{
+    const btn = qs(id);
+    if(!btn) return;
+    const active = key === activeKey;
+    btn.classList.toggle("active", active);
+    btn.classList.toggle("secondary", !active);
+  });
+}
+function showGpsProfileSelectionNow(sourceLabel = "Админка"){
+  const profiles = readGpsProfilesFromControls();
+  const currentEl = qs("gpsProfileCurrentText");
+  if(currentEl) currentEl.textContent = `Сейчас: обычный ${formatGpsProfileLine(profiles.normal)} • live ${formatGpsProfileLine(profiles.live)}`;
+  if(qs("gpsAppliedNormalText")) qs("gpsAppliedNormalText").textContent = formatGpsProfileLine(profiles.normal);
+  if(qs("gpsAppliedLiveText")) qs("gpsAppliedLiveText").textContent = formatGpsProfileLine(profiles.live);
+  if(qs("gpsProfileSourceText")) qs("gpsProfileSourceText").textContent = sourceLabel;
+  const modeEl = qs("gpsProfileModeText");
+  if(modeEl && (modeEl.textContent === "—" || !modeEl.textContent.trim())) modeEl.textContent = detectCurrentGpsMode(getCurrentPointForGpsProfiles());
+  syncGpsPresetButtons();
+}
+function refreshGpsProfileCurrentText(){
+  const box = qs('gpsProfileCurrentText');
+  if(!box) return;
+  const profiles = readGpsProfilesFromControls();
+  box.textContent = `Сейчас: обычный ${formatGpsProfileLine(profiles.normal)} • live ${formatGpsProfileLine(profiles.live)}`;
+  showGpsProfileSelectionNow(qs("gpsProfileSourceText")?.textContent || "Админка");
+}
 async function applyGpsPreset(kind){
   adminSettings.gpsProfiles = gpsPresetProfile(kind);
   setGpsProfileControlsFromState();
+  showGpsProfileSelectionNow("Админка");
   await saveGpsSettings({silent:false, label: GPS_PRESETS[kind]?.label || "Профиль"});
+  showGpsProfileSelectionNow("Админка");
 }
 function bindGpsSettingsControls(){
   if(qs('gpsPresetFastBtn')) qs('gpsPresetFastBtn').onclick = ()=>safeAction("GPS: Точно", ()=>applyGpsPreset('fast'), "Профиль GPS: Точно");
   if(qs('gpsPresetBalancedBtn')) qs('gpsPresetBalancedBtn').onclick = ()=>safeAction("GPS: Баланс", ()=>applyGpsPreset('balanced'), "Профиль GPS: Баланс");
   if(qs('gpsPresetEcoBtn')) qs('gpsPresetEcoBtn').onclick = ()=>safeAction("GPS: Экономно", ()=>applyGpsPreset('eco'), "Профиль GPS: Экономно");
-  if(qs('gpsResetDefaultsBtn')) qs('gpsResetDefaultsBtn').onclick = async()=>{ adminSettings.gpsProfiles = gpsPresetProfile(GPS_DEFAULT_PRESET); setGpsProfileControlsFromState(); await safeAction("Сброс настроек GPS", ()=>saveGpsSettings({silent:true}), "GPS сброшен на баланс"); };
+  if(qs('gpsResetDefaultsBtn')) qs('gpsResetDefaultsBtn').onclick = async()=>{ adminSettings.gpsProfiles = gpsPresetProfile(GPS_DEFAULT_PRESET); setGpsProfileControlsFromState(); showGpsProfileSelectionNow("Админка"); await safeAction("Сброс настроек GPS", ()=>saveGpsSettings({silent:true}), "GPS сброшен на баланс"); showGpsProfileSelectionNow("Админка"); };
 }
 function normalizeGpsProfilesShape(value){
   const src = value && typeof value === "object" ? value : {}; const normal = src.normal && typeof src.normal === "object" ? src.normal : {}; const live = src.live && typeof src.live === "object" ? src.live : {};
@@ -3211,7 +3254,7 @@ async function saveGpsSettings(options = {}){
     gpsProfileUpdatedAt: Date.now(),
     gpsProfileSource: "admin"
   });
-  refreshGpsProfileCurrentText();
+  showGpsProfileSelectionNow("Админка");
   if(!options.silent){
     showToast(options.label ? `Настройки GPS сохранены: ${options.label}` : "Настройки GPS сохранены", "success");
   }
