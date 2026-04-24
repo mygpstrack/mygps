@@ -296,6 +296,29 @@
       cursor:pointer;
     }
 
+
+    /* FINAL override for GPS frequency buttons */
+    #gpsPresetFastBtn.gps-active.active,
+    #gpsPresetBalancedBtn.gps-active.active,
+    #gpsPresetEcoBtn.gps-active.active{
+      background:#16a34a!important;
+      background-color:#16a34a!important;
+      color:#fff!important;
+      border:1px solid rgba(34,197,94,.85)!important;
+      box-shadow:0 10px 24px rgba(22,163,74,.34)!important;
+      transform:translateY(-1px)!important;
+    }
+    #gpsPresetFastBtn.gps-inactive.secondary,
+    #gpsPresetBalancedBtn.gps-inactive.secondary,
+    #gpsPresetEcoBtn.gps-inactive.secondary{
+      background:#374151!important;
+      background-color:#374151!important;
+      color:#fff!important;
+      border:1px solid rgba(148,163,184,.22)!important;
+      box-shadow:none!important;
+      transform:none!important;
+    }
+
 </style>
 </head>
 <body>
@@ -3342,7 +3365,7 @@ function initGpsSettingsControls(){
   fillSelectOptions('gpsNormalDistanceSelect', [1,5,30], ["1 м","5 м","30 м"]);
   fillSelectOptions('gpsLiveDistanceSelect', [1,3,15], ["1 м","3 м","15 м"]);
 }
-function setGpsPresetButtonsActive(kind){ const map = { fast: 'gpsPresetFastBtn', balanced: 'gpsPresetBalancedBtn', eco: 'gpsPresetEcoBtn' }; Object.entries(map).forEach(([preset, id])=>{ const btn = qs(id); if(btn) btn.className = preset === kind ? "success active" : "secondary"; }); }
+function setGpsPresetButtonsActive(kind){ setGpsPresetActiveButton(kind); }
 function setGpsProfileControlsFromState(){
   ensureGpsProfiles(); initGpsSettingsControls(); const p = adminSettings.gpsProfiles;
   if(qs('gpsNormalIntervalSelect')) qs('gpsNormalIntervalSelect').value = String(p.normal.intervalMs);
@@ -3376,12 +3399,17 @@ function setGpsPresetActiveButton(kind){
     const btn = qs(id);
     if(!btn) return;
     const active = id === activeId;
-    btn.classList.remove("active","secondary","success","gps-active","gps-inactive");
-    btn.classList.add(active ? "gps-active" : "gps-inactive");
+
+    btn.className = active ? "gps-active active" : "gps-inactive secondary";
     btn.setAttribute("aria-pressed", active ? "true" : "false");
-    btn.style.background = active ? "#16a34a" : "#374151";
-    btn.style.color = "#fff";
-    btn.style.boxShadow = active ? "0 10px 24px rgba(22,163,74,.32)" : "none";
+
+    // Force inline important because older .secondary/.active CSS in this file uses !important.
+    btn.style.setProperty("background", active ? "#16a34a" : "#374151", "important");
+    btn.style.setProperty("background-color", active ? "#16a34a" : "#374151", "important");
+    btn.style.setProperty("color", "#ffffff", "important");
+    btn.style.setProperty("border", active ? "1px solid rgba(34,197,94,.85)" : "1px solid rgba(148,163,184,.22)", "important");
+    btn.style.setProperty("box-shadow", active ? "0 10px 24px rgba(22,163,74,.34)" : "none", "important");
+    btn.style.setProperty("transform", active ? "translateY(-1px)" : "none", "important");
   });
 }
 
