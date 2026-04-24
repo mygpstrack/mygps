@@ -3422,9 +3422,7 @@ async function saveAdminUiSettings(){
   updateStatusAlgorithmCard();
   setupAutoRefresh();
 }
-
-async 
-function getAdminTargetUids(){
+async function getAdminTargetUids(){
   const ids = new Set();
   if(selectedUid) ids.add(selectedUid);
   if(!selectedUid){
