@@ -413,6 +413,45 @@ function fmtCountdown(ms){
   return m+':'+String(s).padStart(2,'0');
 }
 
+function getPointAgeMs(p){
+  return p?.ts ? Math.max(0, Date.now() - Number(p.ts || 0)) : Number.POSITIVE_INFINITY;
+}
+
+function getLiveStopDurationMs(p, meta){
+  if(!p) return 0;
+  const ageMs = getPointAgeMs(p);
+  const baseStopMs = Number.isFinite(Number(p.stopDurationMs)) ? Math.max(0, Number(p.stopDurationMs)) : 0;
+  const movementState = String(p.movementState || '').toLowerCase();
+  const speed = Number(p.speed || 0);
+  const moveThreshold = Number(runtimeSettings?.moveSpeedThresholdKmh || 3);
+
+  if(meta?.paused) return baseStopMs + (Number.isFinite(ageMs) ? ageMs : 0);
+  if(['stopped','stop','idle','stop_short','long_stopped','longstopped','stop_long'].includes(movementState)){
+    return baseStopMs + (Number.isFinite(ageMs) ? ageMs : 0);
+  }
+
+  // Protection from stale "moving": if the point is not refreshed and speed is near zero,
+  // show stop/idle instead of keeping green forever.
+  if(['moving','move'].includes(movementState) && speed < moveThreshold && ageMs > 15_000){
+    return baseStopMs + ageMs;
+  }
+
+  return baseStopMs;
+}
+
+function formatAgeAndStop(p, meta){
+  const ageText = relTime(p?.ts) + ' назад';
+  const stopMs = getLiveStopDurationMs(p, meta);
+  const movementState = String(p?.movementState || '').toLowerCase();
+  const speed = Number(p?.speed || 0);
+  const moveThreshold = Number(runtimeSettings?.moveSpeedThresholdKmh || 3);
+  const shouldShowStop =
+    meta?.paused ||
+    ['stopped','stop','idle','stop_short','long_stopped','longstopped','stop_long'].includes(movementState) ||
+    (['moving','move'].includes(movementState) && speed < moveThreshold && getPointAgeMs(p) > 15_000);
+  return ageText + (shouldShowStop ? ` · простой ${fmtCountdown(stopMs)}` : '');
+}
+
 function checkTimeWarnings(leftMs, isPaused){
   if(isPaused) return;
   const expiresAt = currentSessionMeta?.expiresAt ? Number(currentSessionMeta.expiresAt) : null;
@@ -481,7 +520,7 @@ function getStatusMeta(p, sessionMeta){
     return {status:'⏸ Пауза', signal:'—', type:'paused', color:'#3b82f6'};
   }
 
-  const ageMs = p?.ts ? Math.max(0, Date.now() - Number(p.ts || 0)) : Number.POSITIVE_INFINITY;
+  const ageMs = getPointAgeMs(p);
   const speed = Number(p?.speed || 0);
   const accuracy = Number(p?.accuracy || 0);
 
@@ -499,30 +538,36 @@ function getStatusMeta(p, sessionMeta){
   }
 
   const movementState = String(p?.movementState || '').toLowerCase();
+  const isJunk = (accuracy > junkAccuracyMeters) || (speed > impossibleSpeedKmh);
+  const stopMs = getLiveStopDurationMs(p, sessionMeta);
+
   if(['no_signal','nosignal','offline'].includes(movementState)){
     return {status:'📡 Нет сигнала', signal:'Потерян', type:'offline', color:'#94a3b8'};
   }
-  if(['moving','move'].includes(movementState)){
-    return {status:'🚗 Движение', signal:'Есть', type:'moving', color:'#22c55e'};
-  }
-  if(['long_stopped','longstopped','stop_long'].includes(movementState)){
+
+  if(['long_stopped','longstopped','stop_long'].includes(movementState) || stopMs >= stopLongMs){
     return {status:'🅿 Стоянка', signal:'Есть', type:'stop_long', color:'#ef4444'};
   }
+
   if(['stopped','stop','idle','stop_short'].includes(movementState)){
     return {status:'⏸ Остановка', signal:'Есть', type:'stop_short', color:'#f59e0b'};
   }
 
-  const isJunk = (accuracy > junkAccuracyMeters) || (speed > impossibleSpeedKmh);
+  // Do not keep green forever if "moving" arrived once and then the point stopped updating.
+  if(['moving','move'].includes(movementState)){
+    if(!isJunk && speed >= moveThreshold){
+      return {status:'🚗 Движение', signal:'Есть', type:'moving', color:'#22c55e'};
+    }
+    if(ageMs > 15_000){
+      return {status:'⏸ Остановка', signal:'Есть', type:'stop_short', color:'#f59e0b'};
+    }
+  }
+
   if(!isJunk && speed >= moveThreshold){
     return {status:'🚗 Движение', signal:'Есть', type:'moving', color:'#22c55e'};
   }
 
-  const stopDurationMs = Number(p?.stopDurationMs ?? NaN);
-  if(Number.isFinite(stopDurationMs) && stopDurationMs >= stopLongMs){
-    return {status:'🅿 Стоянка', signal:'Есть', type:'stop_long', color:'#ef4444'};
-  }
-
-  if(ageMs >= stopLongMs){
+  if(stopMs >= stopLongMs || ageMs >= stopLongMs){
     return {status:'🅿 Стоянка', signal:'Есть', type:'stop_long', color:'#ef4444'};
   }
 
@@ -627,9 +672,7 @@ function updateUi(p, expiresAt, sessionMeta, moveType){
   qs('d_coords').innerText=Number(p.lat).toFixed(5)+', '+Number(p.lng).toFixed(5);
   qs('d_signal').innerText=meta.signal;
   qs('d_tail').innerText=accuracy>0 ? Math.round(accuracy)+' м' : '—';
-  const stopDurationMs = Number(p.stopDurationMs);
-  const stopDurationText = Number.isFinite(stopDurationMs) && stopDurationMs >= 0 ? ` · простой ${fmtCountdown(stopDurationMs)}` : '';
-  qs('d_age').innerText=relTime(p.ts)+' назад'+stopDurationText;
+  qs('d_age').innerText=formatAgeAndStop(p, sessionMeta);
   qs('d_type').innerText = moveType || '—';
 
   checkTimeWarnings(leftMs, !!sessionMeta?.paused);
@@ -812,6 +855,10 @@ setInterval(() => {
   qs('d_status').innerText = meta.status;
   qs('d_status').style.color = meta.color || '#fff';
   qs('d_signal').innerText = meta.signal;
+  qs('d_age').innerText = formatAgeAndStop(lastPoint, currentSessionMeta);
+  if(marker){
+    marker.setIcon(L.divIcon({html:buildIconHtml(lastPoint, currentSessionMeta), className:'', iconSize:[24,24], iconAnchor:[12,12]}));
+  }
 
   const leftMs = currentSessionMeta?.paused
     ? Math.max(0, Number(currentSessionMeta?.remainingMs || 0))
