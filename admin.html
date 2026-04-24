@@ -319,6 +319,29 @@
       transform:none!important;
     }
 
+
+    /* ABSOLUTE FINAL GPS BUTTON OVERRIDE */
+    #gpsPresetFastBtn.gps-hard-active,
+    #gpsPresetBalancedBtn.gps-hard-active,
+    #gpsPresetEcoBtn.gps-hard-active{
+      background:#16a34a!important;
+      background-color:#16a34a!important;
+      color:#fff!important;
+      border:2px solid #86efac!important;
+      box-shadow:0 0 0 3px rgba(34,197,94,.22),0 12px 24px rgba(22,163,74,.34)!important;
+      transform:translateY(-1px)!important;
+    }
+    #gpsPresetFastBtn.gps-hard-inactive,
+    #gpsPresetBalancedBtn.gps-hard-inactive,
+    #gpsPresetEcoBtn.gps-hard-inactive{
+      background:#1f2937!important;
+      background-color:#1f2937!important;
+      color:#d1d5db!important;
+      border:1px solid rgba(148,163,184,.28)!important;
+      box-shadow:none!important;
+      transform:none!important;
+    }
+
 </style>
 </head>
 <body>
@@ -878,9 +901,9 @@
             <h3>Частота GPS</h3>
             <p class="gpsHelpText">Профиль сохраняется сразу после нажатия. Кнопка «Сохранить» оставлена как ручное подтверждение, но для переключения она больше не нужна.</p>
             <div class="gpsPresetButtons">
-              <button id="gpsPresetFastBtn" class="secondary">Точно</button>
-              <button id="gpsPresetBalancedBtn" class="secondary">Баланс</button>
-              <button id="gpsPresetEcoBtn" class="secondary">Экономно</button>
+              <button id="gpsPresetFastBtn" class="secondary" data-label="Точно">Точно</button>
+              <button id="gpsPresetBalancedBtn" class="secondary" data-label="Баланс">Баланс</button>
+              <button id="gpsPresetEcoBtn" class="secondary" data-label="Экономно">Экономно</button>
             </div>
             <div class="gpsPresetInfoGrid">
               <div class="gpsPresetInfo"><div class="label">Точно</div><div class="value">Обычный 1s / 1м<br>Live 1s / 1м</div></div>
@@ -3395,22 +3418,36 @@ function setGpsPresetActiveButton(kind){
     normalized === "eco" || normalized === "economy" ? "gpsPresetEcoBtn" :
     "gpsPresetBalancedBtn";
 
+  const base = {
+    gpsPresetFastBtn: "Точно",
+    gpsPresetBalancedBtn: "Баланс",
+    gpsPresetEcoBtn: "Экономно"
+  };
+
   ["gpsPresetFastBtn","gpsPresetBalancedBtn","gpsPresetEcoBtn"].forEach(id => {
     const btn = qs(id);
     if(!btn) return;
+
     const active = id === activeId;
+    const label = base[id] || btn.dataset.label || btn.textContent.replace(/^✓\s*/,"");
 
-    btn.className = active ? "gps-active active" : "gps-inactive secondary";
+    btn.dataset.gpsState = active ? "active" : "inactive";
     btn.setAttribute("aria-pressed", active ? "true" : "false");
+    btn.className = active ? "gps-hard-active" : "gps-hard-inactive";
+    btn.textContent = active ? `✓ ${label}` : label;
 
-    // Force inline important because older .secondary/.active CSS in this file uses !important.
-    btn.style.setProperty("background", active ? "#16a34a" : "#374151", "important");
-    btn.style.setProperty("background-color", active ? "#16a34a" : "#374151", "important");
-    btn.style.setProperty("color", "#ffffff", "important");
-    btn.style.setProperty("border", active ? "1px solid rgba(34,197,94,.85)" : "1px solid rgba(148,163,184,.22)", "important");
-    btn.style.setProperty("box-shadow", active ? "0 10px 24px rgba(22,163,74,.34)" : "none", "important");
-    btn.style.setProperty("transform", active ? "translateY(-1px)" : "none", "important");
+    // Full cssText intentionally overrides all previous .success/.secondary/.active rules.
+    btn.style.cssText = active
+      ? "background:#16a34a !important;background-color:#16a34a !important;color:#ffffff !important;border:2px solid #86efac !important;box-shadow:0 0 0 3px rgba(34,197,94,.22),0 12px 24px rgba(22,163,74,.34) !important;transform:translateY(-1px) !important;min-width:112px;border-radius:14px;padding:11px 16px;font-weight:900;transition:all .12s ease;"
+      : "background:#1f2937 !important;background-color:#1f2937 !important;color:#d1d5db !important;border:1px solid rgba(148,163,184,.28) !important;box-shadow:none !important;transform:none !important;min-width:112px;border-radius:14px;padding:11px 16px;font-weight:800;transition:all .12s ease;";
   });
+}
+
+function forceGpsButtonColorLater(kind){
+  setGpsPresetActiveButton(kind);
+  requestAnimationFrame(() => setGpsPresetActiveButton(kind));
+  setTimeout(() => setGpsPresetActiveButton(kind), 80);
+  setTimeout(() => setGpsPresetActiveButton(kind), 300);
 }
 
 function syncGpsPresetButtons(){
@@ -3440,43 +3477,46 @@ async function applyGpsPreset(kind){
   const preset = adminPresetToAndroidPreset(kind);
   const btnKind = preset === "accurate" ? "fast" : preset === "economy" ? "eco" : "balanced";
 
-  // Instant UI feedback before Firebase write.
-  setGpsPresetActiveButton(btnKind);
+  forceGpsButtonColorLater(btnKind);
 
-  adminSettings.gpsProfiles = profilesForAndroidPreset(preset);
+  adminSettings.gpsProfiles = profilesForAndroidPreset ? profilesForAndroidPreset(preset) : gpsPresetProfile(btnKind);
   setGpsProfileControlsFromState();
 
-  // setGpsProfileControlsFromState can refresh UI, so force active color again.
-  setGpsPresetActiveButton(btnKind);
+  forceGpsButtonColorLater(btnKind);
   showGpsProfileSelectionNow("Админка");
 
   await saveGpsSettings({silent:false, label: GPS_PRESETS[btnKind]?.label || "Профиль", preset});
 
-  setGpsPresetActiveButton(btnKind);
+  forceGpsButtonColorLater(btnKind);
   showGpsProfileSelectionNow("Админка");
 }
+
 function bindGpsSettingsControls(){
-  if(qs('gpsPresetFastBtn')) qs('gpsPresetFastBtn').onclick = ()=>{
-    setGpsPresetActiveButton('fast');
-    applyGpsPreset('fast').catch(e=>showToast(errText(e), "error", 4200));
+  const bind = (id, kind) => {
+    const btn = qs(id);
+    if(!btn) return;
+    btn.onpointerdown = () => forceGpsButtonColorLater(kind);
+    btn.onmousedown = () => forceGpsButtonColorLater(kind);
+    btn.onclick = () => {
+      forceGpsButtonColorLater(kind);
+      applyGpsPreset(kind).catch(e=>showToast(errText(e), "error", 4200));
+    };
   };
-  if(qs('gpsPresetBalancedBtn')) qs('gpsPresetBalancedBtn').onclick = ()=>{
-    setGpsPresetActiveButton('balanced');
-    applyGpsPreset('balanced').catch(e=>showToast(errText(e), "error", 4200));
-  };
-  if(qs('gpsPresetEcoBtn')) qs('gpsPresetEcoBtn').onclick = ()=>{
-    setGpsPresetActiveButton('eco');
-    applyGpsPreset('eco').catch(e=>showToast(errText(e), "error", 4200));
-  };
+
+  bind('gpsPresetFastBtn', 'fast');
+  bind('gpsPresetBalancedBtn', 'balanced');
+  bind('gpsPresetEcoBtn', 'eco');
+
   if(qs('gpsResetDefaultsBtn')) qs('gpsResetDefaultsBtn').onclick = async()=>{
-    setGpsPresetActiveButton('balanced');
+    forceGpsButtonColorLater('balanced');
     adminSettings.gpsProfiles = profilesForAndroidPreset ? profilesForAndroidPreset('balanced') : gpsPresetProfile(GPS_DEFAULT_PRESET);
     setGpsProfileControlsFromState();
-    setGpsPresetActiveButton('balanced');
+    forceGpsButtonColorLater('balanced');
     showGpsProfileSelectionNow("Админка");
     await saveGpsSettings({silent:false, label:"Баланс", preset:"balanced"});
   };
 }
+
 function normalizeGpsProfilesShape(value){
   const src = value && typeof value === "object" ? value : {}; const normal = src.normal && typeof src.normal === "object" ? src.normal : {}; const live = src.live && typeof src.live === "object" ? src.live : {};
   const candidate = { normal: { intervalMs: Number(normal.intervalMs || 2000), minDistanceM: Number(normal.minDistanceM || 5) }, live: { intervalMs: Number(live.intervalMs || 2000), minDistanceM: Number(live.minDistanceM || 3) } };
