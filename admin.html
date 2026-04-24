@@ -1323,7 +1323,6 @@ function statusByPoint(point){
 }
 
 function getNowOfflineMs(){
-function getNowOfflineMs(){
   return Number(adminSettings?.offlineMinutes ?? 5) * 60 * 1000;
 }
 
@@ -2813,7 +2812,6 @@ async function saveGeofenceNotificationSettings(){
   updateGeofenceNotifyStatus("Настройки сохранены.");
 }
 
-async function maybeShowBrowserNotification
 async function maybeShowBrowserNotification(title, body){
   ensureGeofenceNotificationSettings();
   if(!adminSettings.geofenceNotifications.browserPushEnabled) return;
@@ -3054,13 +3052,6 @@ function normalizeGpsProfilesShape(value){
   return gpsPresetProfile(GPS_DEFAULT_PRESET);
 }
 function gpsProfilesEqual(a,b){ const x = normalizeGpsProfilesShape(a), y = normalizeGpsProfilesShape(b); return x.normal.intervalMs === y.normal.intervalMs && x.normal.minDistanceM === y.normal.minDistanceM && x.live.intervalMs === y.live.intervalMs && x.live.minDistanceM === y.live.minDistanceM; }
-function startGpsProfilesRealtimeSync(){
-  if(gpsProfilesListenerStarted) return; gpsProfilesListenerStarted = true;
-  const applyIncomingGpsProfiles = (raw) => { const incoming = normalizeGpsProfilesShape(raw); const incomingJson = JSON.stringify(incoming); adminSettings.gpsProfiles = incoming; setGpsProfileControlsFromState(); if(gpsProfilesLastSeenJson !== null && incomingJson !== gpsProfilesLastSeenJson && !suppressNextGpsProfilesToast) showToast(`Частота GPS синхронизирована: ${GPS_PRESETS[getGpsPresetKind(incoming)].label}`, "info", 3400); gpsProfilesLastSeenJson = incomingJson; lastGpsProfilesSnapshot = incoming; suppressNextGpsProfilesToast = false; };
-  onValue(ref(db, "adminSettings/config/gpsProfiles"), snap => applyIncomingGpsProfiles(snap.val()));
-}
-
-async function ensureUserMeta
 async function ensureUserMeta(user){
   if(!user?.uid) return;
   const r = ref(db, `users/${user.uid}`);
@@ -3072,29 +3063,6 @@ async function ensureUserMeta(user){
   }
 }
 
-function normalizeGpsProfilesShape(value){
-  const src = value && typeof value === "object" ? value : {};
-  const normal = src.normal && typeof src.normal === "object" ? src.normal : {};
-  const live = src.live && typeof src.live === "object" ? src.live : {};
-  return {
-    normal: {
-      intervalMs: Number(normal.intervalMs || 5000),
-      minDistanceM: Number(normal.minDistanceM || 3)
-    },
-    live: {
-      intervalMs: Number(live.intervalMs || 3000),
-      minDistanceM: Number(live.minDistanceM || 2)
-    }
-  };
-}
-function gpsProfilesEqual(a,b){
-  const x = normalizeGpsProfilesShape(a);
-  const y = normalizeGpsProfilesShape(b);
-  return x.normal.intervalMs === y.normal.intervalMs &&
-         x.normal.minDistanceM === y.normal.minDistanceM &&
-         x.live.intervalMs === y.live.intervalMs &&
-         x.live.minDistanceM === y.live.minDistanceM;
-}
 function startGpsProfilesRealtimeSync(){
   if(gpsProfilesListenerStarted) return;
   gpsProfilesListenerStarted = true;
