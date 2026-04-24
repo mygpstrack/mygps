@@ -603,13 +603,11 @@
           <div class="stat"><div class="label">Toast в админке</div><label class="pill"><input id="geofenceToastEnabled" type="checkbox" checked style="width:auto;min-width:auto"/> Включено</label></div>
           <div class="stat"><div class="label">Запись в журнал</div><label class="pill"><input id="geofenceJournalEnabled" type="checkbox" checked style="width:auto;min-width:auto"/> Включено</label></div>
           <div class="stat"><div class="label">Push в браузере</div><label class="pill"><input id="geofenceBrowserPushEnabled" type="checkbox" style="width:auto;min-width:auto"/> Включено</label></div>
-          <div class="stat"><div class="label">Email уведомления</div><label class="pill"><input id="geofenceEmailEnabled" type="checkbox" style="width:auto;min-width:auto"/> Включено</label></div>
+          <div class="stat"><div class="label">События</div><label class="pill"><input id="geofenceNotifyEnterEnabled" type="checkbox" checked style="width:auto;min-width:auto"/> Вход</label> <label class="pill"><input id="geofenceNotifyExitEnabled" type="checkbox" checked style="width:auto;min-width:auto"/> Выход</label></div>
         </div>
-        <div class="grid2" style="margin-top:12px">
-          <div><div class="label">Email для уведомлений</div><input id="geofenceEmailToInput" type="email" placeholder="name@example.com"></div>
-          <div><div class="label">Статус</div><div class="notice smallMuted" id="geofenceNotifyStatus">Toast и журнал работают в админке. Для браузерных push можно запросить разрешение. Email-настройка сохраняется, но для реальной отправки нужен backend.</div></div>
-        </div>
+        <div class="grid2" style="margin-top:12px"><div><div class="label">Статус</div><div class="notice smallMuted" id="geofenceNotifyStatus">Toast и журнал работают в админке. Для браузерных push можно запросить разрешение.</div></div></div>
         <div class="toolbar">
+          <button id="requestBrowserNotifyBtn"         <div class="toolbar">
           <button id="requestBrowserNotifyBtn" class="secondary">Разрешить push в браузере</button>
           <button id="saveGeofenceNotifySettingsBtn" class="success">Сохранить уведомления</button>
         </div>
@@ -727,14 +725,15 @@
             <button id="gpsPresetBalancedBtn" class="secondary">Баланс</button>
             <button id="gpsPresetEcoBtn" class="secondary">Экономно</button>
           </div>
-          <div class="grid4" style="margin-top:12px">
-            <div><div class="label">Обычный режим — интервал</div><select id="gpsNormalIntervalSelect"></select></div>
-            <div><div class="label">Обычный режим — дистанция</div><select id="gpsNormalDistanceSelect"></select></div>
-            <div><div class="label">Live — интервал</div><select id="gpsLiveIntervalSelect"></select></div>
-            <div><div class="label">Live — дистанция</div><select id="gpsLiveDistanceSelect"></select></div>
+          <div class="grid3" style="margin-top:12px">
+            <div class="stat"><div class="label">Точно</div><div class="value">Обычный 1s / 1м<br>Live 1s / 1м</div></div>
+            <div class="stat"><div class="label">Баланс</div><div class="value">Обычный 2s / 5м<br>Live 2s / 3м</div></div>
+            <div class="stat"><div class="label">Экономно</div><div class="value">Обычный 20s / 30м<br>Live 10s / 15м</div></div>
           </div>
-          <div class="notice" id="gpsProfileCurrentText" style="margin-top:12px">Сейчас: обычный 5s / 3м • live 3s / 2м</div>
+          <div style="display:none"><select id="gpsNormalIntervalSelect"></select><select id="gpsNormalDistanceSelect"></select><select id="gpsLiveIntervalSelect"></select><select id="gpsLiveDistanceSelect"></select></div>
+          <div class="notice" id="gpsProfileCurrentText" style="margin-top:12px">Сейчас: обычный 2s / 5м • live 2s / 3м</div>
           <div class="grid4" style="margin-top:12px">
+  <div class="stat">          <div class="grid4" style="margin-top:12px">
   <div class="stat">
     <div class="label">Текущий профиль</div>
     <div class="value" id="gpsProfileModeText">—</div>
@@ -839,8 +838,8 @@ let adminSettings = {
   impossibleSpeedKmh: 250,
   junkAccuracyMeters: 100,
   gpsProfiles: {
-    normal: { intervalMs: 5000, minDistanceM: 3 },
-    live: { intervalMs: 3000, minDistanceM: 2 }
+    normal: { intervalMs: 2000, minDistanceM: 5 },
+    live: { intervalMs: 2000, minDistanceM: 3 }
   },
   geofences: []
 };
@@ -1302,34 +1301,28 @@ async function updateNowWeather(lat, lon){
   }
 }
 
+function getPointSpeedKmh(point){
+  const raw = point?.speedKmh ?? point?.speed_kmh ?? point?.speedSmoothedKmh ?? point?.speed ?? point?.speedRawKmh ?? point?.speed_raw_kmh;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
 function statusByPoint(point){
-  const moveThreshold = Number(adminSettings?.moveSpeedThresholdKmh ?? 3);
-  const stopLongMinutes = Number(adminSettings?.stopLongMinutes ?? 5);
   const offlineMs = Number(adminSettings?.offlineMinutes ?? 5) * 60 * 1000;
-  const junkAccuracy = Number(adminSettings?.junkAccuracyMeters ?? 100);
-
-  if(!point || !Number.isFinite(Number(point.timestamp || 0))){
-    return { text:"📡 Нет сигнала", cls:"offline", color:"#9ca3af", kind:"offline" };
-  }
-
-  const speed = Number(point.speed || 0);
+  if(!point || !Number.isFinite(Number(point.timestamp || 0))) return { text:"📡 Нет сигнала", cls:"offline", color:"#9ca3af", kind:"offline" };
   const ts = Number(point.timestamp || 0);
-  const age = Math.max(0, Date.now() - ts);
-  const accuracy = Number(point.accuracy || 9999);
-  const stopLongMs = stopLongMinutes * 60 * 1000;
-
-  if(age > offlineMs){
-    return { text:"📡 Нет сигнала", cls:"offline", color:"#9ca3af", kind:"offline" };
-  }
-  if(accuracy <= junkAccuracy && speed >= moveThreshold){
-    return { text:"🚗 Движение", cls:"online", color:"#22c55e", kind:"moving" };
-  }
-  if(age >= stopLongMs){
-    return { text:"🅿 Стоянка", cls:"offline", color:"#ef4444", kind:"stop_long" };
-  }
+  if(Math.max(0, Date.now() - ts) > offlineMs) return { text:"📡 Нет сигнала", cls:"offline", color:"#9ca3af", kind:"offline" };
+  const movementState = String(point.movementState ?? point.movement_state ?? "").toLowerCase();
+  if(["no_signal","nosignal","offline"].includes(movementState)) return { text:"📡 Нет сигнала", cls:"offline", color:"#9ca3af", kind:"offline" };
+  if(["moving","move"].includes(movementState)) return { text:"🚗 Движение", cls:"online", color:"#22c55e", kind:"moving" };
+  if(["long_stopped","longstopped","stop_long"].includes(movementState)) return { text:"🅿 Долгая стоянка", cls:"offline", color:"#ef4444", kind:"stop_long" };
+  if(["stopped","stop","idle","stop_short"].includes(movementState)) return { text:"⏸ Остановка", cls:"idle", color:"#eab308", kind:"stop_short" };
+  const speed = getPointSpeedKmh(point) ?? 0;
+  if(Number(point.accuracy || 9999) <= Number(adminSettings?.junkAccuracyMeters ?? 100) && speed >= Number(adminSettings?.moveSpeedThresholdKmh ?? 3)) return { text:"🚗 Движение", cls:"online", color:"#22c55e", kind:"moving" };
   return { text:"⏸ Остановка", cls:"idle", color:"#eab308", kind:"stop_short" };
 }
 
+function getNowOfflineMs(){
 function getNowOfflineMs(){
   return Number(adminSettings?.offlineMinutes ?? 5) * 60 * 1000;
 }
@@ -2077,7 +2070,7 @@ function setReplayInfo(point){
   if(qs("replayStepMsText")) qs("replayStepMsText").textContent = `${replayState.stepMs} мс`;
   if(qs("replayStateText")) qs("replayStateText").textContent = replayState.playing ? "Проигрывается" : (total ? "Пауза" : "Нет данных");
   if(qs("replayTimeText")) qs("replayTimeText").textContent = point ? fmtTime(point.timestamp) : "—";
-  if(qs("replaySpeedText")) qs("replaySpeedText").textContent = point?.speed != null ? `${Number(point.speed).toFixed(1)} км/ч` : "—";
+  if(qs("replaySpeedText")){ const sp = getPointSpeedKmh(point); qs("replaySpeedText").textContent = sp != null ? `${sp.toFixed(1)} км/ч` : "—"; }
   if(qs("replayAccuracyText")) qs("replayAccuracyText").textContent = formatAccuracy(point?.accuracy);
   if(qs("replayCoordsText")) qs("replayCoordsText").textContent = point ? `${Number(point.latitude).toFixed(5)}, ${Number(point.longitude).toFixed(5)}` : "—";
 }
@@ -2673,7 +2666,8 @@ async function updateNowUI(point, sourceLabel){
   liveMarker.setStyle({ color: st.color, fillColor: st.color, radius: 8, fillOpacity: 1 });
   qs("nowStatus").innerHTML = `<span class="tag ${st.cls}" style="background:${st.color}22;border-color:${st.color};color:${st.color};font-weight:800">${st.text}</span>`;
   qs("nowSource").textContent = sourceLabel || "—";
-  qs("nowSpeed").textContent = point?.speed != null ? `${Number(point.speed).toFixed(1)} км/ч` : "—";
+  const nowSpeedKmh = getPointSpeedKmh(point);
+  qs("nowSpeed").textContent = nowSpeedKmh != null ? `${nowSpeedKmh.toFixed(1)} км/ч` : "—";
   qs("nowAccuracy").textContent = formatAccuracy(point?.accuracy);
   qs("nowUpdated").textContent = fmtTime(point?.timestamp);
   qs("nowBearing").textContent = point?.bearing != null ? `${Number(point.bearing).toFixed(0)}°` : "—";
@@ -2773,12 +2767,13 @@ geofenceMap.on("click", e => {
 });
 
 function ensureGeofenceNotificationSettings(){
+  const old = adminSettings?.geofenceNotifications || {};
   adminSettings.geofenceNotifications = {
-    toastEnabled: adminSettings?.geofenceNotifications?.toastEnabled !== false,
-    journalEnabled: adminSettings?.geofenceNotifications?.journalEnabled !== false,
-    browserPushEnabled: !!adminSettings?.geofenceNotifications?.browserPushEnabled,
-    emailEnabled: !!adminSettings?.geofenceNotifications?.emailEnabled,
-    emailTo: String(adminSettings?.geofenceNotifications?.emailTo || "")
+    toastEnabled: old.toastEnabled !== false,
+    journalEnabled: old.journalEnabled !== false,
+    browserPushEnabled: !!old.browserPushEnabled,
+    notifyEnterEnabled: old.notifyEnterEnabled !== false,
+    notifyExitEnabled: old.notifyExitEnabled !== false
   };
 }
 
@@ -2787,8 +2782,8 @@ function setGeofenceNotificationControlsFromState(){
   if(qs("geofenceToastEnabled")) qs("geofenceToastEnabled").checked = !!adminSettings.geofenceNotifications.toastEnabled;
   if(qs("geofenceJournalEnabled")) qs("geofenceJournalEnabled").checked = !!adminSettings.geofenceNotifications.journalEnabled;
   if(qs("geofenceBrowserPushEnabled")) qs("geofenceBrowserPushEnabled").checked = !!adminSettings.geofenceNotifications.browserPushEnabled;
-  if(qs("geofenceEmailEnabled")) qs("geofenceEmailEnabled").checked = !!adminSettings.geofenceNotifications.emailEnabled;
-  if(qs("geofenceEmailToInput")) qs("geofenceEmailToInput").value = adminSettings.geofenceNotifications.emailTo || "";
+  if(qs("geofenceNotifyEnterEnabled")) qs("geofenceNotifyEnterEnabled").checked = !!adminSettings.geofenceNotifications.notifyEnterEnabled;
+  if(qs("geofenceNotifyExitEnabled")) qs("geofenceNotifyExitEnabled").checked = !!adminSettings.geofenceNotifications.notifyExitEnabled;
   updateGeofenceNotifyStatus();
 }
 
@@ -2797,8 +2792,8 @@ function readGeofenceNotificationControls(){
     toastEnabled: !!qs("geofenceToastEnabled")?.checked,
     journalEnabled: !!qs("geofenceJournalEnabled")?.checked,
     browserPushEnabled: !!qs("geofenceBrowserPushEnabled")?.checked,
-    emailEnabled: !!qs("geofenceEmailEnabled")?.checked,
-    emailTo: String(qs("geofenceEmailToInput")?.value || "").trim()
+    notifyEnterEnabled: !!qs("geofenceNotifyEnterEnabled")?.checked,
+    notifyExitEnabled: !!qs("geofenceNotifyExitEnabled")?.checked
   };
 }
 
@@ -2806,24 +2801,19 @@ function updateGeofenceNotifyStatus(extraText = ""){
   ensureGeofenceNotificationSettings();
   const status = qs("geofenceNotifyStatus");
   if(!status) return;
-  const emailPart = adminSettings.geofenceNotifications.emailEnabled
-    ? (adminSettings.geofenceNotifications.emailTo ? `Email включён: ${adminSettings.geofenceNotifications.emailTo}.` : "Email включён, но адрес не указан.")
-    : "Email выключен.";
-  const pushPart = adminSettings.geofenceNotifications.browserPushEnabled
-    ? `Push в браузере: ${Notification.permission === "granted" ? "разрешены" : "нужно разрешение"}.`
-    : "Push в браузере выключен.";
-  status.textContent = `${emailPart} ${pushPart} Toast и журнал работают в админке.${extraText ? " " + extraText : ""}`;
+  const pushPart = adminSettings.geofenceNotifications.browserPushEnabled ? `Push в браузере: ${Notification.permission === "granted" ? "разрешены" : "нужно разрешение"}.` : "Push в браузере выключен.";
+  const eventPart = `События: вход ${adminSettings.geofenceNotifications.notifyEnterEnabled ? "вкл" : "выкл"}, выход ${adminSettings.geofenceNotifications.notifyExitEnabled ? "вкл" : "выкл"}.`;
+  status.textContent = `${eventPart} ${pushPart} Toast и журнал работают в админке.${extraText ? " " + extraText : ""}`;
 }
 
 async function saveGeofenceNotificationSettings(){
   const next = readGeofenceNotificationControls();
   adminSettings.geofenceNotifications = next;
-  await update(ref(db,"adminSettings/config"), {
-    geofenceNotifications: next
-  });
+  await update(ref(db,"adminSettings/config"), { geofenceNotifications: next });
   updateGeofenceNotifyStatus("Настройки сохранены.");
 }
 
+async function maybeShowBrowserNotification
 async function maybeShowBrowserNotification(title, body){
   ensureGeofenceNotificationSettings();
   if(!adminSettings.geofenceNotifications.browserPushEnabled) return;
@@ -2870,17 +2860,10 @@ async function handleGeofenceTransitions(point){
     const action = insideNow ? "enter" : "exit";
     const text = insideNow ? `Вход в геозону: ${zone.name}` : `Выход из геозоны: ${zone.name}`;
 
-    if(adminSettings.geofenceNotifications.toastEnabled){
-      showToast(`📍 ${text}`, insideNow ? "success" : "warn", 4200);
-    }
-    if(adminSettings.geofenceNotifications.journalEnabled){
-      await logDeviceEvent(`geofence_${action}`, text, {
-        geofenceId: zone.id,
-        geofenceName: zone.name,
-        emailTarget: adminSettings.geofenceNotifications.emailEnabled ? (adminSettings.geofenceNotifications.emailTo || null) : null,
-        notifyEmailEnabled: !!adminSettings.geofenceNotifications.emailEnabled
-      });
-    }
+    const notifyThisAction = action === "enter" ? adminSettings.geofenceNotifications.notifyEnterEnabled : adminSettings.geofenceNotifications.notifyExitEnabled;
+    if(!notifyThisAction) continue;
+    if(adminSettings.geofenceNotifications.toastEnabled) showToast(`📍 ${text}`, insideNow ? "success" : "warn", 4200);
+    if(adminSettings.geofenceNotifications.journalEnabled) await logDeviceEvent(`geofence_${action}`, text, { geofenceId: zone.id, geofenceName: zone.name, action });
     await maybeShowBrowserNotification("MyGps", text);
   }
 }
@@ -3023,96 +3006,61 @@ function fillGeofenceFromNowPoint(){
   if(qs("geofenceFormStatus")) qs("geofenceFormStatus").textContent = "Координаты взяты из текущей точки.";
 }
 
-const gpsIntervalValues = [1000,3000,5000,10000,15000,30000,60000];
-const gpsIntervalLabels = ["1 сек","3 сек","5 сек","10 сек","15 сек","30 сек","60 сек"];
-const gpsDistanceValues = [1,2,3,5,10,20,50];
-const gpsDistanceLabels = ["1 м","2 м","3 м","5 м","10 м","20 м","50 м"];
-
-function ensureGpsProfiles(){
-  adminSettings.gpsProfiles = adminSettings.gpsProfiles || {};
-  adminSettings.gpsProfiles.normal = adminSettings.gpsProfiles.normal || { intervalMs: 5000, minDistanceM: 3 };
-  adminSettings.gpsProfiles.live = adminSettings.gpsProfiles.live || { intervalMs: 3000, minDistanceM: 2 };
-}
-function fillSelectOptions(selectId, values, labels){
-  const el = qs(selectId);
-  if(!el || el.options.length) return;
-  labels.forEach((label, idx)=>{
-    const opt = document.createElement('option');
-    opt.value = String(values[idx]);
-    opt.textContent = label;
-    el.appendChild(opt);
-  });
-}
-function initGpsSettingsControls(){
-  fillSelectOptions('gpsNormalIntervalSelect', gpsIntervalValues, gpsIntervalLabels);
-  fillSelectOptions('gpsLiveIntervalSelect', gpsIntervalValues, gpsIntervalLabels);
-  fillSelectOptions('gpsNormalDistanceSelect', gpsDistanceValues, gpsDistanceLabels);
-  fillSelectOptions('gpsLiveDistanceSelect', gpsDistanceValues, gpsDistanceLabels);
-}
-function setGpsProfileControlsFromState(){
-  ensureGpsProfiles();
-  initGpsSettingsControls();
-  if(qs('gpsNormalIntervalSelect')) qs('gpsNormalIntervalSelect').value = String(adminSettings.gpsProfiles.normal.intervalMs || 5000);
-  if(qs('gpsNormalDistanceSelect')) qs('gpsNormalDistanceSelect').value = String(adminSettings.gpsProfiles.normal.minDistanceM || 3);
-  if(qs('gpsLiveIntervalSelect')) qs('gpsLiveIntervalSelect').value = String(adminSettings.gpsProfiles.live.intervalMs || 3000);
-  if(qs('gpsLiveDistanceSelect')) qs('gpsLiveDistanceSelect').value = String(adminSettings.gpsProfiles.live.minDistanceM || 2);
-  refreshGpsProfileCurrentText();
-  updateGpsProfilesUiFromData(getCurrentPointForGpsProfiles());
-}
-function readGpsProfilesFromControls(){
-  return {
-    normal: {
-      intervalMs: Number(qs('gpsNormalIntervalSelect')?.value || 5000),
-      minDistanceM: Number(qs('gpsNormalDistanceSelect')?.value || 3)
-    },
-    live: {
-      intervalMs: Number(qs('gpsLiveIntervalSelect')?.value || 3000),
-      minDistanceM: Number(qs('gpsLiveDistanceSelect')?.value || 2)
-    }
-  };
-}
-function refreshGpsProfileCurrentText(){
-  const box = qs('gpsProfileCurrentText');
-  if(!box) return;
-  const profiles = readGpsProfilesFromControls();
-  box.textContent = `Сейчас: обычный ${profiles.normal.intervalMs / 1000}s / ${profiles.normal.minDistanceM}м • live ${profiles.live.intervalMs / 1000}s / ${profiles.live.minDistanceM}м`;
-  updateGpsProfilesUiFromData(getCurrentPointForGpsProfiles());
-}
-function applyGpsPreset(kind){
-  initGpsSettingsControls();
-  if(kind === 'fast'){
-    qs('gpsNormalIntervalSelect').value = '1000';
-    qs('gpsNormalDistanceSelect').value = '1';
-    qs('gpsLiveIntervalSelect').value = '1000';
-    qs('gpsLiveDistanceSelect').value = '1';
-  } else if(kind === 'balanced'){
-    qs('gpsNormalIntervalSelect').value = '5000';
-    qs('gpsNormalDistanceSelect').value = '3';
-    qs('gpsLiveIntervalSelect').value = '3000';
-    qs('gpsLiveDistanceSelect').value = '3';
-  } else if(kind === 'eco'){
-    qs('gpsNormalIntervalSelect').value = '30000';
-    qs('gpsNormalDistanceSelect').value = '20';
-    qs('gpsLiveIntervalSelect').value = '15000';
-    qs('gpsLiveDistanceSelect').value = '10';
+const GPS_PRESETS = {
+  fast: { label: "Точно", normal: { intervalMs: 1000, minDistanceM: 1 }, live: { intervalMs: 1000, minDistanceM: 1 } },
+  balanced: { label: "Баланс", normal: { intervalMs: 2000, minDistanceM: 5 }, live: { intervalMs: 2000, minDistanceM: 3 } },
+  eco: { label: "Экономно", normal: { intervalMs: 20000, minDistanceM: 30 }, live: { intervalMs: 10000, minDistanceM: 15 } }
+};
+const GPS_DEFAULT_PRESET = "balanced";
+function cloneGpsProfile(profile){ return { normal: { intervalMs: Number(profile.normal.intervalMs), minDistanceM: Number(profile.normal.minDistanceM) }, live: { intervalMs: Number(profile.live.intervalMs), minDistanceM: Number(profile.live.minDistanceM) } }; }
+function gpsPresetProfile(kind = GPS_DEFAULT_PRESET){ return cloneGpsProfile(GPS_PRESETS[kind] || GPS_PRESETS[GPS_DEFAULT_PRESET]); }
+function getGpsPresetKind(profile){
+  const src = profile && typeof profile === "object" ? profile : {}; const n = src.normal || {}, l = src.live || {};
+  for(const [kind, preset] of Object.entries(GPS_PRESETS)){
+    if(Number(n.intervalMs) === preset.normal.intervalMs && Number(n.minDistanceM) === preset.normal.minDistanceM && Number(l.intervalMs) === preset.live.intervalMs && Number(l.minDistanceM) === preset.live.minDistanceM) return kind;
   }
-  refreshGpsProfileCurrentText();
-  updateGpsProfilesUiFromData(getCurrentPointForGpsProfiles());
+  return GPS_DEFAULT_PRESET;
 }
+function ensureGpsProfiles(){ adminSettings.gpsProfiles = normalizeGpsProfilesShape(adminSettings.gpsProfiles); }
+function fillSelectOptions(selectId, values, labels){ const el = qs(selectId); if(!el) return; el.innerHTML = ""; labels.forEach((label, idx)=>{ const opt = document.createElement('option'); opt.value = String(values[idx]); opt.textContent = label; el.appendChild(opt); }); }
+function initGpsSettingsControls(){
+  fillSelectOptions('gpsNormalIntervalSelect', [1000,2000,20000], ["1 сек","2 сек","20 сек"]);
+  fillSelectOptions('gpsLiveIntervalSelect', [1000,2000,10000], ["1 сек","2 сек","10 сек"]);
+  fillSelectOptions('gpsNormalDistanceSelect', [1,5,30], ["1 м","5 м","30 м"]);
+  fillSelectOptions('gpsLiveDistanceSelect', [1,3,15], ["1 м","3 м","15 м"]);
+}
+function setGpsPresetButtonsActive(kind){ const map = { fast: 'gpsPresetFastBtn', balanced: 'gpsPresetBalancedBtn', eco: 'gpsPresetEcoBtn' }; Object.entries(map).forEach(([preset, id])=>{ const btn = qs(id); if(btn) btn.className = preset === kind ? "success" : "secondary"; }); }
+function setGpsProfileControlsFromState(){
+  ensureGpsProfiles(); initGpsSettingsControls(); const p = adminSettings.gpsProfiles;
+  if(qs('gpsNormalIntervalSelect')) qs('gpsNormalIntervalSelect').value = String(p.normal.intervalMs);
+  if(qs('gpsNormalDistanceSelect')) qs('gpsNormalDistanceSelect').value = String(p.normal.minDistanceM);
+  if(qs('gpsLiveIntervalSelect')) qs('gpsLiveIntervalSelect').value = String(p.live.intervalMs);
+  if(qs('gpsLiveDistanceSelect')) qs('gpsLiveDistanceSelect').value = String(p.live.minDistanceM);
+  setGpsPresetButtonsActive(getGpsPresetKind(p)); refreshGpsProfileCurrentText(); updateGpsProfilesUiFromData(getCurrentPointForGpsProfiles());
+}
+function readGpsProfilesFromControls(){ return normalizeGpsProfilesShape({ normal: { intervalMs: Number(qs('gpsNormalIntervalSelect')?.value || 2000), minDistanceM: Number(qs('gpsNormalDistanceSelect')?.value || 5) }, live: { intervalMs: Number(qs('gpsLiveIntervalSelect')?.value || 2000), minDistanceM: Number(qs('gpsLiveDistanceSelect')?.value || 3) } }); }
+function refreshGpsProfileCurrentText(){ const box = qs('gpsProfileCurrentText'); if(!box) return; const profiles = readGpsProfilesFromControls(); box.textContent = `Сейчас: обычный ${formatGpsProfileLine(profiles.normal)} • live ${formatGpsProfileLine(profiles.live)}`; updateGpsProfilesUiFromData(getCurrentPointForGpsProfiles()); }
+function applyGpsPreset(kind){ adminSettings.gpsProfiles = gpsPresetProfile(kind); setGpsProfileControlsFromState(); }
 function bindGpsSettingsControls(){
-  ['gpsNormalIntervalSelect','gpsNormalDistanceSelect','gpsLiveIntervalSelect','gpsLiveDistanceSelect'].forEach(id=>{
-    if(qs(id)) qs(id).onchange = refreshGpsProfileCurrentText;
-  });
   if(qs('gpsPresetFastBtn')) qs('gpsPresetFastBtn').onclick = ()=>applyGpsPreset('fast');
   if(qs('gpsPresetBalancedBtn')) qs('gpsPresetBalancedBtn').onclick = ()=>applyGpsPreset('balanced');
   if(qs('gpsPresetEcoBtn')) qs('gpsPresetEcoBtn').onclick = ()=>applyGpsPreset('eco');
-  if(qs('gpsResetDefaultsBtn')) qs('gpsResetDefaultsBtn').onclick = async()=>{
-    adminSettings.gpsProfiles = { normal:{ intervalMs:5000, minDistanceM:3 }, live:{ intervalMs:5000, minDistanceM:3 } };
-    setGpsProfileControlsFromState();
-    await safeAction("Сброс настроек GPS", saveGpsSettings, "Настройки GPS сброшены");
-  };
+  if(qs('gpsResetDefaultsBtn')) qs('gpsResetDefaultsBtn').onclick = async()=>{ adminSettings.gpsProfiles = gpsPresetProfile(GPS_DEFAULT_PRESET); setGpsProfileControlsFromState(); await safeAction("Сброс настроек GPS", saveGpsSettings, "Настройки GPS сброшены"); };
+}
+function normalizeGpsProfilesShape(value){
+  const src = value && typeof value === "object" ? value : {}; const normal = src.normal && typeof src.normal === "object" ? src.normal : {}; const live = src.live && typeof src.live === "object" ? src.live : {};
+  const candidate = { normal: { intervalMs: Number(normal.intervalMs || 2000), minDistanceM: Number(normal.minDistanceM || 5) }, live: { intervalMs: Number(live.intervalMs || 2000), minDistanceM: Number(live.minDistanceM || 3) } };
+  for(const preset of Object.values(GPS_PRESETS)){ if(candidate.normal.intervalMs === preset.normal.intervalMs && candidate.normal.minDistanceM === preset.normal.minDistanceM && candidate.live.intervalMs === preset.live.intervalMs && candidate.live.minDistanceM === preset.live.minDistanceM) return cloneGpsProfile(preset); }
+  return gpsPresetProfile(GPS_DEFAULT_PRESET);
+}
+function gpsProfilesEqual(a,b){ const x = normalizeGpsProfilesShape(a), y = normalizeGpsProfilesShape(b); return x.normal.intervalMs === y.normal.intervalMs && x.normal.minDistanceM === y.normal.minDistanceM && x.live.intervalMs === y.live.intervalMs && x.live.minDistanceM === y.live.minDistanceM; }
+function startGpsProfilesRealtimeSync(){
+  if(gpsProfilesListenerStarted) return; gpsProfilesListenerStarted = true;
+  const applyIncomingGpsProfiles = (raw) => { const incoming = normalizeGpsProfilesShape(raw); const incomingJson = JSON.stringify(incoming); adminSettings.gpsProfiles = incoming; setGpsProfileControlsFromState(); if(gpsProfilesLastSeenJson !== null && incomingJson !== gpsProfilesLastSeenJson && !suppressNextGpsProfilesToast) showToast(`Частота GPS синхронизирована: ${GPS_PRESETS[getGpsPresetKind(incoming)].label}`, "info", 3400); gpsProfilesLastSeenJson = incomingJson; lastGpsProfilesSnapshot = incoming; suppressNextGpsProfilesToast = false; };
+  onValue(ref(db, "adminSettings/config/gpsProfiles"), snap => applyIncomingGpsProfiles(snap.val()));
 }
 
+async function ensureUserMeta
 async function ensureUserMeta(user){
   if(!user?.uid) return;
   const r = ref(db, `users/${user.uid}`);
@@ -3211,7 +3159,6 @@ async function loadAdminSettings(){
   ensureGeofenceNotificationSettings();
   setGeofenceNotificationControlsFromState();
   lastGpsProfilesSnapshot = normalizeGpsProfilesShape(adminSettings.gpsProfiles);
-  gpsProfilesLastSeenJson = JSON.stringify(lastGpsProfilesSnapshot);
   gpsProfilesLastSeenJson = JSON.stringify(lastGpsProfilesSnapshot);
   applyToastPosition();
   updateStatusAlgorithmCard();
@@ -4454,6 +4401,14 @@ if (qs("geofenceRadiusInput")) qs("geofenceRadiusInput").addEventListener("input
 if (qs("geofenceLatInput")) qs("geofenceLatInput").addEventListener("input", updateGeofencePreviewFromForm);
 if (qs("geofenceLonInput")) qs("geofenceLonInput").addEventListener("input", updateGeofencePreviewFromForm);
 if (qs("saveGeofenceBtn")) qs("saveGeofenceBtn").onclick = async()=>{ await safeAction("Сохранение геозоны", saveGeofenceFromForm, "Геозона сохранена"); };
+if (qs("saveGeofenceNotifySettingsBtn")) qs("saveGeofenceNotifySettingsBtn").onclick = async()=>{ await safeAction("Сохранение уведомлений геозон", saveGeofenceNotificationSettings, "Уведомления геозон сохранены"); };
+if (qs("requestBrowserNotifyBtn")) qs("requestBrowserNotifyBtn").onclick = async()=>{ if(!("Notification" in window)) return showToast("Браузер не поддерживает push-уведомления", "warn"); try{ const result = await Notification.requestPermission(); showToast(result === "granted" ? "Push разрешены" : "Push не разрешены", result === "granted" ? "success" : "warn"); updateGeofenceNotifyStatus(); }catch(e){ recordError("requestBrowserNotify", e); showToast("Ошибка запроса push", "error"); } };
+if (qs("replayStartBtn")) qs("replayStartBtn").onclick = replayStart;
+if (qs("replayPauseBtn")) qs("replayPauseBtn").onclick = replayPause;
+if (qs("replayResetBtn")) qs("replayResetBtn").onclick = replayReset;
+if (qs("replayFasterBtn")) qs("replayFasterBtn").onclick = replayFaster;
+if (qs("replaySlowerBtn")) qs("replaySlowerBtn").onclick = replaySlower;
+if (qs("replaySeekRange")) qs("replaySeekRange").oninput = () => { replayLoad(false); replayState.index = Number(qs("replaySeekRange").value || 0); renderReplayPoint(true); };
 if (qs("backupNowBtn")) qs("backupNowBtn").onclick = async()=>{ await safeAction("Создание backup", async()=>{ await createMonthlyBackup(true); await renderBackups(); }, "Backup создан"); };
 qs("downloadBackupBtn").onclick=async()=>{
   const payload = {history:historyByUid, live:liveByUid, liveSessions:allSessions, users:usersMeta, adminSettings};
