@@ -213,7 +213,19 @@
     @media (max-width:900px){.gpsPresetInfoGrid,.gpsStatusGrid{grid-template-columns:1fr 1fr}.settings-side-column{grid-template-columns:1fr}}
     @media (max-width:640px){.gpsPresetInfoGrid,.gpsStatusGrid,.settings-side-column{grid-template-columns:1fr}.gpsPresetButtons button{flex:1;min-width:0}}
 
-  </style>
+  
+    .gpsPresetButtons button.active{
+      background:#15803d!important;
+      color:#fff!important;
+      box-shadow:0 10px 22px rgba(21,128,61,.28)!important;
+    }
+    .gpsPresetButtons button:not(.active){
+      background:#374151!important;
+      color:#fff!important;
+      box-shadow:none!important;
+    }
+
+</style>
 </head>
 <body>
 <div class="wrap">
@@ -3252,21 +3264,29 @@ function detectGpsPresetKeyFromProfiles(profiles){
   }
   return "";
 }
-function syncGpsPresetButtons(){
-  const activeKey = detectGpsPresetKeyFromProfiles(readGpsProfilesFromControls());
-  [["gpsPresetFastBtn","fast"],["gpsPresetBalancedBtn","balanced"],["gpsPresetEcoBtn","eco"]].forEach(([id,key])=>{
+function setGpsPresetActiveButton(kind){
+  const map = {
+    fast: "gpsPresetFastBtn",
+    accurate: "gpsPresetFastBtn",
+    balanced: "gpsPresetBalancedBtn",
+    balance: "gpsPresetBalancedBtn",
+    eco: "gpsPresetEcoBtn",
+    economy: "gpsPresetEcoBtn"
+  };
+  const activeId = map[String(kind || "").toLowerCase()] || "";
+  ["gpsPresetFastBtn","gpsPresetBalancedBtn","gpsPresetEcoBtn"].forEach(id=>{
     const btn = qs(id);
     if(!btn) return;
-    const active = key === activeKey;
-    btn.classList.remove("active");
-    btn.classList.add("secondary");
-    btn.setAttribute("aria-pressed", "false");
-    if(active){
-      btn.classList.add("active");
-      btn.classList.remove("secondary");
-      btn.setAttribute("aria-pressed", "true");
-    }
+    const active = id === activeId;
+    btn.classList.remove("active","secondary");
+    btn.classList.add(active ? "active" : "secondary");
+    btn.setAttribute("aria-pressed", active ? "true" : "false");
   });
+}
+
+function syncGpsPresetButtons(){
+  const activeKey = detectGpsPresetKeyFromProfiles(readGpsProfilesFromControls());
+  setGpsPresetActiveButton(activeKey || "");
 }
 function showGpsProfileSelectionNow(sourceLabel = "Админка"){
   const profiles = readGpsProfilesFromControls();
@@ -3287,17 +3307,26 @@ function refreshGpsProfileCurrentText(){
   showGpsProfileSelectionNow(qs("gpsProfileSourceText")?.textContent || "Админка");
 }
 async function applyGpsPreset(kind){
+  setGpsPresetActiveButton(kind);
   adminSettings.gpsProfiles = gpsPresetProfile(kind);
   setGpsProfileControlsFromState();
+  setGpsPresetActiveButton(kind);
   showGpsProfileSelectionNow("Админка");
   await saveGpsSettings({silent:false, label: GPS_PRESETS[kind]?.label || "Профиль"});
+  setGpsPresetActiveButton(kind);
   showGpsProfileSelectionNow("Админка");
 }
 function bindGpsSettingsControls(){
-  if(qs('gpsPresetFastBtn')) qs('gpsPresetFastBtn').onclick = ()=>safeAction("GPS: Точно", ()=>applyGpsPreset('fast'), "Профиль GPS: Точно");
-  if(qs('gpsPresetBalancedBtn')) qs('gpsPresetBalancedBtn').onclick = ()=>safeAction("GPS: Баланс", ()=>applyGpsPreset('balanced'), "Профиль GPS: Баланс");
-  if(qs('gpsPresetEcoBtn')) qs('gpsPresetEcoBtn').onclick = ()=>safeAction("GPS: Экономно", ()=>applyGpsPreset('eco'), "Профиль GPS: Экономно");
-  if(qs('gpsResetDefaultsBtn')) qs('gpsResetDefaultsBtn').onclick = async()=>{ adminSettings.gpsProfiles = gpsPresetProfile(GPS_DEFAULT_PRESET); setGpsProfileControlsFromState(); showGpsProfileSelectionNow("Админка"); await safeAction("Сброс настроек GPS", ()=>saveGpsSettings({silent:true}), "GPS сброшен на баланс"); showGpsProfileSelectionNow("Админка"); };
+  if(qs('gpsPresetFastBtn')) qs('gpsPresetFastBtn').onclick = ()=>applyGpsPreset('fast').catch(e=>showToast(errText(e), "error", 4200));
+  if(qs('gpsPresetBalancedBtn')) qs('gpsPresetBalancedBtn').onclick = ()=>applyGpsPreset('balanced').catch(e=>showToast(errText(e), "error", 4200));
+  if(qs('gpsPresetEcoBtn')) qs('gpsPresetEcoBtn').onclick = ()=>applyGpsPreset('eco').catch(e=>showToast(errText(e), "error", 4200));
+  if(qs('gpsResetDefaultsBtn')) qs('gpsResetDefaultsBtn').onclick = async()=>{
+    adminSettings.gpsProfiles = gpsPresetProfile(GPS_DEFAULT_PRESET);
+    setGpsProfileControlsFromState();
+    setGpsPresetActiveButton(GPS_DEFAULT_PRESET);
+    showGpsProfileSelectionNow("Админка");
+    await saveGpsSettings({silent:false, label:"Баланс"});
+  };
 }
 function normalizeGpsProfilesShape(value){
   const src = value && typeof value === "object" ? value : {}; const normal = src.normal && typeof src.normal === "object" ? src.normal : {}; const live = src.live && typeof src.live === "object" ? src.live : {};
@@ -3422,17 +3451,42 @@ async function saveAdminUiSettings(){
   updateStatusAlgorithmCard();
   setupAutoRefresh();
 }
-async function getAdminTargetUids(){
+function getAdminTargetUids(){
   const ids = new Set();
-  if(selectedUid) ids.add(selectedUid);
-  if(!selectedUid){
-    Object.keys(liveByUid || {}).forEach(uid => { if(uid && uid !== "_init") ids.add(uid); });
-    (allUsers || []).forEach(u => {
-      const uid = u?.uid || u?.id || u?.key;
-      if(uid) ids.add(uid);
-    });
-  }
-  return [...ids].filter(Boolean);
+
+  const add = (uid) => {
+    const v = String(uid || "").trim();
+    if(v && v !== "_init" && v !== "undefined" && v !== "null") ids.add(v);
+  };
+
+  add(selectedUid);
+
+  const selectCandidates = [
+    "userSelect",
+    "deviceSelect",
+    "uidSelect",
+    "liveUserSelect",
+    "viewUserSelect",
+    "selectedUserSelect"
+  ];
+  selectCandidates.forEach(id => add(qs(id)?.value));
+
+  Object.keys(liveByUid || {}).forEach(add);
+
+  (allUsers || []).forEach(u => {
+    add(u?.uid);
+    add(u?.id);
+    add(u?.key);
+    add(u?.userId);
+  });
+
+  document.querySelectorAll("[data-uid],[data-user-uid],[data-userid]").forEach(el => {
+    add(el.dataset.uid);
+    add(el.dataset.userUid);
+    add(el.dataset.userid);
+  });
+
+  return [...ids];
 }
 
 function gpsPresetKeyFromProfiles(profiles){
@@ -3445,9 +3499,9 @@ function gpsPresetKeyFromProfiles(profiles){
 async function publishGpsCommandToDevices(profiles){
   const targets = getAdminTargetUids();
   if(!targets.length){
-    showToast("Выбери устройство, чтобы отправить GPS-профиль", "warn", 3200);
-    return;
+    return 0;
   }
+
   const now = Date.now();
   const preset = gpsPresetKeyFromProfiles(profiles);
   const updates = {};
@@ -3461,6 +3515,7 @@ async function publishGpsCommandToDevices(profiles){
     updates[`live/${uid}/requestedGpsProfileUpdatedAt`] = now;
   });
   await update(ref(db), updates);
+  return targets.length;
 }
 
 function geofenceListToLiveMap(list){
@@ -3521,16 +3576,24 @@ async function saveGpsSettings(options = {}){
   suppressNextGpsProfilesToast = true;
   lastGpsProfilesSnapshot = normalizeGpsProfilesShape(adminSettings.gpsProfiles);
   gpsProfilesLastSeenJson = JSON.stringify(lastGpsProfilesSnapshot);
+
   await update(ref(db,"adminSettings/config"), {
     gpsProfiles: adminSettings.gpsProfiles,
     gpsProfilePreset: gpsPresetKeyFromProfiles(adminSettings.gpsProfiles),
     gpsProfileUpdatedAt: Date.now(),
     gpsProfileSource: "admin"
   });
-  await publishGpsCommandToDevices(adminSettings.gpsProfiles);
+
+  const sentCount = await publishGpsCommandToDevices(adminSettings.gpsProfiles);
   showGpsProfileSelectionNow("Админка");
+
   if(!options.silent){
-    showToast(options.label ? `Настройки GPS сохранены: ${options.label}` : "Настройки GPS сохранены", "success");
+    const label = options.label || "Профиль";
+    if(sentCount > 0){
+      showToast(`Профиль GPS отправлен на устройство: ${label}`, "success", 3200);
+    }else{
+      showToast("Настройки GPS сохранены, но устройство не найдено. Выбери устройство или дождись live-данных.", "warn", 4200);
+    }
   }
 }
 
