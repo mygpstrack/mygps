@@ -1357,18 +1357,50 @@ function getPointSpeedKmh(point){
   return Number.isFinite(n) ? n : null;
 }
 
+function getPointIdleText(point){
+  const stopDurationMs = Number(point?.stopDurationMs ?? point?.stop_duration_ms ?? NaN);
+  if(Number.isFinite(stopDurationMs) && stopDurationMs >= 0){
+    return formatIdle(stopDurationMs);
+  }
+  return point?.timestamp ? formatIdle(Date.now()-Number(point.timestamp)) : "—";
+}
+
 function statusByPoint(point){
   const offlineMs = Number(adminSettings?.offlineMinutes ?? 5) * 60 * 1000;
-  if(!point || !Number.isFinite(Number(point.timestamp || 0))) return { text:"📡 Нет сигнала", cls:"offline", color:"#9ca3af", kind:"offline" };
+  if(!point || !Number.isFinite(Number(point.timestamp || 0))){
+    return { text:"📡 Нет сигнала", cls:"offline", color:"#9ca3af", kind:"offline" };
+  }
+
   const ts = Number(point.timestamp || 0);
-  if(Math.max(0, Date.now() - ts) > offlineMs) return { text:"📡 Нет сигнала", cls:"offline", color:"#9ca3af", kind:"offline" };
+  if(Math.max(0, Date.now() - ts) > offlineMs){
+    return { text:"📡 Нет сигнала", cls:"offline", color:"#9ca3af", kind:"offline" };
+  }
+
   const movementState = String(point.movementState ?? point.movement_state ?? "").toLowerCase();
-  if(["no_signal","nosignal","offline"].includes(movementState)) return { text:"📡 Нет сигнала", cls:"offline", color:"#9ca3af", kind:"offline" };
-  if(["moving","move"].includes(movementState)) return { text:"🚗 Движение", cls:"online", color:"#22c55e", kind:"moving" };
-  if(["long_stopped","longstopped","stop_long"].includes(movementState)) return { text:"🅿 Долгая стоянка", cls:"offline", color:"#ef4444", kind:"stop_long" };
-  if(["stopped","stop","idle","stop_short"].includes(movementState)) return { text:"⏸ Остановка", cls:"idle", color:"#eab308", kind:"stop_short" };
+  if(["no_signal","nosignal","offline"].includes(movementState)){
+    return { text:"📡 Нет сигнала", cls:"offline", color:"#9ca3af", kind:"offline" };
+  }
+  if(["moving","move"].includes(movementState)){
+    return { text:"🚗 Движение", cls:"online", color:"#22c55e", kind:"moving" };
+  }
+  if(["long_stopped","longstopped","stop_long"].includes(movementState)){
+    return { text:"🅿 Долгая стоянка", cls:"offline", color:"#ef4444", kind:"stop_long" };
+  }
+  if(["stopped","stop","idle","stop_short"].includes(movementState)){
+    return { text:"⏸ Остановка", cls:"idle", color:"#eab308", kind:"stop_short" };
+  }
+
   const speed = getPointSpeedKmh(point) ?? 0;
-  if(Number(point.accuracy || 9999) <= Number(adminSettings?.junkAccuracyMeters ?? 100) && speed >= Number(adminSettings?.moveSpeedThresholdKmh ?? 3)) return { text:"🚗 Движение", cls:"online", color:"#22c55e", kind:"moving" };
+  const acc = Number(point.accuracy || 9999);
+  if(acc <= Number(adminSettings?.junkAccuracyMeters ?? 100) && speed >= Number(adminSettings?.moveSpeedThresholdKmh ?? 3)){
+    return { text:"🚗 Движение", cls:"online", color:"#22c55e", kind:"moving" };
+  }
+
+  const stopDurationMs = Number(point.stopDurationMs ?? point.stop_duration_ms ?? 0);
+  if(Number.isFinite(stopDurationMs) && stopDurationMs >= Number(adminSettings?.stopLongMinutes ?? 5) * 60 * 1000){
+    return { text:"🅿 Долгая стоянка", cls:"offline", color:"#ef4444", kind:"stop_long" };
+  }
+
   return { text:"⏸ Остановка", cls:"idle", color:"#eab308", kind:"stop_short" };
 }
 
@@ -2829,15 +2861,16 @@ async function updateNowUI(point, sourceLabel){
     setWeatherChip("headerWeatherDynamic", "По точке", weatherIcon(3), "Ожидание координат…");
   }
   const st = statusByPoint(point);
-  liveMarker.setStyle({ color: st.color, fillColor: st.color, radius: 8, fillOpacity: 1 });
+  liveMarker.setStyle({ color: st.color, fillColor: st.color, radius: st.kind === "offline" ? 9 : 8, fillOpacity: 1, weight: st.kind === "stop_long" ? 4 : 2 });
   qs("nowStatus").innerHTML = `<span class="tag ${st.cls}" style="background:${st.color}22;border-color:${st.color};color:${st.color};font-weight:800">${st.text}</span>`;
   qs("nowSource").textContent = sourceLabel || "—";
   const nowSpeedKmh = getPointSpeedKmh(point);
-  qs("nowSpeed").textContent = nowSpeedKmh != null ? `${nowSpeedKmh.toFixed(1)} км/ч` : "—";
+  const speedSource = String(point?.speedSource ?? point?.speed_source ?? "").trim();
+  qs("nowSpeed").textContent = nowSpeedKmh != null ? `${nowSpeedKmh.toFixed(1)} км/ч${speedSource ? " · " + speedSource : ""}` : "—";
   qs("nowAccuracy").textContent = formatAccuracy(point?.accuracy);
   qs("nowUpdated").textContent = fmtTime(point?.timestamp);
   qs("nowBearing").textContent = point?.bearing != null ? `${Number(point.bearing).toFixed(0)}°` : "—";
-  qs("nowIdle").textContent = point?.timestamp ? formatIdle(Date.now()-Number(point.timestamp)) : "—";
+  qs("nowIdle").textContent = getPointIdleText(point);
   updateNowExtraFields(point);
   await handleGeofenceTransitions(point);
 }
