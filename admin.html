@@ -1151,6 +1151,8 @@ let gpsProfilesPollTimer = null;
 let gpsProfilesLastSeenJson = null;
 let lastGpsProfilesSnapshot = null;
 let suppressNextGpsProfilesToast = false;
+let manualGpsPresetKind = "";
+let manualGpsPresetUntilMs = 0;
 let suppressHistoryMapInteraction = false;
 let eventJournalNotifyInitialized = false;
 let eventJournalSeenNotifyKeys = new Set();
@@ -3401,7 +3403,7 @@ function readGpsProfilesFromControls(){ return normalizeGpsProfilesShape({ norma
 function detectGpsPresetKeyFromProfiles(profiles){
   const p = normalizeGpsProfilesShape(profiles);
   for(const [key, preset] of Object.entries(GPS_PRESETS)){
-    const pp = normalizeGpsProfilesShape(preset.profiles);
+    const pp = normalizeGpsProfilesShape(preset);
     if(p.normal.intervalMs === pp.normal.intervalMs &&
        p.normal.minDistanceM === pp.normal.minDistanceM &&
        p.live.intervalMs === pp.live.intervalMs &&
@@ -3411,6 +3413,39 @@ function detectGpsPresetKeyFromProfiles(profiles){
   }
   return "";
 }
+
+function gpsPresetKindFromAndroidPreset(preset){
+  const p = String(preset || "").toLowerCase();
+  if(p === "accurate" || p === "fast") return "fast";
+  if(p === "economy" || p === "eco") return "eco";
+  return "balanced";
+}
+
+function holdManualGpsPreset(kind, ms = 15000){
+  manualGpsPresetKind = gpsPresetKindFromAndroidPreset(kind);
+  manualGpsPresetUntilMs = Date.now() + ms;
+}
+
+function clearManualGpsPresetHold(){
+  manualGpsPresetKind = "";
+  manualGpsPresetUntilMs = 0;
+}
+
+function getDeviceAppliedPresetKind(point){
+  if(!point) return "";
+  const n = {
+    intervalMs: Number(point?.appliedGpsProfile?.normal?.intervalMs ?? point?.appliedGpsNormalIntervalMs ?? 0),
+    minDistanceM: Number(point?.appliedGpsProfile?.normal?.minDistanceM ?? point?.appliedGpsNormalDistanceM ?? 0)
+  };
+  const l = {
+    intervalMs: Number(point?.appliedGpsProfile?.live?.intervalMs ?? point?.appliedGpsLiveIntervalMs ?? 0),
+    minDistanceM: Number(point?.appliedGpsProfile?.live?.minDistanceM ?? point?.appliedGpsLiveDistanceM ?? 0)
+  };
+  if(!n.intervalMs && !n.minDistanceM && !l.intervalMs && !l.minDistanceM) return "";
+  return detectGpsPresetKeyFromProfiles({normal:n, live:l});
+}
+
+
 function setGpsPresetActiveButton(kind){
   const normalized = String(kind || "").toLowerCase();
   const activeId =
@@ -3451,8 +3486,17 @@ function forceGpsButtonColorLater(kind){
 }
 
 function syncGpsPresetButtons(){
-  const activeKey = detectGpsPresetKeyFromProfiles(readGpsProfilesFromControls());
-  setGpsPresetActiveButton(activeKey || "balanced");
+  const deviceKind = getDeviceAppliedPresetKind(getCurrentPointForGpsProfiles());
+  if(manualGpsPresetKind && Date.now() < manualGpsPresetUntilMs){
+    if(deviceKind && deviceKind === manualGpsPresetKind){
+      clearManualGpsPresetHold();
+    }else{
+      setGpsPresetActiveButton(manualGpsPresetKind);
+      return;
+    }
+  }
+  const activeKey = deviceKind || detectGpsPresetKeyFromProfiles(readGpsProfilesFromControls()) || "balanced";
+  setGpsPresetActiveButton(activeKey);
 }
 
 function showGpsProfileSelectionNow(sourceLabel = "Админка"){
@@ -3477,16 +3521,19 @@ async function applyGpsPreset(kind){
   const preset = adminPresetToAndroidPreset(kind);
   const btnKind = preset === "accurate" ? "fast" : preset === "economy" ? "eco" : "balanced";
 
+  holdManualGpsPreset(btnKind);
   forceGpsButtonColorLater(btnKind);
 
   adminSettings.gpsProfiles = profilesForAndroidPreset ? profilesForAndroidPreset(preset) : gpsPresetProfile(btnKind);
   setGpsProfileControlsFromState();
 
+  holdManualGpsPreset(btnKind);
   forceGpsButtonColorLater(btnKind);
   showGpsProfileSelectionNow("Админка");
 
   await saveGpsSettings({silent:false, label: GPS_PRESETS[btnKind]?.label || "Профиль", preset});
 
+  holdManualGpsPreset(btnKind);
   forceGpsButtonColorLater(btnKind);
   showGpsProfileSelectionNow("Админка");
 }
@@ -3495,9 +3542,10 @@ function bindGpsSettingsControls(){
   const bind = (id, kind) => {
     const btn = qs(id);
     if(!btn) return;
-    btn.onpointerdown = () => forceGpsButtonColorLater(kind);
-    btn.onmousedown = () => forceGpsButtonColorLater(kind);
+    btn.onpointerdown = () => { holdManualGpsPreset(kind); forceGpsButtonColorLater(kind); };
+    btn.onmousedown = () => { holdManualGpsPreset(kind); forceGpsButtonColorLater(kind); };
     btn.onclick = () => {
+      holdManualGpsPreset(kind);
       forceGpsButtonColorLater(kind);
       applyGpsPreset(kind).catch(e=>showToast(errText(e), "error", 4200));
     };
@@ -3508,9 +3556,11 @@ function bindGpsSettingsControls(){
   bind('gpsPresetEcoBtn', 'eco');
 
   if(qs('gpsResetDefaultsBtn')) qs('gpsResetDefaultsBtn').onclick = async()=>{
+    holdManualGpsPreset('balanced');
     forceGpsButtonColorLater('balanced');
     adminSettings.gpsProfiles = profilesForAndroidPreset ? profilesForAndroidPreset('balanced') : gpsPresetProfile(GPS_DEFAULT_PRESET);
     setGpsProfileControlsFromState();
+    holdManualGpsPreset('balanced');
     forceGpsButtonColorLater('balanced');
     showGpsProfileSelectionNow("Админка");
     await saveGpsSettings({silent:false, label:"Баланс", preset:"balanced"});
