@@ -181,6 +181,38 @@
       .row>*{width:100%}
       #historyMap,#liveMap,#sessionMap,#geofenceMap{height:320px}
     }
+  
+    /* GPS/admin settings layout fix */
+    .settings-actions-card{overflow:hidden}
+    .settings-tools-layout{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(360px,.65fr);gap:16px;align-items:start;margin-top:12px}
+    .settings-side-column{display:grid;gap:16px;align-items:start}
+    .gpsCardClean{margin:0!important;background:linear-gradient(180deg,rgba(17,24,39,.98),rgba(15,23,42,.96));border-radius:24px;padding:18px;border-color:rgba(148,163,184,.16)}
+    .gpsCardClean h3,.backupCardClean h3,.importCardClean h3{margin-bottom:10px;font-size:20px}
+    .gpsHelpText{color:var(--muted);font-size:13px;line-height:1.5;margin:0 0 14px}
+    .gpsPresetButtons{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 14px!important}
+    .gpsPresetButtons button{min-width:112px;border-radius:14px;padding:11px 16px;font-weight:800;transition:transform .15s ease, box-shadow .15s ease, background .15s ease}
+    .gpsPresetButtons button:hover{transform:translateY(-1px)}
+    .gpsPresetButtons button.active{background:#15803d!important;box-shadow:0 10px 22px rgba(21,128,61,.26)}
+    .gpsPresetInfoGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:12px 0}
+    .gpsPresetInfo{padding:14px 16px;border-radius:18px;border:1px solid rgba(148,163,184,.14);background:rgba(255,255,255,.035);min-height:92px}
+    .gpsPresetInfo .label{margin-bottom:8px;color:#93c5fd}
+    .gpsPresetInfo .value{font-size:18px;line-height:1.28;white-space:normal;word-break:normal}
+    .gpsHiddenControls{display:none!important}
+    .gpsCurrentLine{margin-top:12px!important;padding:14px 16px!important;border-radius:18px!important;background:rgba(30,41,59,.54)!important;font-weight:700}
+    .gpsStatusGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:12px}
+    .gpsStatusGrid .stat{min-height:96px;display:flex;flex-direction:column;justify-content:center;overflow:hidden}
+    .gpsStatusGrid .value{font-size:18px;line-height:1.25;word-break:normal;overflow-wrap:anywhere}
+    .gpsActionsClean{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px!important}
+    .gpsActionsClean button{border-radius:14px;padding:11px 14px;font-weight:800}
+    .backupCardClean,.importCardClean{margin:0!important;border-radius:24px;padding:18px;background:rgba(17,24,39,.88)}
+    .backupCardClean .toolbar,.importCardClean .toolbar{display:flex;flex-direction:column;align-items:stretch;gap:10px;margin-top:10px}
+    .backupCardClean button,.importCardClean button{width:100%;border-radius:14px;justify-content:center}
+    .backupCardClean .notice{font-size:12px;margin-top:12px}
+    .importCardClean input[type=file]{width:100%;max-width:100%;background:#0b1220;border-radius:14px}
+    @media (max-width:1180px){.settings-tools-layout{grid-template-columns:1fr}.settings-side-column{grid-template-columns:1fr 1fr}.gpsStatusGrid{grid-template-columns:repeat(4,minmax(0,1fr))}}
+    @media (max-width:900px){.gpsPresetInfoGrid,.gpsStatusGrid,.settings-side-column{grid-template-columns:1fr 1fr}}
+    @media (max-width:640px){.gpsPresetInfoGrid,.gpsStatusGrid,.settings-side-column{grid-template-columns:1fr}.gpsPresetButtons button{flex:1;min-width:0}}
+
   </style>
 </head>
 <body>
@@ -718,69 +750,65 @@
           </div>
         </div>
 
-        <div class="card" style="margin-top:12px">
-          <h3>Частота GPS</h3>
-                    <div class="toolbar" style="margin-top:10px">
-            <button id="gpsPresetFastBtn" class="secondary">Точно</button>
-            <button id="gpsPresetBalancedBtn" class="secondary">Баланс</button>
-            <button id="gpsPresetEcoBtn" class="secondary">Экономно</button>
+        <div class="settings-tools-layout">
+          <div class="card gpsCardClean">
+            <h3>Частота GPS</h3>
+            <p class="gpsHelpText">Профиль сохраняется сразу после нажатия. Кнопка «Сохранить» оставлена как ручное подтверждение, но для переключения она больше не нужна.</p>
+            <div class="gpsPresetButtons">
+              <button id="gpsPresetFastBtn" class="secondary">Точно</button>
+              <button id="gpsPresetBalancedBtn" class="secondary">Баланс</button>
+              <button id="gpsPresetEcoBtn" class="secondary">Экономно</button>
+            </div>
+            <div class="gpsPresetInfoGrid">
+              <div class="gpsPresetInfo"><div class="label">Точно</div><div class="value">Обычный 1s / 1м<br>Live 1s / 1м</div></div>
+              <div class="gpsPresetInfo"><div class="label">Баланс</div><div class="value">Обычный 2s / 5м<br>Live 2s / 3м</div></div>
+              <div class="gpsPresetInfo"><div class="label">Экономно</div><div class="value">Обычный 20s / 30м<br>Live 10s / 15м</div></div>
+            </div>
+            <div class="gpsHiddenControls">
+              <select id="gpsNormalIntervalSelect"></select>
+              <select id="gpsNormalDistanceSelect"></select>
+              <select id="gpsLiveIntervalSelect"></select>
+              <select id="gpsLiveDistanceSelect"></select>
+            </div>
+            <div class="notice gpsCurrentLine" id="gpsProfileCurrentText">Сейчас: обычный 2s / 5м • live 2s / 3м</div>
+            <div class="gpsStatusGrid">
+              <div class="stat"><div class="label">Текущий профиль</div><div class="value" id="gpsProfileModeText">—</div></div>
+              <div class="stat"><div class="label">Обычный применён</div><div class="value" id="gpsAppliedNormalText">—</div></div>
+              <div class="stat"><div class="label">Live применён</div><div class="value" id="gpsAppliedLiveText">—</div></div>
+              <div class="stat"><div class="label">Источник профиля</div><div class="value" id="gpsProfileSourceText">—</div></div>
+            </div>
+            <div class="gpsActionsClean">
+              <button id="gpsResetDefaultsBtn" class="secondary">Сбросить на баланс</button>
+              <button id="saveGpsSettingsBtn" class="success">Сохранить настройки GPS</button>
+            </div>
           </div>
-          <div class="grid3" style="margin-top:12px">
-            <div class="stat"><div class="label">Точно</div><div class="value">Обычный 1s / 1м<br>Live 1s / 1м</div></div>
-            <div class="stat"><div class="label">Баланс</div><div class="value">Обычный 2s / 5м<br>Live 2s / 3м</div></div>
-            <div class="stat"><div class="label">Экономно</div><div class="value">Обычный 20s / 30м<br>Live 10s / 15м</div></div>
-          </div>
-          <div style="display:none"><select id="gpsNormalIntervalSelect"></select><select id="gpsNormalDistanceSelect"></select><select id="gpsLiveIntervalSelect"></select><select id="gpsLiveDistanceSelect"></select></div>
-          <div class="notice" id="gpsProfileCurrentText" style="margin-top:12px">Сейчас: обычный 2s / 5м • live 2s / 3м</div>
-          <div class="grid4" style="margin-top:12px">
-  <div class="stat">          <div class="grid4" style="margin-top:12px">
-  <div class="stat">
-    <div class="label">Текущий профиль</div>
-    <div class="value" id="gpsProfileModeText">—</div>
-  </div>
-  <div class="stat">
-    <div class="label">Обычный применён</div>
-    <div class="value" id="gpsAppliedNormalText">—</div>
-  </div>
-  <div class="stat">
-    <div class="label">Live применён</div>
-    <div class="value" id="gpsAppliedLiveText">—</div>
-  </div>
-  <div class="stat">
-    <div class="label">Источник профиля</div>
-    <div class="value" id="gpsProfileSourceText">—</div>
-  </div>
-</div>
-          <div class="toolbar">
-            <button id="gpsResetDefaultsBtn" class="secondary">Сбросить GPS по умолчанию</button>
-            <button id="saveGpsSettingsBtn" class="success">Сохранить настройки GPS</button>
+          <div class="settings-side-column">
+            <div class="card backupCardClean">
+              <h3>Backup / Restore</h3>
+              <div class="toolbar">
+                <button id="backupNowBtn" class="secondary">Создать backup сейчас</button>
+                <button id="downloadBackupBtn" class="secondary">Скачать backup</button>
+                <button id="restoreBackupBtn" class="warn">Восстановить backup</button>
+                <input id="restoreBackupFile" type="file" accept=".json" style="display:none">
+              </div>
+              <div class="notice smallMuted">Backup сохраняется в Firebase не чаще раза в месяц и хранится максимум 3 последних копии.</div>
+              <div class="value" id="lastBackupText" style="margin-top:8px">Последний backup: —</div>
+              <div style="overflow:auto">
+                <table>
+                  <thead><tr><th>Дата</th><th>Размер</th><th>Состав</th><th>Действия</th></tr></thead>
+                  <tbody id="backupsTbody"></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="card importCardClean">
+              <h3>Импорт</h3>
+              <div class="toolbar">
+                <input id="importDataFile" type="file" accept=".json,.csv">
+                <button id="importDataBtn" class="secondary">Импортировать данные</button>
+              </div>
+            </div>
           </div>
         </div>
-
-        <div class="card" style="margin-top:12px">
-          <h3>Backup / Restore</h3>
-          <div class="toolbar">
-            <button id="backupNowBtn" class="secondary">Создать backup сейчас</button>
-            <button id="downloadBackupBtn" class="secondary">Скачать backup</button>
-            <button id="restoreBackupBtn" class="warn">Восстановить backup</button>
-            <input id="restoreBackupFile" type="file" accept=".json" style="display:none">
-          </div>
-          <div class="notice smallMuted">Backup сохраняется в Firebase не чаще раза в месяц и хранится максимум 3 последних копии.</div>
-          <div class="value" id="lastBackupText" style="margin-top:8px">Последний backup: —</div>
-          <div style="overflow:auto">
-            <table>
-              <thead><tr><th>Дата</th><th>Размер</th><th>Состав</th><th>Действия</th></tr></thead>
-              <tbody id="backupsTbody"></tbody>
-            </table>
-          </div>
-        </div>
-
-        <div class="card" style="margin-top:12px">
-          <h3>Импорт</h3>
-          <div class="toolbar">
-            <input id="importDataFile" type="file" accept=".json,.csv">
-            <button id="importDataBtn" class="secondary">Импортировать данные</button>
-          </div>
         </div>
       </div>
     </div>
@@ -3027,7 +3055,7 @@ function initGpsSettingsControls(){
   fillSelectOptions('gpsNormalDistanceSelect', [1,5,30], ["1 м","5 м","30 м"]);
   fillSelectOptions('gpsLiveDistanceSelect', [1,3,15], ["1 м","3 м","15 м"]);
 }
-function setGpsPresetButtonsActive(kind){ const map = { fast: 'gpsPresetFastBtn', balanced: 'gpsPresetBalancedBtn', eco: 'gpsPresetEcoBtn' }; Object.entries(map).forEach(([preset, id])=>{ const btn = qs(id); if(btn) btn.className = preset === kind ? "success" : "secondary"; }); }
+function setGpsPresetButtonsActive(kind){ const map = { fast: 'gpsPresetFastBtn', balanced: 'gpsPresetBalancedBtn', eco: 'gpsPresetEcoBtn' }; Object.entries(map).forEach(([preset, id])=>{ const btn = qs(id); if(btn) btn.className = preset === kind ? "success active" : "secondary"; }); }
 function setGpsProfileControlsFromState(){
   ensureGpsProfiles(); initGpsSettingsControls(); const p = adminSettings.gpsProfiles;
   if(qs('gpsNormalIntervalSelect')) qs('gpsNormalIntervalSelect').value = String(p.normal.intervalMs);
@@ -3038,12 +3066,16 @@ function setGpsProfileControlsFromState(){
 }
 function readGpsProfilesFromControls(){ return normalizeGpsProfilesShape({ normal: { intervalMs: Number(qs('gpsNormalIntervalSelect')?.value || 2000), minDistanceM: Number(qs('gpsNormalDistanceSelect')?.value || 5) }, live: { intervalMs: Number(qs('gpsLiveIntervalSelect')?.value || 2000), minDistanceM: Number(qs('gpsLiveDistanceSelect')?.value || 3) } }); }
 function refreshGpsProfileCurrentText(){ const box = qs('gpsProfileCurrentText'); if(!box) return; const profiles = readGpsProfilesFromControls(); box.textContent = `Сейчас: обычный ${formatGpsProfileLine(profiles.normal)} • live ${formatGpsProfileLine(profiles.live)}`; updateGpsProfilesUiFromData(getCurrentPointForGpsProfiles()); }
-function applyGpsPreset(kind){ adminSettings.gpsProfiles = gpsPresetProfile(kind); setGpsProfileControlsFromState(); }
+async function applyGpsPreset(kind){
+  adminSettings.gpsProfiles = gpsPresetProfile(kind);
+  setGpsProfileControlsFromState();
+  await saveGpsSettings({silent:false, label: GPS_PRESETS[kind]?.label || "Профиль"});
+}
 function bindGpsSettingsControls(){
-  if(qs('gpsPresetFastBtn')) qs('gpsPresetFastBtn').onclick = ()=>applyGpsPreset('fast');
-  if(qs('gpsPresetBalancedBtn')) qs('gpsPresetBalancedBtn').onclick = ()=>applyGpsPreset('balanced');
-  if(qs('gpsPresetEcoBtn')) qs('gpsPresetEcoBtn').onclick = ()=>applyGpsPreset('eco');
-  if(qs('gpsResetDefaultsBtn')) qs('gpsResetDefaultsBtn').onclick = async()=>{ adminSettings.gpsProfiles = gpsPresetProfile(GPS_DEFAULT_PRESET); setGpsProfileControlsFromState(); await safeAction("Сброс настроек GPS", saveGpsSettings, "Настройки GPS сброшены"); };
+  if(qs('gpsPresetFastBtn')) qs('gpsPresetFastBtn').onclick = ()=>safeAction("GPS: Точно", ()=>applyGpsPreset('fast'), "Профиль GPS: Точно");
+  if(qs('gpsPresetBalancedBtn')) qs('gpsPresetBalancedBtn').onclick = ()=>safeAction("GPS: Баланс", ()=>applyGpsPreset('balanced'), "Профиль GPS: Баланс");
+  if(qs('gpsPresetEcoBtn')) qs('gpsPresetEcoBtn').onclick = ()=>safeAction("GPS: Экономно", ()=>applyGpsPreset('eco'), "Профиль GPS: Экономно");
+  if(qs('gpsResetDefaultsBtn')) qs('gpsResetDefaultsBtn').onclick = async()=>{ adminSettings.gpsProfiles = gpsPresetProfile(GPS_DEFAULT_PRESET); setGpsProfileControlsFromState(); await safeAction("Сброс настроек GPS", ()=>saveGpsSettings({silent:true}), "GPS сброшен на баланс"); };
 }
 function normalizeGpsProfilesShape(value){
   const src = value && typeof value === "object" ? value : {}; const normal = src.normal && typeof src.normal === "object" ? src.normal : {}; const live = src.live && typeof src.live === "object" ? src.live : {};
@@ -3169,16 +3201,20 @@ async function saveAdminUiSettings(){
   setupAutoRefresh();
 }
 
-async function saveGpsSettings(){
+async function saveGpsSettings(options = {}){
   adminSettings.gpsProfiles = readGpsProfilesFromControls();
   suppressNextGpsProfilesToast = true;
   lastGpsProfilesSnapshot = normalizeGpsProfilesShape(adminSettings.gpsProfiles);
   gpsProfilesLastSeenJson = JSON.stringify(lastGpsProfilesSnapshot);
   await update(ref(db,"adminSettings/config"), {
-    gpsProfiles: adminSettings.gpsProfiles
+    gpsProfiles: adminSettings.gpsProfiles,
+    gpsProfileUpdatedAt: Date.now(),
+    gpsProfileSource: "admin"
   });
   refreshGpsProfileCurrentText();
-  showToast("Настройки GPS сохранены", "success");
+  if(!options.silent){
+    showToast(options.label ? `Настройки GPS сохранены: ${options.label}` : "Настройки GPS сохранены", "success");
+  }
 }
 
 function setupAutoRefresh(){
@@ -4347,7 +4383,7 @@ bindGpsSettingsControls();
 setGpsProfileControlsFromState();
 updateGeofenceDrawButtons();
 if (qs("saveAdminUiSettingsBtn")) qs("saveAdminUiSettingsBtn").onclick = async()=>{ await safeAction("Сохранение настроек", saveAdminUiSettings, "Настройки сохранены"); };
-if (qs("saveGpsSettingsBtn")) qs("saveGpsSettingsBtn").onclick = async()=>{ await safeAction("Сохранение настроек GPS", saveGpsSettings, "Настройки GPS сохранены"); };
+if (qs("saveGpsSettingsBtn")) qs("saveGpsSettingsBtn").onclick = async()=>{ await safeAction("Сохранение настроек GPS", ()=>saveGpsSettings({silent:true}), "Настройки GPS сохранены"); };
 if (qs("useNowPointForGeofenceBtn")) qs("useNowPointForGeofenceBtn").onclick = () => {
   const point = getSelectedLiveData()?.lastPoint || getVisibleHistoryPoints().slice(-1)[0];
   if(!point || point.latitude == null || point.longitude == null) return showToast("Нет текущей точки для геозоны", "warn");
