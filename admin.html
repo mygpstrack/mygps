@@ -1025,6 +1025,8 @@ let suppressNextGpsProfilesToast = false;
 let suppressHistoryMapInteraction = false;
 let eventJournalNotifyInitialized = false;
 let eventJournalSeenNotifyKeys = new Set();
+let liveGpsProfileNotifyInitialized = false;
+let liveGpsProfileSignatures = {};
 
 function windDirShort(deg){
   const dirs=["С","СВ","В","ЮВ","Ю","ЮЗ","З","СЗ"];
@@ -2330,6 +2332,59 @@ function getSelectedLiveData(){
 
 function getVisibleHistoryPoints(){ return qs("viewModeSelect").value==="all" ? Object.values(historyByUid).flat().sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0)) : getSelectedHistoryPoints(); }
 function getAllLastPoints(){ return Object.entries(liveByUid).map(([uid,live])=>({uid,point:normalizeLivePointFromRoot(live)})).filter(item=>item.point && item.point.latitude!=null && item.point.longitude!=null); }
+
+function getAppliedGpsSignatureFromPoint(point){
+  if(!point || typeof point !== "object") return "";
+  const hasApplied =
+    !!point.appliedGpsProfile ||
+    point.appliedGpsNormalIntervalMs != null ||
+    point.appliedGpsNormalDistanceM != null ||
+    point.appliedGpsLiveIntervalMs != null ||
+    point.appliedGpsLiveDistanceM != null;
+  if(!hasApplied) return "";
+
+  const normal = {
+    intervalMs: Number(point?.appliedGpsProfile?.normal?.intervalMs ?? point?.appliedGpsNormalIntervalMs ?? 0),
+    minDistanceM: Number(point?.appliedGpsProfile?.normal?.minDistanceM ?? point?.appliedGpsNormalDistanceM ?? 0)
+  };
+  const live = {
+    intervalMs: Number(point?.appliedGpsProfile?.live?.intervalMs ?? point?.appliedGpsLiveIntervalMs ?? 0),
+    minDistanceM: Number(point?.appliedGpsProfile?.live?.minDistanceM ?? point?.appliedGpsLiveDistanceM ?? 0)
+  };
+
+  if(!normal.intervalMs && !normal.minDistanceM && !live.intervalMs && !live.minDistanceM) return "";
+  return JSON.stringify({ normal, live });
+}
+
+function getAppliedGpsHumanTextFromSignature(sig){
+  try{
+    const parsed = JSON.parse(sig);
+    return `обычный ${formatGpsProfileLine(parsed.normal)} • live ${formatGpsProfileLine(parsed.live)}`;
+  }catch(e){
+    return "GPS-профиль изменён";
+  }
+}
+
+function notifyLiveGpsProfileChanges(rawLiveByUid){
+  const next = {};
+  Object.entries(rawLiveByUid || {}).forEach(([uid, live]) => {
+    const point = normalizeLivePointFromRoot(live);
+    const sig = getAppliedGpsSignatureFromPoint(point);
+    if(!sig) return;
+    next[uid] = sig;
+
+    const prev = liveGpsProfileSignatures[uid];
+    if(liveGpsProfileNotifyInitialized && prev && prev !== sig){
+      const selectedOnly = qs("viewModeSelect")?.value !== "all";
+      if(!selectedOnly || !selectedUid || uid === selectedUid){
+        const name = getDisplayName(uid) || uid || "устройство";
+        showToast(`📡 ${name}: частота GPS изменилась — ${getAppliedGpsHumanTextFromSignature(sig)}`, "info", 4200);
+      }
+    }
+  });
+  liveGpsProfileSignatures = next;
+  liveGpsProfileNotifyInitialized = true;
+}
 
 
 function updateTodaySummary(){
@@ -4682,7 +4737,12 @@ onAuthStateChanged(auth, async user => {
   setDefaultPeriodToday();
   await ensureUserMeta(user);
 
-  onValue(ref(db, "live"), snap => { liveByUid=snap.val()||{}; updateUsage(); updateNowFromAvailableSources(); });
+  onValue(ref(db, "live"), snap => {
+    liveByUid=snap.val()||{};
+    notifyLiveGpsProfileChanges(liveByUid);
+    updateUsage();
+    updateNowFromAvailableSources();
+  });
   onValue(ref(db, "history"), snap => {
     const raw=snap.val()||{};
     historyByUid={};
