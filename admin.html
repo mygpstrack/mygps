@@ -864,7 +864,7 @@ const provider = new GoogleAuthProvider();
 const qs = (id) => document.getElementById(id);
 
 let historyByUid = {}, liveByUid = {}, allSessions = {}, selectedUid = "", allUsers = [];
-let currentFiltered = [], deletionsLog = [], actionLogs = [], appEventLogs = [];
+let currentFiltered = [], deletionsLog = [], actionLogs = [], appEventLogs = [], liveEventLogs = [];
 let liveAutoCenter = true, createdShareUrl = "", speedChart = null, distanceChart = null, currentNowSourceLabel = "—";
 let usersMeta = {};
 let adminSettings = {
@@ -3156,6 +3156,7 @@ function renderGeofences(){
     if(!confirm(`Удалить геозону «${item.name}»?`)) return;
     adminSettings.geofences = adminSettings.geofences.filter(x => x.id !== id);
     await update(ref(db, "adminSettings/config"), { geofences: adminSettings.geofences });
+    await publishGeofencesToDevices(adminSettings.geofences);
     await logAction("geofence_delete", `Удалена геозона ${item.name}`);
     renderGeofences();
     resetGeofenceForm();
@@ -3178,6 +3179,7 @@ async function saveGeofenceFromForm(){
   if(idx >= 0) list[idx] = item; else list.push(item);
   adminSettings.geofences = list;
   await update(ref(db, "adminSettings/config"), { geofences: list });
+  await publishGeofencesToDevices(list);
   await logAction(idx >= 0 ? "geofence_update" : "geofence_create", `${idx >= 0 ? "Обновлена" : "Создана"} геозона ${item.name}`);
   renderGeofences();
   resetGeofenceForm();
@@ -3256,8 +3258,14 @@ function syncGpsPresetButtons(){
     const btn = qs(id);
     if(!btn) return;
     const active = key === activeKey;
-    btn.classList.toggle("active", active);
-    btn.classList.toggle("secondary", !active);
+    btn.classList.remove("active");
+    btn.classList.add("secondary");
+    btn.setAttribute("aria-pressed", "false");
+    if(active){
+      btn.classList.add("active");
+      btn.classList.remove("secondary");
+      btn.setAttribute("aria-pressed", "true");
+    }
   });
 }
 function showGpsProfileSelectionNow(sourceLabel = "Админка"){
@@ -3415,6 +3423,101 @@ async function saveAdminUiSettings(){
   setupAutoRefresh();
 }
 
+async 
+function getAdminTargetUids(){
+  const ids = new Set();
+  if(selectedUid) ids.add(selectedUid);
+  if(!selectedUid){
+    Object.keys(liveByUid || {}).forEach(uid => { if(uid && uid !== "_init") ids.add(uid); });
+    (allUsers || []).forEach(u => {
+      const uid = u?.uid || u?.id || u?.key;
+      if(uid) ids.add(uid);
+    });
+  }
+  return [...ids].filter(Boolean);
+}
+
+function gpsPresetKeyFromProfiles(profiles){
+  const key = detectGpsPresetKeyFromProfiles(profiles);
+  if(key === "fast") return "accurate";
+  if(key === "eco") return "economy";
+  return "balanced";
+}
+
+async function publishGpsCommandToDevices(profiles){
+  const targets = getAdminTargetUids();
+  if(!targets.length){
+    showToast("Выбери устройство, чтобы отправить GPS-профиль", "warn", 3200);
+    return;
+  }
+  const now = Date.now();
+  const preset = gpsPresetKeyFromProfiles(profiles);
+  const updates = {};
+  targets.forEach(uid => {
+    updates[`live/${uid}/control/gpsProfiles`] = profiles;
+    updates[`live/${uid}/control/gpsProfilePreset`] = preset;
+    updates[`live/${uid}/control/gpsProfileUpdatedAt`] = now;
+    updates[`live/${uid}/control/gpsProfileSource`] = "admin";
+    updates[`live/${uid}/requestedGpsProfiles`] = profiles;
+    updates[`live/${uid}/requestedGpsProfilePreset`] = preset;
+    updates[`live/${uid}/requestedGpsProfileUpdatedAt`] = now;
+  });
+  await update(ref(db), updates);
+}
+
+function geofenceListToLiveMap(list){
+  const out = {};
+  normalizeGeofencesShape(list).forEach((item, index) => {
+    const id = item.id || `geofence_${index}_${Date.now()}`;
+    out[id] = {
+      id,
+      name: item.name || "Без названия",
+      lat: Number(item.lat),
+      lon: Number(item.lon),
+      lng: Number(item.lon),
+      latitude: Number(item.lat),
+      longitude: Number(item.lon),
+      radius: Number(item.radiusM || item.radius || 100),
+      radiusM: Number(item.radiusM || item.radius || 100),
+      updatedAt: Date.now()
+    };
+  });
+  return out;
+}
+
+async function publishGeofencesToDevices(list){
+  const targets = getAdminTargetUids();
+  if(!targets.length) return;
+  const liveMap = geofenceListToLiveMap(list);
+  const updates = {};
+  targets.forEach(uid => {
+    updates[`live/${uid}/geofences`] = liveMap;
+    updates[`live/${uid}/geofencesUpdatedAt`] = Date.now();
+  });
+  await update(ref(db), updates);
+}
+
+function normalizeLiveEventJournalSnapshot(liveRoot){
+  const out = [];
+  Object.entries(liveRoot || {}).forEach(([uid, live]) => {
+    const events = live?.eventJournal || live?.geofenceEvents || {};
+    Object.entries(events || {}).forEach(([eventId, item]) => {
+      if(!item || typeof item !== "object") return;
+      const rawType = getGeofenceTypeForJournalItem(item);
+      out.push({
+        ...item,
+        uid,
+        eventId,
+        ts: Number(item.timestamp || item.ts || 0),
+        _type: rawType,
+        actor: getDisplayName(uid) || uid || "—",
+        description: item.description || item.geofenceName || item.zoneName || rawType
+      });
+    });
+  });
+  return out.sort((a,b)=>Number(b.ts||0)-Number(a.ts||0));
+}
+
 async function saveGpsSettings(options = {}){
   adminSettings.gpsProfiles = readGpsProfilesFromControls();
   suppressNextGpsProfilesToast = true;
@@ -3422,9 +3525,11 @@ async function saveGpsSettings(options = {}){
   gpsProfilesLastSeenJson = JSON.stringify(lastGpsProfilesSnapshot);
   await update(ref(db,"adminSettings/config"), {
     gpsProfiles: adminSettings.gpsProfiles,
+    gpsProfilePreset: gpsPresetKeyFromProfiles(adminSettings.gpsProfiles),
     gpsProfileUpdatedAt: Date.now(),
     gpsProfileSource: "admin"
   });
+  await publishGpsCommandToDevices(adminSettings.gpsProfiles);
   showGpsProfileSelectionNow("Админка");
   if(!options.silent){
     showToast(options.label ? `Настройки GPS сохранены: ${options.label}` : "Настройки GPS сохранены", "success");
@@ -3954,7 +4059,8 @@ function renderJournal(){
   const combined=[
     ...deletionsLog.map(item=>({...item,_type:item.kind||"deletion"})),
     ...actionLogs.map(item=>({...item,_type:item.kind||"action"})),
-    ...filteredAppEvents
+    ...filteredAppEvents,
+    ...liveEventLogs.filter(item => !selectedOnly || !selectedUser || item.uid === selectedUser)
   ].sort((a,b)=>Number(b.ts||0)-Number(a.ts||0));
   if(!combined.length){
     tbody.innerHTML=`<tr><td colspan="6">Событий пока нет</td></tr>`;
@@ -4772,8 +4878,10 @@ onAuthStateChanged(auth, async user => {
 
   onValue(ref(db, "live"), snap => {
     liveByUid=snap.val()||{};
+    liveEventLogs = normalizeLiveEventJournalSnapshot(liveByUid);
     notifyLiveGpsProfileChanges(liveByUid);
     updateUsage();
+    renderJournal();
     updateNowFromAvailableSources();
   });
   onValue(ref(db, "history"), snap => {
