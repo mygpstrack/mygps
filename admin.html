@@ -249,6 +249,53 @@
       transform:none;
     }
 
+
+    /* Final UI state colors: GPS presets + replay controls */
+    #gpsPresetFastBtn.gps-active,
+    #gpsPresetBalancedBtn.gps-active,
+    #gpsPresetEcoBtn.gps-active{
+      background:#16a34a!important;
+      color:#fff!important;
+      border:1px solid rgba(34,197,94,.75)!important;
+      box-shadow:0 10px 24px rgba(22,163,74,.32)!important;
+      transform:translateY(-1px);
+    }
+    #gpsPresetFastBtn.gps-inactive,
+    #gpsPresetBalancedBtn.gps-inactive,
+    #gpsPresetEcoBtn.gps-inactive{
+      background:#374151!important;
+      color:#e5e7eb!important;
+      border:1px solid rgba(148,163,184,.18)!important;
+      box-shadow:none!important;
+      transform:none;
+    }
+    #replayStartBtn.replay-active,
+    #replayPauseBtn.replay-active,
+    #replayResetBtn.replay-active,
+    #replaySlowerBtn.replay-active,
+    #replayFasterBtn.replay-active{
+      background:#2563eb!important;
+      color:#fff!important;
+      border:1px solid rgba(96,165,250,.75)!important;
+      box-shadow:0 10px 22px rgba(37,99,235,.28)!important;
+      transform:translateY(-1px);
+    }
+    #replayStartBtn.replay-idle,
+    #replayPauseBtn.replay-idle,
+    #replayResetBtn.replay-idle,
+    #replaySlowerBtn.replay-idle,
+    #replayFasterBtn.replay-idle{
+      background:#374151!important;
+      color:#e5e7eb!important;
+      border:1px solid rgba(148,163,184,.18)!important;
+      box-shadow:none!important;
+      transform:none;
+    }
+    #replaySeekRange{
+      accent-color:#2563eb;
+      cursor:pointer;
+    }
+
 </style>
 </head>
 <body>
@@ -2203,6 +2250,29 @@ function setReplayInfo(point){
   if(qs("replayCoordsText")) qs("replayCoordsText").textContent = point ? `${Number(point.latitude).toFixed(5)}, ${Number(point.longitude).toFixed(5)}` : "—";
 }
 
+function setReplayActiveButton(activeId = ""){
+  ["replayStartBtn","replayPauseBtn","replayResetBtn","replaySlowerBtn","replayFasterBtn"].forEach(id => {
+    const btn = qs(id);
+    if(!btn) return;
+    const active = id === activeId;
+    btn.classList.remove("success","secondary","replay-active","replay-idle");
+    btn.classList.add(active ? "replay-active" : "replay-idle");
+    btn.style.background = active ? "#2563eb" : "#374151";
+    btn.style.color = "#fff";
+    btn.style.boxShadow = active ? "0 10px 22px rgba(37,99,235,.28)" : "none";
+  });
+}
+
+function flashReplayButton(id){
+  setReplayActiveButton(id);
+  clearTimeout(window.__replayButtonFlashTimer);
+  if(id !== "replayStartBtn" && id !== "replayPauseBtn"){
+    window.__replayButtonFlashTimer = setTimeout(() => {
+      setReplayActiveButton(replayState.playing ? "replayStartBtn" : "");
+    }, 650);
+  }
+}
+
 function updateReplaySeek(){
   const seek = qs("replaySeekRange");
   if(!seek) return;
@@ -2243,6 +2313,7 @@ function replayStopInternal(resetIndex = false){
   clearReplayTimer();
   replayState.playing = false;
   if(resetIndex) replayState.index = 0;
+  setReplayActiveButton("");
   renderReplayPoint(false);
 }
 
@@ -2250,6 +2321,7 @@ function replayTick(){
   if(!replayState.playing) return;
   if(replayState.index >= replayState.points.length - 1){
     replayState.playing = false;
+    setReplayActiveButton("");
     renderReplayPoint(false);
     showToast("Replay завершён", "info");
     return;
@@ -2272,6 +2344,7 @@ function replayLoad(resetIndex = false){
 }
 
 function replayStart(){
+  setReplayActiveButton("replayStartBtn");
   replayLoad(false);
   if(!replayState.points.length){
     showToast("Нет точек для replay. Сначала обнови историю или выбери период с точками.", "warn");
@@ -2287,18 +2360,21 @@ function replayStart(){
 }
 
 function replayPause(){
+  setReplayActiveButton("replayPauseBtn");
   clearReplayTimer();
   replayState.playing = false;
   renderReplayPoint(false);
 }
 
 function replayReset(){
+  flashReplayButton("replayResetBtn");
   replayStopInternal(true);
   if(replayTrail) replayTrail.setLatLngs([]);
   renderReplayPoint(true);
 }
 
 function replayFaster(){
+  flashReplayButton("replayFasterBtn");
   replayState.stepMs = Math.max(120, Math.round(replayState.stepMs * 0.7));
   renderReplayPoint(false);
   if(replayState.playing){
@@ -2308,6 +2384,7 @@ function replayFaster(){
 }
 
 function replaySlower(){
+  flashReplayButton("replaySlowerBtn");
   replayState.stepMs = Math.min(4000, Math.round(replayState.stepMs * 1.4));
   renderReplayPoint(false);
   if(replayState.playing){
@@ -3299,9 +3376,12 @@ function setGpsPresetActiveButton(kind){
     const btn = qs(id);
     if(!btn) return;
     const active = id === activeId;
-    btn.classList.remove("active", "secondary", "success");
-    btn.classList.add(active ? "active" : "secondary");
+    btn.classList.remove("active","secondary","success","gps-active","gps-inactive");
+    btn.classList.add(active ? "gps-active" : "gps-inactive");
     btn.setAttribute("aria-pressed", active ? "true" : "false");
+    btn.style.background = active ? "#16a34a" : "#374151";
+    btn.style.color = "#fff";
+    btn.style.boxShadow = active ? "0 10px 24px rgba(22,163,74,.32)" : "none";
   });
 }
 
@@ -3309,6 +3389,7 @@ function syncGpsPresetButtons(){
   const activeKey = detectGpsPresetKeyFromProfiles(readGpsProfilesFromControls());
   setGpsPresetActiveButton(activeKey || "balanced");
 }
+
 function showGpsProfileSelectionNow(sourceLabel = "Админка"){
   const profiles = readGpsProfilesFromControls();
   const currentEl = qs("gpsProfileCurrentText");
@@ -3361,7 +3442,7 @@ function bindGpsSettingsControls(){
   };
   if(qs('gpsResetDefaultsBtn')) qs('gpsResetDefaultsBtn').onclick = async()=>{
     setGpsPresetActiveButton('balanced');
-    adminSettings.gpsProfiles = profilesForAndroidPreset('balanced');
+    adminSettings.gpsProfiles = profilesForAndroidPreset ? profilesForAndroidPreset('balanced') : gpsPresetProfile(GPS_DEFAULT_PRESET);
     setGpsProfileControlsFromState();
     setGpsPresetActiveButton('balanced');
     showGpsProfileSelectionNow("Админка");
@@ -4924,12 +5005,24 @@ if (qs("replayPauseBtn")) qs("replayPauseBtn").onclick = replayPause;
 if (qs("replayResetBtn")) qs("replayResetBtn").onclick = replayReset;
 if (qs("replayFasterBtn")) qs("replayFasterBtn").onclick = replayFaster;
 if (qs("replaySlowerBtn")) qs("replaySlowerBtn").onclick = replaySlower;
-if (qs("replaySeekRange")) qs("replaySeekRange").oninput = () => {
-  if(!replayState.points.length) replayLoad(false);
-  replayPause();
-  replayState.index = Number(qs("replaySeekRange").value || 0);
-  renderReplayPoint(true);
-};
+if (qs("replaySeekRange")) {
+  const seek = qs("replaySeekRange");
+  seek.oninput = () => {
+    if(!replayState.points.length) replayLoad(false);
+    clearReplayTimer();
+    replayState.playing = false;
+    setReplayActiveButton("");
+    replayState.index = Number(seek.value || 0);
+    renderReplayPoint(false);
+  };
+  seek.onchange = () => {
+    if(!replayState.points.length) replayLoad(false);
+    replayState.index = Number(seek.value || 0);
+    renderReplayPoint(true);
+  };
+}
+setReplayActiveButton("");
+syncGpsPresetButtons();
 if (qs("backupNowBtn")) qs("backupNowBtn").onclick = async()=>{ await safeAction("Создание backup", async()=>{ await createMonthlyBackup(true); await renderBackups(); }, "Backup создан"); };
 qs("downloadBackupBtn").onclick=async()=>{
   const payload = {history:historyByUid, live:liveByUid, liveSessions:allSessions, users:usersMeta, adminSettings};
