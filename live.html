@@ -455,6 +455,12 @@ function smoothPoint(prev, cur){
 }
 
 function getMoveType(points, currentPoint){
+  const movementState = String(currentPoint?.movementState || '').toLowerCase();
+  if(['moving','move'].includes(movementState)) return 'Движение';
+  if(['stopped','stop','idle','stop_short'].includes(movementState)) return 'Остановка';
+  if(['long_stopped','longstopped','stop_long'].includes(movementState)) return 'Стоянка';
+  if(['no_signal','nosignal','offline'].includes(movementState)) return 'Нет сигнала';
+
   const sample = (points && points.length ? points : [currentPoint])
     .slice(-5)
     .map(p => Number(p.speed || 0))
@@ -492,9 +498,28 @@ function getStatusMeta(p, sessionMeta){
     return {status:'📡 Нет сигнала', signal:'Потерян', type:'offline', color:'#94a3b8'};
   }
 
+  const movementState = String(p?.movementState || '').toLowerCase();
+  if(['no_signal','nosignal','offline'].includes(movementState)){
+    return {status:'📡 Нет сигнала', signal:'Потерян', type:'offline', color:'#94a3b8'};
+  }
+  if(['moving','move'].includes(movementState)){
+    return {status:'🚗 Движение', signal:'Есть', type:'moving', color:'#22c55e'};
+  }
+  if(['long_stopped','longstopped','stop_long'].includes(movementState)){
+    return {status:'🅿 Стоянка', signal:'Есть', type:'stop_long', color:'#ef4444'};
+  }
+  if(['stopped','stop','idle','stop_short'].includes(movementState)){
+    return {status:'⏸ Остановка', signal:'Есть', type:'stop_short', color:'#f59e0b'};
+  }
+
   const isJunk = (accuracy > junkAccuracyMeters) || (speed > impossibleSpeedKmh);
   if(!isJunk && speed >= moveThreshold){
     return {status:'🚗 Движение', signal:'Есть', type:'moving', color:'#22c55e'};
+  }
+
+  const stopDurationMs = Number(p?.stopDurationMs ?? NaN);
+  if(Number.isFinite(stopDurationMs) && stopDurationMs >= stopLongMs){
+    return {status:'🅿 Стоянка', signal:'Есть', type:'stop_long', color:'#ef4444'};
   }
 
   if(ageMs >= stopLongMs){
@@ -595,14 +620,16 @@ function updateUi(p, expiresAt, sessionMeta, moveType){
 
   qs('d_status').innerText=meta.status;
   qs('d_status').style.color=meta.color || '#fff';
-  qs('d_speed').innerText=(Number(p.speed||0)).toFixed(1)+' км/ч';
+  qs('d_speed').innerText=(Number(p.speed||0)).toFixed(1)+' км/ч' + (p.speedSource ? ' · ' + p.speedSource : '');
   qs('d_updated').innerText=fmtClock(p.ts)+' ('+relTime(p.ts)+' назад)';
   qs('d_time').innerText=leftText;
   qs('d_bearing').innerText=gpsState;
   qs('d_coords').innerText=Number(p.lat).toFixed(5)+', '+Number(p.lng).toFixed(5);
   qs('d_signal').innerText=meta.signal;
   qs('d_tail').innerText=accuracy>0 ? Math.round(accuracy)+' м' : '—';
-  qs('d_age').innerText=relTime(p.ts)+' назад';
+  const stopDurationMs = Number(p.stopDurationMs);
+  const stopDurationText = Number.isFinite(stopDurationMs) && stopDurationMs >= 0 ? ` · простой ${fmtCountdown(stopDurationMs)}` : '';
+  qs('d_age').innerText=relTime(p.ts)+' назад'+stopDurationText;
   qs('d_type').innerText = moveType || '—';
 
   checkTimeWarnings(leftMs, !!sessionMeta?.paused);
@@ -612,13 +639,17 @@ function updateUi(p, expiresAt, sessionMeta, moveType){
 }
 
 function normalizePoint(p){
+  const speedRaw = p?.speedKmh ?? p?.speed_kmh ?? p?.speedSmoothedKmh ?? p?.speed ?? p?.speedRawKmh ?? p?.speed_raw_kmh ?? 0;
   return {
-    lat:Number(p.latitude ?? p.lat),
-    lng:Number(p.longitude ?? p.lng),
-    speed:Number(p.speed ?? 0),
-    bearing:Number(p.bearing ?? 0),
-    accuracy:Number(p.accuracy ?? p.acc ?? 0),
-    ts:Number(p.timestamp ?? p.ts ?? Date.now())
+    lat:Number(p?.latitude ?? p?.lat),
+    lng:Number(p?.longitude ?? p?.lon ?? p?.lng),
+    speed:Number(speedRaw),
+    speedSource:String(p?.speedSource ?? p?.speed_source ?? '').trim(),
+    movementState:String(p?.movementState ?? p?.movement_state ?? '').toLowerCase(),
+    stopDurationMs:Number(p?.stopDurationMs ?? p?.stop_duration_ms ?? NaN),
+    bearing:Number(p?.bearing ?? 0),
+    accuracy:Number(p?.accuracy ?? p?.acc ?? 0),
+    ts:Number(p?.timestamp ?? p?.ts ?? Date.now())
   };
 }
 
