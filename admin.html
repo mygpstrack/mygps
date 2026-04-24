@@ -3307,13 +3307,15 @@ function refreshGpsProfileCurrentText(){
   showGpsProfileSelectionNow(qs("gpsProfileSourceText")?.textContent || "Админка");
 }
 async function applyGpsPreset(kind){
-  setGpsPresetActiveButton(kind);
-  adminSettings.gpsProfiles = gpsPresetProfile(kind);
+  const preset = adminPresetToAndroidPreset(kind);
+  const btnKind = preset === "accurate" ? "fast" : preset === "economy" ? "eco" : "balanced";
+  setGpsPresetActiveButton(btnKind);
+  adminSettings.gpsProfiles = profilesForAndroidPreset(preset);
   setGpsProfileControlsFromState();
-  setGpsPresetActiveButton(kind);
+  setGpsPresetActiveButton(btnKind);
   showGpsProfileSelectionNow("Админка");
-  await saveGpsSettings({silent:false, label: GPS_PRESETS[kind]?.label || "Профиль"});
-  setGpsPresetActiveButton(kind);
+  await saveGpsSettings({silent:false, label: GPS_PRESETS[btnKind]?.label || "Профиль", preset});
+  setGpsPresetActiveButton(btnKind);
   showGpsProfileSelectionNow("Админка");
 }
 function bindGpsSettingsControls(){
@@ -3453,67 +3455,82 @@ async function saveAdminUiSettings(){
 }
 function getAdminTargetUids(){
   const ids = new Set();
-
   const add = (uid) => {
     const v = String(uid || "").trim();
     if(v && v !== "_init" && v !== "undefined" && v !== "null") ids.add(v);
   };
 
+  // If a user/device is selected, send only to this device.
   add(selectedUid);
+  if(ids.size > 0) return [...ids];
 
-  const selectCandidates = [
-    "userSelect",
-    "deviceSelect",
-    "uidSelect",
-    "liveUserSelect",
-    "viewUserSelect",
-    "selectedUserSelect"
-  ];
-  selectCandidates.forEach(id => add(qs(id)?.value));
-
+  // No selected device: send only to real devices that currently have live/<uid>.
   Object.keys(liveByUid || {}).forEach(add);
-
-  (allUsers || []).forEach(u => {
-    add(u?.uid);
-    add(u?.id);
-    add(u?.key);
-    add(u?.userId);
-  });
-
-  document.querySelectorAll("[data-uid],[data-user-uid],[data-userid]").forEach(el => {
-    add(el.dataset.uid);
-    add(el.dataset.userUid);
-    add(el.dataset.userid);
-  });
-
   return [...ids];
 }
 
-function gpsPresetKeyFromProfiles(profiles){
-  const key = detectGpsPresetKeyFromProfiles(profiles);
-  if(key === "fast") return "accurate";
-  if(key === "eco") return "economy";
+function adminPresetToAndroidPreset(kind){
+  const k = String(kind || "").toLowerCase();
+  if(k === "fast" || k === "accurate" || k === "точно") return "accurate";
+  if(k === "eco" || k === "economy" || k === "экономно") return "economy";
   return "balanced";
 }
 
-async function publishGpsCommandToDevices(profiles){
-  const targets = getAdminTargetUids();
-  if(!targets.length){
-    return 0;
+function profilesForAndroidPreset(preset){
+  const p = adminPresetToAndroidPreset(preset);
+  if(p === "accurate"){
+    return {
+      normal: { intervalMs: 1000, minDistanceM: 1 },
+      live: { intervalMs: 1000, minDistanceM: 1 }
+    };
   }
+  if(p === "economy"){
+    return {
+      normal: { intervalMs: 20000, minDistanceM: 30 },
+      live: { intervalMs: 10000, minDistanceM: 15 }
+    };
+  }
+  return {
+    normal: { intervalMs: 2000, minDistanceM: 5 },
+    live: { intervalMs: 2000, minDistanceM: 3 }
+  };
+}
+
+function gpsPresetKeyFromProfiles(profiles){
+  const p = normalizeGpsProfilesShape(profiles);
+  if(p.normal.intervalMs === 1000 && Number(p.normal.minDistanceM) === 1 && p.live.intervalMs === 1000 && Number(p.live.minDistanceM) === 1) return "accurate";
+  if(p.normal.intervalMs === 20000 && Number(p.normal.minDistanceM) === 30 && p.live.intervalMs === 10000 && Number(p.live.minDistanceM) === 15) return "economy";
+  return "balanced";
+}
+
+async function publishGpsCommandToDevices(profiles, explicitPreset = ""){
+  const targets = getAdminTargetUids();
+  if(!targets.length) return 0;
 
   const now = Date.now();
-  const preset = gpsPresetKeyFromProfiles(profiles);
+  const preset = adminPresetToAndroidPreset(explicitPreset || gpsPresetKeyFromProfiles(profiles));
+  const fixedProfiles = profilesForAndroidPreset(preset);
+  const commandId = `${now}_${preset}`;
+
+  const command = {
+    gpsProfilePreset: preset,
+    gpsProfiles: fixedProfiles,
+
+    normalIntervalMs: fixedProfiles.normal.intervalMs,
+    normalDistanceM: fixedProfiles.normal.minDistanceM,
+    liveIntervalMs: fixedProfiles.live.intervalMs,
+    liveDistanceM: fixedProfiles.live.minDistanceM,
+
+    gpsProfileUpdatedAt: now,
+    gpsProfileCommandId: commandId,
+    gpsProfileSource: "admin"
+  };
+
   const updates = {};
   targets.forEach(uid => {
-    updates[`live/${uid}/control/gpsProfiles`] = profiles;
-    updates[`live/${uid}/control/gpsProfilePreset`] = preset;
-    updates[`live/${uid}/control/gpsProfileUpdatedAt`] = now;
-    updates[`live/${uid}/control/gpsProfileSource`] = "admin";
-    updates[`live/${uid}/requestedGpsProfiles`] = profiles;
-    updates[`live/${uid}/requestedGpsProfilePreset`] = preset;
-    updates[`live/${uid}/requestedGpsProfileUpdatedAt`] = now;
+    updates[`live/${uid}/control`] = command;
   });
+
   await update(ref(db), updates);
   return targets.length;
 }
@@ -3572,27 +3589,30 @@ function normalizeLiveEventJournalSnapshot(liveRoot){
 }
 
 async function saveGpsSettings(options = {}){
-  adminSettings.gpsProfiles = readGpsProfilesFromControls();
+  const preset = adminPresetToAndroidPreset(options.preset || gpsPresetKeyFromProfiles(readGpsProfilesFromControls()));
+  adminSettings.gpsProfiles = profilesForAndroidPreset(preset);
+
   suppressNextGpsProfilesToast = true;
   lastGpsProfilesSnapshot = normalizeGpsProfilesShape(adminSettings.gpsProfiles);
   gpsProfilesLastSeenJson = JSON.stringify(lastGpsProfilesSnapshot);
 
   await update(ref(db,"adminSettings/config"), {
     gpsProfiles: adminSettings.gpsProfiles,
-    gpsProfilePreset: gpsPresetKeyFromProfiles(adminSettings.gpsProfiles),
+    gpsProfilePreset: preset,
     gpsProfileUpdatedAt: Date.now(),
     gpsProfileSource: "admin"
   });
 
-  const sentCount = await publishGpsCommandToDevices(adminSettings.gpsProfiles);
+  const sentCount = await publishGpsCommandToDevices(adminSettings.gpsProfiles, preset);
+  setGpsProfileControlsFromState();
   showGpsProfileSelectionNow("Админка");
 
   if(!options.silent){
     const label = options.label || "Профиль";
     if(sentCount > 0){
-      showToast(`Профиль GPS отправлен на устройство: ${label}`, "success", 3200);
+      showToast(`Профиль GPS отправлен: ${label}`, "success", 3200);
     }else{
-      showToast("Настройки GPS сохранены, но устройство не найдено. Выбери устройство или дождись live-данных.", "warn", 4200);
+      showToast("Профиль сохранён в админке, но live-устройство не найдено.", "warn", 4200);
     }
   }
 }
