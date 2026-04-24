@@ -225,6 +225,30 @@
       box-shadow:none!important;
     }
 
+
+    /* GPS preset buttons: exactly one active button, instant visual feedback */
+    #gpsPresetFastBtn,
+    #gpsPresetBalancedBtn,
+    #gpsPresetEcoBtn{
+      transition: background .15s ease, transform .12s ease, box-shadow .15s ease;
+    }
+    #gpsPresetFastBtn.active,
+    #gpsPresetBalancedBtn.active,
+    #gpsPresetEcoBtn.active{
+      background:#15803d!important;
+      color:#fff!important;
+      box-shadow:0 10px 22px rgba(21,128,61,.30)!important;
+      transform:translateY(-1px);
+    }
+    #gpsPresetFastBtn.secondary,
+    #gpsPresetBalancedBtn.secondary,
+    #gpsPresetEcoBtn.secondary{
+      background:#374151!important;
+      color:#fff!important;
+      box-shadow:none!important;
+      transform:none;
+    }
+
 </style>
 </head>
 <body>
@@ -3265,20 +3289,17 @@ function detectGpsPresetKeyFromProfiles(profiles){
   return "";
 }
 function setGpsPresetActiveButton(kind){
-  const map = {
-    fast: "gpsPresetFastBtn",
-    accurate: "gpsPresetFastBtn",
-    balanced: "gpsPresetBalancedBtn",
-    balance: "gpsPresetBalancedBtn",
-    eco: "gpsPresetEcoBtn",
-    economy: "gpsPresetEcoBtn"
-  };
-  const activeId = map[String(kind || "").toLowerCase()] || "";
-  ["gpsPresetFastBtn","gpsPresetBalancedBtn","gpsPresetEcoBtn"].forEach(id=>{
+  const normalized = String(kind || "").toLowerCase();
+  const activeId =
+    normalized === "fast" || normalized === "accurate" ? "gpsPresetFastBtn" :
+    normalized === "eco" || normalized === "economy" ? "gpsPresetEcoBtn" :
+    "gpsPresetBalancedBtn";
+
+  ["gpsPresetFastBtn","gpsPresetBalancedBtn","gpsPresetEcoBtn"].forEach(id => {
     const btn = qs(id);
     if(!btn) return;
     const active = id === activeId;
-    btn.classList.remove("active","secondary");
+    btn.classList.remove("active", "secondary", "success");
     btn.classList.add(active ? "active" : "secondary");
     btn.setAttribute("aria-pressed", active ? "true" : "false");
   });
@@ -3286,7 +3307,7 @@ function setGpsPresetActiveButton(kind){
 
 function syncGpsPresetButtons(){
   const activeKey = detectGpsPresetKeyFromProfiles(readGpsProfilesFromControls());
-  setGpsPresetActiveButton(activeKey || "");
+  setGpsPresetActiveButton(activeKey || "balanced");
 }
 function showGpsProfileSelectionNow(sourceLabel = "Админка"){
   const profiles = readGpsProfilesFromControls();
@@ -3309,25 +3330,42 @@ function refreshGpsProfileCurrentText(){
 async function applyGpsPreset(kind){
   const preset = adminPresetToAndroidPreset(kind);
   const btnKind = preset === "accurate" ? "fast" : preset === "economy" ? "eco" : "balanced";
+
+  // Instant UI feedback before Firebase write.
   setGpsPresetActiveButton(btnKind);
+
   adminSettings.gpsProfiles = profilesForAndroidPreset(preset);
   setGpsProfileControlsFromState();
+
+  // setGpsProfileControlsFromState can refresh UI, so force active color again.
   setGpsPresetActiveButton(btnKind);
   showGpsProfileSelectionNow("Админка");
+
   await saveGpsSettings({silent:false, label: GPS_PRESETS[btnKind]?.label || "Профиль", preset});
+
   setGpsPresetActiveButton(btnKind);
   showGpsProfileSelectionNow("Админка");
 }
 function bindGpsSettingsControls(){
-  if(qs('gpsPresetFastBtn')) qs('gpsPresetFastBtn').onclick = ()=>applyGpsPreset('fast').catch(e=>showToast(errText(e), "error", 4200));
-  if(qs('gpsPresetBalancedBtn')) qs('gpsPresetBalancedBtn').onclick = ()=>applyGpsPreset('balanced').catch(e=>showToast(errText(e), "error", 4200));
-  if(qs('gpsPresetEcoBtn')) qs('gpsPresetEcoBtn').onclick = ()=>applyGpsPreset('eco').catch(e=>showToast(errText(e), "error", 4200));
+  if(qs('gpsPresetFastBtn')) qs('gpsPresetFastBtn').onclick = ()=>{
+    setGpsPresetActiveButton('fast');
+    applyGpsPreset('fast').catch(e=>showToast(errText(e), "error", 4200));
+  };
+  if(qs('gpsPresetBalancedBtn')) qs('gpsPresetBalancedBtn').onclick = ()=>{
+    setGpsPresetActiveButton('balanced');
+    applyGpsPreset('balanced').catch(e=>showToast(errText(e), "error", 4200));
+  };
+  if(qs('gpsPresetEcoBtn')) qs('gpsPresetEcoBtn').onclick = ()=>{
+    setGpsPresetActiveButton('eco');
+    applyGpsPreset('eco').catch(e=>showToast(errText(e), "error", 4200));
+  };
   if(qs('gpsResetDefaultsBtn')) qs('gpsResetDefaultsBtn').onclick = async()=>{
-    adminSettings.gpsProfiles = gpsPresetProfile(GPS_DEFAULT_PRESET);
+    setGpsPresetActiveButton('balanced');
+    adminSettings.gpsProfiles = profilesForAndroidPreset('balanced');
     setGpsProfileControlsFromState();
-    setGpsPresetActiveButton(GPS_DEFAULT_PRESET);
+    setGpsPresetActiveButton('balanced');
     showGpsProfileSelectionNow("Админка");
-    await saveGpsSettings({silent:false, label:"Баланс"});
+    await saveGpsSettings({silent:false, label:"Баланс", preset:"balanced"});
   };
 }
 function normalizeGpsProfilesShape(value){
