@@ -2263,9 +2263,55 @@ async function loadUsers(){
 }
 
 function getSelectedHistoryPoints(){ return selectedUid ? (historyByUid[selectedUid] || []) : []; }
-function getSelectedLiveData(){ return selectedUid ? (liveByUid[selectedUid] || null) : null; }
+
+function normalizeLivePointFromRoot(live){
+  if(!live || typeof live !== "object") return null;
+  const lastPoint = live.lastPoint && typeof live.lastPoint === "object" ? live.lastPoint : {};
+  const lat = Number(lastPoint.latitude ?? lastPoint.lat ?? live.latitude ?? live.lat ?? NaN);
+  const lon = Number(lastPoint.longitude ?? lastPoint.lon ?? lastPoint.lng ?? live.longitude ?? live.lon ?? live.lng ?? NaN);
+  if(!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+
+  return {
+    ...live,
+    ...lastPoint,
+    latitude: lat,
+    longitude: lon,
+    lat,
+    lon,
+    lng: lon,
+    timestamp: Number(lastPoint.timestamp ?? live.timestamp ?? live.updatedAt ?? live.lastUpdated ?? 0),
+    accuracy: lastPoint.accuracy ?? live.accuracy,
+    speedKmh: lastPoint.speedKmh ?? live.speedKmh,
+    speedRawKmh: lastPoint.speedRawKmh ?? live.speedRawKmh,
+    speedSource: lastPoint.speedSource ?? live.speedSource,
+    movementState: lastPoint.movementState ?? live.movementState,
+    stopDurationMs: lastPoint.stopDurationMs ?? live.stopDurationMs,
+    batteryLevel: lastPoint.batteryLevel ?? live.batteryLevel ?? live.battery,
+    isCharging: lastPoint.isCharging ?? live.isCharging,
+    satellitesVisible: lastPoint.satellitesVisible ?? live.satellitesVisible,
+    satellitesUsed: lastPoint.satellitesUsed ?? live.satellitesUsed,
+    gpsMode: lastPoint.gpsMode ?? live.gpsMode,
+    trackingMode: lastPoint.trackingMode ?? live.trackingMode,
+    appliedGpsProfile: lastPoint.appliedGpsProfile ?? live.appliedGpsProfile,
+    appliedGpsNormalIntervalMs: lastPoint.appliedGpsNormalIntervalMs ?? live.appliedGpsNormalIntervalMs,
+    appliedGpsNormalDistanceM: lastPoint.appliedGpsNormalDistanceM ?? live.appliedGpsNormalDistanceM,
+    appliedGpsLiveIntervalMs: lastPoint.appliedGpsLiveIntervalMs ?? live.appliedGpsLiveIntervalMs,
+    appliedGpsLiveDistanceM: lastPoint.appliedGpsLiveDistanceM ?? live.appliedGpsLiveDistanceM
+  };
+}
+
+function getSelectedLiveData(){
+  if(!selectedUid) return null;
+  const live = liveByUid[selectedUid] || null;
+  if(!live) return null;
+  return {
+    ...live,
+    lastPoint: normalizeLivePointFromRoot(live)
+  };
+}
+
 function getVisibleHistoryPoints(){ return qs("viewModeSelect").value==="all" ? Object.values(historyByUid).flat().sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0)) : getSelectedHistoryPoints(); }
-function getAllLastPoints(){ return Object.entries(liveByUid).map(([uid,live])=>({uid,point:live?.lastPoint})).filter(item=>item.point && item.point.latitude!=null && item.point.longitude!=null); }
+function getAllLastPoints(){ return Object.entries(liveByUid).map(([uid,live])=>({uid,point:normalizeLivePointFromRoot(live)})).filter(item=>item.point && item.point.latitude!=null && item.point.longitude!=null); }
 
 
 function updateTodaySummary(){
