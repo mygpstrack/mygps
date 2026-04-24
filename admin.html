@@ -2089,7 +2089,15 @@ function normalizeReplayPoint(p){
 }
 
 function getReplayPoints(){
-  return [...(currentFiltered || [])]
+  let source = Array.isArray(currentFiltered) && currentFiltered.length ? currentFiltered : [];
+  if(!source.length){
+    try{
+      source = getVisibleHistoryPoints();
+    }catch(e){
+      source = [];
+    }
+  }
+  return [...(source || [])]
     .map(normalizeReplayPoint)
     .filter(Boolean)
     .sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
@@ -2098,16 +2106,19 @@ function getReplayPoints(){
 function ensureReplayLayers(){
   if(!replayMarker){
     replayMarker = L.circleMarker([56.95,24.10], {
-      radius: 7,
+      radius: 9,
       color: "#f59e0b",
       fillColor: "#f59e0b",
       fillOpacity: 1,
-      weight: 2
+      opacity: 1,
+      weight: 3
     }).addTo(historyMap);
   }
   if(!replayTrail){
-    replayTrail = L.polyline([], {weight:4, color:"#f59e0b", opacity:0.85}).addTo(historyMap);
+    replayTrail = L.polyline([], {weight:5, color:"#f59e0b", opacity:0.9}).addTo(historyMap);
   }
+  if(replayMarker?.bringToFront) replayMarker.bringToFront();
+  if(replayTrail?.bringToFront) replayTrail.bringToFront();
 }
 
 function setReplayInfo(point){
@@ -2148,6 +2159,8 @@ function renderReplayPoint(centerMap = true){
 
   const played = replayState.points.slice(0, replayState.index + 1).map(p => [Number(p.latitude), Number(p.longitude)]);
   replayTrail.setLatLngs(played);
+  if(replayTrail?.bringToFront) replayTrail.bringToFront();
+  if(replayMarker?.bringToFront) replayMarker.bringToFront();
 
   if(centerMap){
     suppressHistoryMapInteraction = true;
@@ -2191,8 +2204,11 @@ function replayLoad(resetIndex = false){
 function replayStart(){
   replayLoad(false);
   if(!replayState.points.length){
-    showToast("Нет точек для replay", "warn");
+    showToast("Нет точек для replay. Сначала обнови историю или выбери период с точками.", "warn");
     return;
+  }
+  if(replayState.index >= replayState.points.length - 1){
+    replayState.index = 0;
   }
   clearReplayTimer();
   replayState.playing = true;
@@ -2208,6 +2224,8 @@ function replayPause(){
 
 function replayReset(){
   replayStopInternal(true);
+  if(replayTrail) replayTrail.setLatLngs([]);
+  renderReplayPoint(true);
 }
 
 function replayFaster(){
@@ -4593,7 +4611,12 @@ if (qs("replayPauseBtn")) qs("replayPauseBtn").onclick = replayPause;
 if (qs("replayResetBtn")) qs("replayResetBtn").onclick = replayReset;
 if (qs("replayFasterBtn")) qs("replayFasterBtn").onclick = replayFaster;
 if (qs("replaySlowerBtn")) qs("replaySlowerBtn").onclick = replaySlower;
-if (qs("replaySeekRange")) qs("replaySeekRange").oninput = () => { replayLoad(false); replayState.index = Number(qs("replaySeekRange").value || 0); renderReplayPoint(true); };
+if (qs("replaySeekRange")) qs("replaySeekRange").oninput = () => {
+  if(!replayState.points.length) replayLoad(false);
+  replayPause();
+  replayState.index = Number(qs("replaySeekRange").value || 0);
+  renderReplayPoint(true);
+};
 if (qs("backupNowBtn")) qs("backupNowBtn").onclick = async()=>{ await safeAction("Создание backup", async()=>{ await createMonthlyBackup(true); await renderBackups(); }, "Backup создан"); };
 qs("downloadBackupBtn").onclick=async()=>{
   const payload = {history:historyByUid, live:liveByUid, liveSessions:allSessions, users:usersMeta, adminSettings};
