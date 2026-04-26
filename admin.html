@@ -848,6 +848,43 @@
     <div id="journalPanel" class="hidden">
       <div class="card">
         <h2>Журнал действий</h2>
+        <div class="grid4">
+          <div>
+            <div class="label">Пользователь</div>
+            <select id="journalUserFilter">
+              <option value="">Все пользователи</option>
+            </select>
+          </div>
+          <div>
+            <div class="label">Тип события</div>
+            <select id="journalTypeFilter">
+              <option value="">Все типы</option>
+              <option value="login">Пользователь вошёл</option>
+              <option value="logout">Пользователь вышел</option>
+              <option value="gps_start">GPS включён</option>
+              <option value="gps_stop">GPS остановлен</option>
+              <option value="live_created">Live-ссылка создана</option>
+              <option value="live_link_opened">Live-ссылка открыта</option>
+              <option value="geofence_enter">Вход в геозону</option>
+              <option value="geofence_exit">Выход из геозоны</option>
+              <option value="battery_low">Батарея низкая</option>
+              <option value="gps_no_signal">Нет сигнала GPS</option>
+              <option value="user_offline">Пользователь офлайн</option>
+            </select>
+          </div>
+          <div class="stat">
+            <div class="label">Всего событий</div>
+            <div class="value" id="journalCount">0</div>
+          </div>
+          <div class="stat">
+            <div class="label">Источник</div>
+            <div class="value">events / eventJournal / adminLogs</div>
+          </div>
+        </div>
+        <div class="toolbar">
+          <button id="refreshJournalBtn" class="secondary">Обновить журнал</button>
+          <button id="clearOldEventsBtn" class="warn">Очистить старше 30 дней</button>
+        </div>
         <div style="overflow:auto">
           <table>
             <thead><tr><th>Время</th><th>Тип</th><th>Описание</th><th>Кто</th><th>Геозона</th><th>Данные</th></tr></thead>
@@ -4547,6 +4584,46 @@ async function notifyNewEventJournalGeofences(items){
   eventJournalNotifyInitialized = true;
 }
 
+
+function normalizeEventsSnapshot(data){
+  const out = [];
+  Object.entries(data || {}).forEach(([uid, events]) => {
+    Object.entries(events || {}).forEach(([eventId, item]) => {
+      if(!item || typeof item !== "object") return;
+      out.push({
+        ...item,
+        uid,
+        eventId,
+        ts: Number(item.timestamp || item.ts || 0),
+        _type: item.type || item.kind || "event",
+        actor: getDisplayName(uid) || uid || "—",
+        description: item.message || item.title || item.description || item.type || "—"
+      });
+    });
+  });
+  return out.sort((a,b)=>Number(b.ts||0)-Number(a.ts||0));
+}
+
+function updateJournalFilters(){
+  const userSel = qs("journalUserFilter");
+  const typeSel = qs("journalTypeFilter");
+  if(userSel){
+    const prev = userSel.value || "";
+    const options = [`<option value="">Все пользователи</option>`]
+      .concat((allUsers||[]).map(uid=>`<option value="${uid}">${userLabel(uid)}</option>`));
+    userSel.innerHTML = options.join("");
+    if(prev) userSel.value = prev;
+  }
+  if(typeSel && !typeSel.dataset.bound){
+    typeSel.dataset.bound = "1";
+    typeSel.addEventListener("change", renderJournal);
+  }
+  if(userSel && !userSel.dataset.bound){
+    userSel.dataset.bound = "1";
+    userSel.addEventListener("change", renderJournal);
+  }
+}
+
 function normalizeEventJournalSnapshot(data){
   const out = [];
   Object.entries(data || {}).forEach(([uid, events]) => {
@@ -4570,15 +4647,19 @@ function renderJournal(){
   const tbody=qs("journalTbody");
   if(!tbody) return;
   tbody.innerHTML="";
-  const selectedOnly = qs("viewModeSelect")?.value !== "all";
-  const selectedUser = selectedUid || "";
-  const filteredAppEvents = (appEventLogs || []).filter(item => !selectedOnly || !selectedUser || item.uid === selectedUser);
+  updateJournalFilters();
+  const selectedUser = qs("journalUserFilter")?.value || "";
+  const selectedType = qs("journalTypeFilter")?.value || "";
   const combined=[
     ...deletionsLog.map(item=>({...item,_type:item.kind||"deletion"})),
     ...actionLogs.map(item=>({...item,_type:item.kind||"action"})),
-    ...filteredAppEvents,
-    ...liveEventLogs.filter(item => !selectedOnly || !selectedUser || item.uid === selectedUser)
-  ].sort((a,b)=>Number(b.ts||0)-Number(a.ts||0));
+    ...(appEventLogs || []),
+    ...liveEventLogs
+  ]
+    .filter(item => !selectedUser || item.uid === selectedUser || item.selectedUid === selectedUser)
+    .filter(item => !selectedType || String(item._type || item.type || item.kind || "") === selectedType)
+    .sort((a,b)=>Number(b.ts||0)-Number(a.ts||0));
+  if(qs("journalCount")) qs("journalCount").textContent = String(combined.length);
   if(!combined.length){
     tbody.innerHTML=`<tr><td colspan="6">Событий пока нет</td></tr>`;
     return;
@@ -5518,6 +5599,29 @@ if (qs("shareDurationPreset")) { qs("shareDurationPreset").addEventListener("cha
 if (qs("createManagedUserBtn")) qs("createManagedUserBtn").onclick = ()=>createManagedUser();
 if (qs("createTabUserBtn")) qs("createTabUserBtn").onclick = ()=>createManagedUserFromTab();
 if (qs("refreshUsersManageBtn")) qs("refreshUsersManageBtn").onclick = async()=>{ await loadUsers(); renderUsersManagement(); renderEmptyProfilesList(); showToast("Список пользователей обновлён","success"); };
+if (qs("refreshJournalBtn")) qs("refreshJournalBtn").onclick = ()=>{ renderJournal(); showToast("Журнал обновлён","success"); };
+if (qs("clearOldEventsBtn")) qs("clearOldEventsBtn").onclick = async()=>{
+  const cutoff = Date.now() - 30*24*60*60*1000;
+  if(!confirm("Удалить события старше 30 дней из events?")) return;
+  try{
+    const snap = await get(ref(db, "events"));
+    const updatesObj = {};
+    Object.entries(snap.val() || {}).forEach(([uid, events])=>{
+      Object.entries(events || {}).forEach(([eventId, item])=>{
+        const ts = Number(item?.timestamp || item?.ts || 0);
+        if(ts && ts < cutoff) updatesObj[`events/${uid}/${eventId}`] = null;
+      });
+    });
+    if(!Object.keys(updatesObj).length) return showToast("Старых событий нет","info");
+    await update(ref(db), updatesObj);
+    await logAction("events_cleanup", `Удалено старых событий: ${Object.keys(updatesObj).length}`);
+    showToast("Старые события удалены","success");
+  }catch(e){
+    recordError("clearOldEvents", e);
+    showToast("Ошибка очистки журнала: "+errText(e), "error", 4200);
+  }
+};
+
 if (qs("findEmptyProfilesBtn")) qs("findEmptyProfilesBtn").onclick = async()=>{ await loadUsers(); await loadAllData(); renderEmptyProfilesList(); };
 if (qs("deleteEmptyProfilesBtn")) qs("deleteEmptyProfilesBtn").onclick = async()=>deleteEmptyProfiles();
 bindVisibilityControls();
@@ -5694,7 +5798,14 @@ onAuthStateChanged(auth, async user => {
   onValue(ref(db, "liveSessions"), snap => { allSessions=snap.val()||{}; updateUsage(); renderSessions(); updateActiveSessionToast(); updateNowFromAvailableSources(); });
   onValue(ref(db, "adminLogs/deletions"), snap => { deletionsLog=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0)); renderJournal(); });
   onValue(ref(db, "adminLogs/actions"), snap => { actionLogs=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0)); renderJournal(); });
-  onValue(ref(db, "eventJournal"), snap => { appEventLogs = normalizeEventJournalSnapshot(snap.val()||{}); renderJournal(); notifyNewEventJournalGeofences(appEventLogs).catch(e=>recordError("eventJournalNotify", e)); });
+  let legacyEventJournalLogs = [];
+  let androidEventLogs = [];
+  function refreshCombinedAppEvents(){
+    appEventLogs = [...androidEventLogs, ...legacyEventJournalLogs].sort((a,b)=>Number(b.ts||0)-Number(a.ts||0));
+    renderJournal();
+  }
+  onValue(ref(db, "events"), snap => { androidEventLogs = normalizeEventsSnapshot(snap.val()||{}); refreshCombinedAppEvents(); });
+  onValue(ref(db, "eventJournal"), snap => { legacyEventJournalLogs = normalizeEventJournalSnapshot(snap.val()||{}); refreshCombinedAppEvents(); notifyNewEventJournalGeofences(legacyEventJournalLogs).catch(e=>recordError("eventJournalNotify", e)); });
 
   await loadAdminSettings();
   startGpsProfilesRealtimeSync();
