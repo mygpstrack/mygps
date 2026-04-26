@@ -211,7 +211,7 @@ button{
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
-import { getDatabase, ref, onValue, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
+import { getDatabase, ref, onValue, runTransaction, push, set } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
 
 const firebaseConfig={
   apiKey:"AIzaSyCXNCY-IpkhAXb8jNPhN8gf2UdOfPBc5gM",
@@ -371,16 +371,16 @@ function showEnd(message){
 }
 function hideEnd(){ qs('endOverlay').style.display='none'; }
 
-async function registerSessionOpen(){
+async function registerSessionOpen(meta = {}){
   if(!sessionId) return;
 
   const openKey = `live_open_registered_${sessionId}`;
   if(sessionStorage.getItem(openKey) === '1') return;
 
+  const now = Date.now();
   try{
     const statsRef = ref(db, `liveSessions/${sessionId}/viewStats`);
     await runTransaction(statsRef, current => {
-      const now = Date.now();
       const next = current || {};
       return {
         openCount: Number(next.openCount || 0) + 1,
@@ -388,6 +388,25 @@ async function registerSessionOpen(){
         lastOpenAt: now
       };
     });
+
+    const ownerUid = meta?.ownerUid || meta?.uid || meta?.createdBy || "";
+    if(ownerUid){
+      const eventRef = push(ref(db, `events/${ownerUid}`));
+      await set(eventRef, {
+        id: eventRef.key || String(now),
+        type: "live_link_opened",
+        title: "Live-ссылка открыта",
+        message: "Кто-то открыл live-ссылку",
+        timestamp: now,
+        ts: now,
+        source: "live.html",
+        uid: ownerUid,
+        sessionId,
+        userAgent: navigator.userAgent || "",
+        url: location.href.split("#")[0]
+      });
+    }
+
     sessionStorage.setItem(openKey, '1');
   }catch(e){
     console.warn('registerSessionOpen error', e);
@@ -899,7 +918,7 @@ if(!sessionId){
     const data = snap.val();
     if(data && !openRegistered){
       openRegistered = true;
-      registerSessionOpen();
+      registerSessionOpen(data?.meta || {});
     }
     applySession(data);
   }, err => {
