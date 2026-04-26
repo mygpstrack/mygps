@@ -2505,30 +2505,49 @@ function updateUsage(){
 }
 
 async function loadUsers(){
+  const safeGet = async (path) => {
+    try {
+      return await get(ref(db, path));
+    } catch (e) {
+      recordError(`loadUsers/${path}`, e);
+      return { val: () => ({}) };
+    }
+  };
+
   const [historySnap, liveSnap, usersSnap, visibilitySnap, adminsSnap] = await Promise.all([
-    get(ref(db,"history")),
-    get(ref(db,"live")),
-    get(ref(db,"users")),
-    get(ref(db,"userVisibility")),
-    get(ref(db,"admins"))
+    safeGet("history"),
+    safeGet("live"),
+    safeGet("users"),
+    safeGet("userVisibility"),
+    safeGet("admins")
   ]);
+
+  const historyVal = historySnap.val() || {};
+  const liveVal = liveSnap.val() || {};
+
   usersMeta = usersSnap.val() || {};
   userVisibility = visibilitySnap.val() || {};
   adminsMap = adminsSnap.val() || {};
+
   const userSet = new Set();
   Object.keys(usersMeta||{}).forEach(uid=>userSet.add(uid));
-  Object.keys(historySnap.val()||{}).forEach(uid=>userSet.add(uid));
-  Object.keys(liveSnap.val()||{}).forEach(uid=>userSet.add(uid));
+  Object.keys(historyVal||{}).forEach(uid=>userSet.add(uid));
+  Object.keys(liveVal||{}).forEach(uid=>userSet.add(uid));
+  Object.keys(adminsMap||{}).forEach(uid=>userSet.add(uid));
+
   allUsers = Array.from(userSet).filter(Boolean).sort((a,b)=>{
     if(a==="default" && b!=="default") return 1;
     if(a!=="default" && b==="default") return -1;
     return getDisplayName(a).localeCompare(getDisplayName(b), "ru");
   });
+
   const select = qs("userSelect"), prev = selectedUid;
   select.innerHTML = allUsers.length ? allUsers.map(uid=>`<option value="${uid}">${userLabel(uid)}</option>`).join("") : `<option value="">Нет пользователей</option>`;
   selectedUid = (prev && allUsers.includes(prev)) ? prev : (allUsers.find(uid=>uid!=="default") || allUsers[0] || "");
   if(selectedUid) select.value = selectedUid;
+
   renderVisibilityPanel();
+  renderUsersManagement();
 }
 
 function getSelectedHistoryPoints(){ return selectedUid ? (historyByUid[selectedUid] || []) : []; }
