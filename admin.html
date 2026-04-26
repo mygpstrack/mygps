@@ -4998,7 +4998,14 @@ async function saveVisibilitySettings(){
 }
 
 function bindVisibilityControls(){
-  if(qs("visibilitySaveBtn")) qs("visibilitySaveBtn").onclick = ()=>safeAction(saveVisibilitySettings, "Видимость сохранена");
+  if(qs("visibilitySaveBtn")) qs("visibilitySaveBtn").onclick = async()=>{
+    try{
+      await saveVisibilitySettings();
+    }catch(e){
+      recordError("saveVisibilitySettings", e);
+      showToast("Ошибка сохранения видимости: " + errText(e), "error", 3600);
+    }
+  };
   if(qs("visibilitySelectAllBtn")) qs("visibilitySelectAllBtn").onclick = ()=>{
     document.querySelectorAll("[data-visibility-target]").forEach(input=>input.checked = true);
   };
