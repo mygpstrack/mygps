@@ -1128,6 +1128,16 @@ const geocodeCache = JSON.parse(localStorage.getItem("geocodeCache") || "{}");
 let geocodeQueue = Promise.resolve();
 
 const fmtTime = v => v ? new Date(v).toLocaleString("ru-RU") : "—";
+
+function movementLabelRu(value){
+  const v = String(value || "").toLowerCase().trim();
+  if(!v || v === "unknown") return "";
+  if(["moving","move","driving","walk","walking"].includes(v)) return "едет";
+  if(["held","stopped","stop","idle","stationary","still","stop_short","long_stopped","longstopped"].includes(v)) return "стоит";
+  if(["no_signal","nosignal","offline"].includes(v)) return "нет сигнала";
+  return "";
+}
+
 const fmtRemainingCompact = ms => {
   const total = Math.max(0, Math.floor(Number(ms||0)/1000));
   const d = Math.floor(total / 86400);

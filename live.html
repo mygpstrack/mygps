@@ -432,6 +432,15 @@ function fmtCountdown(ms){
   return m+':'+String(s).padStart(2,'0');
 }
 
+function movementLabelRu(value){
+  const v = String(value || '').toLowerCase().trim();
+  if(!v || v === 'unknown') return '';
+  if(['moving','move','driving','walk','walking'].includes(v)) return 'едет';
+  if(['held','stopped','stop','idle','stationary','still','stop_short','long_stopped','longstopped'].includes(v)) return 'стоит';
+  if(['no_signal','nosignal','offline'].includes(v)) return 'нет сигнала';
+  return '';
+}
+
 function getPointAgeMs(p){
   return p?.ts ? Math.max(0, Date.now() - Number(p.ts || 0)) : Number.POSITIVE_INFINITY;
 }
