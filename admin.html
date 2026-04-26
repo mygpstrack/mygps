@@ -4979,7 +4979,7 @@ async function saveVisibilitySettings(){
 }
 
 function bindVisibilityControls(){
-  if(qs("visibilitySaveBtn")) qs("visibilitySaveBtn").onclick = ()=>safeAction(saveVisibilitySettings(), "Видимость сохранена");
+  if(qs("visibilitySaveBtn")) qs("visibilitySaveBtn").onclick = ()=>safeAction(saveVisibilitySettings, "Видимость сохранена");
   if(qs("visibilitySelectAllBtn")) qs("visibilitySelectAllBtn").onclick = ()=>{
     document.querySelectorAll("[data-visibility-target]").forEach(input=>input.checked = true);
   };
