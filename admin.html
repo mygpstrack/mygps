@@ -734,6 +734,19 @@
           <button id="createTabUserBtn" class="success">Создать пользователя</button>
           <button id="refreshUsersManageBtn" class="secondary">Обновить список</button>
         </div>
+
+        <div class="notice">
+          <b>Чистка пустых профилей</b><br>
+          Пустые профили — это старые anonymous/unknown UID без email, которые могли появиться при входе/выходе.
+          Новые версии приложения больше не должны их создавать.
+          <div class="toolbar">
+            <button id="findEmptyProfilesBtn" class="secondary">Найти пустые профили</button>
+            <button id="deleteEmptyProfilesBtn" class="danger">Удалить пустые профили</button>
+          </div>
+          <div id="emptyProfilesStatus" class="smallMuted">Пока не проверено.</div>
+          <div id="emptyProfilesList" class="mono smallMuted"></div>
+        </div>
+
         <div style="overflow:auto">
           <table>
             <thead><tr><th>Имя</th><th>Email</th><th>UID</th><th>Роль</th><th>Действия</th></tr></thead>
@@ -5241,6 +5254,115 @@ function renderUsersManagement(){
   });
 }
 
+
+function isEmptyAnonymousProfileUid(uid){
+  if(!uid) return false;
+  const meta = usersMeta?.[uid] || {};
+  const email = String(meta.email || "").trim();
+  const provider = String(meta.provider || "").trim().toLowerCase();
+  const name = String(meta.name || meta.displayName || "").trim();
+  const hasAdmin = adminsMap?.[uid] === true;
+
+  if(hasAdmin) return false;
+  if(email) return false;
+  if(provider === "google.com" || provider === "password") return false;
+
+  const looksGeneratedName = !name || /^Пользователь\s+[A-Za-z0-9_-]{4,}$/i.test(name) || /^User\s+[A-Za-z0-9_-]{4,}$/i.test(name);
+  const likelyAnonymousProvider = !provider || provider === "anonymous" || provider === "unknown" || provider === "firebase";
+  return looksGeneratedName && likelyAnonymousProvider;
+}
+
+function findEmptyProfiles(){
+  const candidateSet = new Set();
+  Object.keys(usersMeta || {}).forEach(uid => candidateSet.add(uid));
+
+  // Если uid есть только в live/history, но нет нормального users-профиля,
+  // это тоже кандидат на чистку, если нет email/admin.
+  Object.keys(liveByUid || {}).forEach(uid => {
+    const meta = usersMeta?.[uid] || {};
+    if(!meta.email && adminsMap?.[uid] !== true) candidateSet.add(uid);
+  });
+  Object.keys(historyByUid || {}).forEach(uid => {
+    const meta = usersMeta?.[uid] || {};
+    if(!meta.email && adminsMap?.[uid] !== true) candidateSet.add(uid);
+  });
+
+  return Array.from(candidateSet)
+    .filter(uid => uid && uid !== "default")
+    .filter(uid => {
+      if(isEmptyAnonymousProfileUid(uid)) return true;
+      const meta = usersMeta?.[uid] || {};
+      const email = String(meta.email || "").trim();
+      const provider = String(meta.provider || "").trim().toLowerCase();
+      const hasAdmin = adminsMap?.[uid] === true;
+      const hasNoUserProfile = !usersMeta?.[uid];
+      return !hasAdmin && !email && (hasNoUserProfile || !provider || provider === "anonymous" || provider === "unknown");
+    })
+    .sort();
+}
+
+function renderEmptyProfilesList(){
+  const list = findEmptyProfiles();
+  const status = qs("emptyProfilesStatus");
+  const box = qs("emptyProfilesList");
+  if(status) status.textContent = list.length ? `Найдено пустых профилей: ${list.length}` : "Пустых профилей не найдено.";
+  if(box){
+    box.innerHTML = list.length
+      ? list.map(uid => {
+          const meta = usersMeta?.[uid] || {};
+          const provider = meta.provider || "—";
+          const hasLive = !!liveByUid?.[uid];
+          const hasHistory = Array.isArray(historyByUid?.[uid]) && historyByUid[uid].length > 0;
+          return `<div style="padding:6px 0;border-bottom:1px solid var(--border)">
+            <label><input type="checkbox" class="emptyProfileCheckbox" data-uid="${uid}" checked> ${uid}</label>
+            <br><span class="smallMuted">provider: ${provider} • live: ${hasLive ? "да" : "нет"} • history: ${hasHistory ? historyByUid[uid].length : "нет"}</span>
+          </div>`;
+        }).join("")
+      : "";
+  }
+  return list;
+}
+
+async function deleteEmptyProfiles(){
+  const checked = Array.from(document.querySelectorAll(".emptyProfileCheckbox:checked"))
+    .map(cb => cb.dataset.uid)
+    .filter(Boolean);
+
+  const targets = checked.length ? checked : findEmptyProfiles();
+  if(!targets.length) return showToast("Пустые профили не найдены","info");
+
+  if(!confirm(`Удалить пустые профили: ${targets.length}?\n\nБудут удалены users/live/history/liveOwners/userVisibility/admins для этих UID.`)) return;
+
+  try{
+    const updates = {};
+    targets.forEach(uid => {
+      updates[`users/${uid}`] = null;
+      updates[`live/${uid}`] = null;
+      updates[`history/${uid}`] = null;
+      updates[`liveOwners/${uid}`] = null;
+      updates[`userVisibility/${uid}`] = null;
+      updates[`admins/${uid}`] = null;
+      Object.keys(userVisibility || {}).forEach(ownerUid => {
+        updates[`userVisibility/${ownerUid}/${uid}`] = null;
+      });
+    });
+
+    await update(ref(db), updates);
+    await logAction("empty_profiles_delete", `Удалено пустых профилей: ${targets.length}`);
+    showToast(`Удалено пустых профилей: ${targets.length}`, "success");
+
+    await loadUsers();
+    await loadAllData();
+    renderUsersManagement();
+    renderVisibilityPanel();
+    renderEmptyProfilesList();
+  }catch(e){
+    recordError("deleteEmptyProfiles", e);
+    showToast("Ошибка удаления пустых профилей: " + errText(e), "error", 4200);
+  }
+}
+
+
 async function createManagedUserFromTab(){
   const name = qs("tabUserNameInput")?.value?.trim() || "Пользователь";
   const email = qs("tabUserEmailInput")?.value?.trim();
@@ -5395,7 +5517,9 @@ if (qs("createShareBtn")) qs("createShareBtn").onclick = ()=>createLiveSession()
 if (qs("shareDurationPreset")) { qs("shareDurationPreset").addEventListener("change", toggleCustomDuration); toggleCustomDuration(); }
 if (qs("createManagedUserBtn")) qs("createManagedUserBtn").onclick = ()=>createManagedUser();
 if (qs("createTabUserBtn")) qs("createTabUserBtn").onclick = ()=>createManagedUserFromTab();
-if (qs("refreshUsersManageBtn")) qs("refreshUsersManageBtn").onclick = async()=>{ await loadUsers(); renderUsersManagement(); showToast("Список пользователей обновлён","success"); };
+if (qs("refreshUsersManageBtn")) qs("refreshUsersManageBtn").onclick = async()=>{ await loadUsers(); renderUsersManagement(); renderEmptyProfilesList(); showToast("Список пользователей обновлён","success"); };
+if (qs("findEmptyProfilesBtn")) qs("findEmptyProfilesBtn").onclick = async()=>{ await loadUsers(); await loadAllData(); renderEmptyProfilesList(); };
+if (qs("deleteEmptyProfilesBtn")) qs("deleteEmptyProfilesBtn").onclick = async()=>deleteEmptyProfiles();
 bindVisibilityControls();
 if (qs("clearShareResultBtn")) qs("clearShareResultBtn").onclick = ()=>{ createdShareUrl=""; qs("shareResultBox").classList.add("hidden"); };
 if (qs("copyCreatedShareBtn")) qs("copyCreatedShareBtn").onclick = async()=>{ if(createdShareUrl){ await navigator.clipboard.writeText(createdShareUrl); showToast("Ссылка скопирована","success"); } };
