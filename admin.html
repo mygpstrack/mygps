@@ -125,6 +125,17 @@
     .tab-btn{background:#1f2937}
     .tab-btn.active{background:var(--blue)}
     .hidden{display:none!important}
+
+    .visibilityLayout{display:grid;grid-template-columns:minmax(260px,360px) 1fr;gap:16px;align-items:start;margin-top:12px}
+    .visibilityList{display:grid;gap:8px;margin-top:12px}
+    .visibilityUserBtn{width:100%;text-align:left;background:#1f2937;border:1px solid var(--border);border-radius:14px;padding:12px 14px}
+    .visibilityUserBtn.active{background:var(--blue);border-color:rgba(96,165,250,.65)}
+    .visibilityTargetRow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border:1px solid var(--border);border-radius:14px;background:rgba(255,255,255,.03)}
+    .visibilityTargetRow label{display:flex;align-items:center;gap:10px;width:100%;cursor:pointer}
+    .visibilityTargetRow input{min-width:auto;width:auto}
+    .visibilityTargetName{font-weight:800}
+    .visibilityTargetUid{color:var(--muted);font-size:12px;margin-top:2px}
+    @media (max-width:900px){.visibilityLayout{grid-template-columns:1fr}}
     input,button,select,textarea{font:inherit}
     input,select,textarea{
       padding:12px 14px;border-radius:12px;border:1px solid var(--border);
@@ -448,6 +459,7 @@
         <button class="tab-btn" data-tab="usagePanel">Объём</button>
         <button class="tab-btn" data-tab="sessionsPanel">Live-сессии</button>
         <button class="tab-btn" data-tab="usersPanel">Пользователи</button>
+        <button class="tab-btn" data-tab="visibilityPanel">Видимость</button>
         <button class="tab-btn" data-tab="geofencesPanel">Геозоны</button>
         <button class="tab-btn" data-tab="journalPanel">Журнал</button>
         <button class="tab-btn" data-tab="errorsPanel">Ошибки</button>
@@ -732,6 +744,34 @@
     </div>
 
 
+
+    <div id="visibilityPanel" class="hidden">
+      <div class="card">
+        <h2>Видимость пользователей</h2>
+        <div class="notice">
+          Здесь админ выбирает, каких пользователей видит выбранный пользователь в приложении.
+          Админ в админке по-прежнему видит всех.
+        </div>
+        <div class="visibilityLayout">
+          <div class="card" style="margin:0">
+            <h3>Пользователь</h3>
+            <div class="smallMuted">Выбери пользователя, для которого настраивается видимость.</div>
+            <div id="visibilityUsersList" class="visibilityList"></div>
+          </div>
+          <div class="card" style="margin:0">
+            <h3 id="visibilitySelectedTitle">Кого видит пользователь</h3>
+            <div class="smallMuted">Отметь пользователей, которые будут видны на карте в приложении.</div>
+            <div class="toolbar">
+              <button id="visibilitySelectAllBtn" class="secondary">Выбрать всех</button>
+              <button id="visibilityClearAllBtn" class="secondary">Очистить</button>
+              <button id="visibilitySaveBtn" class="success">Сохранить</button>
+            </div>
+            <div id="visibilityTargetsList" class="visibilityList"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div id="geofencesPanel" class="hidden">
       <div class="card">
         <h2>Геозоны</h2>
@@ -996,6 +1036,8 @@ let historyByUid = {}, liveByUid = {}, allSessions = {}, selectedUid = "", allUs
 let currentFiltered = [], deletionsLog = [], actionLogs = [], appEventLogs = [], liveEventLogs = [];
 let liveAutoCenter = true, createdShareUrl = "", speedChart = null, distanceChart = null, currentNowSourceLabel = "—";
 let usersMeta = {};
+let userVisibility = {};
+let selectedVisibilityUid = "";
 let adminSettings = {
   toastPosition: "top-right",
   autoRefreshSec: 0,
@@ -1793,12 +1835,13 @@ function restoreUiState(){
 
     if(state.activeTab){
       document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
-      document.querySelectorAll("#nowPanel,#historyPanel,#reportsPanel,#usagePanel,#sessionsPanel,#usersPanel,#geofencesPanel,#journalPanel,#errorsPanel,#settingsPanel").forEach(p=>p.classList.add("hidden"));
+      document.querySelectorAll("#nowPanel,#historyPanel,#reportsPanel,#usagePanel,#sessionsPanel,#usersPanel,#visibilityPanel,#geofencesPanel,#journalPanel,#errorsPanel,#settingsPanel").forEach(p=>p.classList.add("hidden"));
       const btn = document.querySelector(`.tab-btn[data-tab="${state.activeTab}"]`);
       if(btn){
         btn.classList.add("active");
         const panel = qs(btn.dataset.tab);
         if(panel) panel.classList.remove("hidden");
+        if(state.activeTab === "visibilityPanel") setTimeout(renderVisibilityPanel, 0);
       }
     }
 
@@ -2115,9 +2158,10 @@ function setDefaultPeriodToday(){ const now=new Date(), start=new Date(); start.
 document.querySelectorAll(".tab-btn").forEach(btn=>{
   btn.onclick=()=>{
     document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
-    document.querySelectorAll("#nowPanel,#historyPanel,#reportsPanel,#usagePanel,#sessionsPanel,#usersPanel,#geofencesPanel,#journalPanel,#errorsPanel,#settingsPanel").forEach(p=>p.classList.add("hidden"));
+    document.querySelectorAll("#nowPanel,#historyPanel,#reportsPanel,#usagePanel,#sessionsPanel,#usersPanel,#visibilityPanel,#geofencesPanel,#journalPanel,#errorsPanel,#settingsPanel").forEach(p=>p.classList.add("hidden"));
     btn.classList.add("active");
     qs(btn.dataset.tab).classList.remove("hidden");
+    if(btn.dataset.tab === "visibilityPanel") renderVisibilityPanel();
     setTimeout(()=>{ historyMap.invalidateSize(); liveMap.invalidateSize(); sessionMap.invalidateSize(); geofenceMap.invalidateSize(); speedChart?.resize(); distanceChart?.resize(); },50);
   };
 });
@@ -2459,20 +2503,28 @@ function updateUsage(){
 }
 
 async function loadUsers(){
-  const [historySnap, liveSnap, usersSnap] = await Promise.all([get(ref(db,"history")), get(ref(db,"live")), get(ref(db,"users"))]);
+  const [historySnap, liveSnap, usersSnap, visibilitySnap] = await Promise.all([
+    get(ref(db,"history")),
+    get(ref(db,"live")),
+    get(ref(db,"users")),
+    get(ref(db,"userVisibility"))
+  ]);
   usersMeta = usersSnap.val() || {};
+  userVisibility = visibilitySnap.val() || {};
   const userSet = new Set();
+  Object.keys(usersMeta||{}).forEach(uid=>userSet.add(uid));
   Object.keys(historySnap.val()||{}).forEach(uid=>userSet.add(uid));
   Object.keys(liveSnap.val()||{}).forEach(uid=>userSet.add(uid));
-  allUsers = Array.from(userSet).sort((a,b)=>{
+  allUsers = Array.from(userSet).filter(Boolean).sort((a,b)=>{
     if(a==="default" && b!=="default") return 1;
     if(a!=="default" && b==="default") return -1;
-    return a.localeCompare(b);
+    return getDisplayName(a).localeCompare(getDisplayName(b), "ru");
   });
   const select = qs("userSelect"), prev = selectedUid;
   select.innerHTML = allUsers.length ? allUsers.map(uid=>`<option value="${uid}">${userLabel(uid)}</option>`).join("") : `<option value="">Нет пользователей</option>`;
   selectedUid = (prev && allUsers.includes(prev)) ? prev : (allUsers.find(uid=>uid!=="default") || allUsers[0] || "");
   if(selectedUid) select.value = selectedUid;
+  renderVisibilityPanel();
 }
 
 function getSelectedHistoryPoints(){ return selectedUid ? (historyByUid[selectedUid] || []) : []; }
@@ -4822,6 +4874,96 @@ if (qs("cleanupEndedSessionsBtn")) qs("cleanupEndedSessionsBtn").onclick = async
 };
 
 
+
+function getAllKnownUserIds(){
+  return Array.from(new Set([
+    ...Object.keys(usersMeta || {}),
+    ...Object.keys(historyByUid || {}),
+    ...Object.keys(liveByUid || {}),
+    ...(allUsers || [])
+  ])).filter(Boolean).sort((a,b)=>getDisplayName(a).localeCompare(getDisplayName(b), "ru"));
+}
+
+function renderVisibilityPanel(){
+  const usersList = qs("visibilityUsersList");
+  const targetsList = qs("visibilityTargetsList");
+  if(!usersList || !targetsList) return;
+
+  const uids = getAllKnownUserIds().filter(uid => uid && uid !== "default");
+  if(!uids.length){
+    usersList.innerHTML = `<div class="emptyState">Пользователей пока нет.</div>`;
+    targetsList.innerHTML = `<div class="emptyState">Некого настраивать.</div>`;
+    return;
+  }
+
+  if(!selectedVisibilityUid || !uids.includes(selectedVisibilityUid)){
+    selectedVisibilityUid = selectedUid && uids.includes(selectedUid) ? selectedUid : uids[0];
+  }
+
+  usersList.innerHTML = uids.map(uid => `
+    <button class="visibilityUserBtn ${uid === selectedVisibilityUid ? "active" : ""}" data-visibility-user="${uid}">
+      <div><b>${getDisplayName(uid)}</b></div>
+      <div class="smallMuted mono">${uid}</div>
+    </button>
+  `).join("");
+
+  const selectedName = getDisplayName(selectedVisibilityUid);
+  qs("visibilitySelectedTitle").textContent = `Кого видит: ${selectedName}`;
+
+  const visibleMap = userVisibility?.[selectedVisibilityUid] || {};
+  const targets = uids.filter(uid => uid !== selectedVisibilityUid);
+
+  if(!targets.length){
+    targetsList.innerHTML = `<div class="emptyState">Нет других пользователей для выбора.</div>`;
+  }else{
+    targetsList.innerHTML = targets.map(uid => {
+      const checked = visibleMap?.[uid] === true ? "checked" : "";
+      return `
+        <div class="visibilityTargetRow">
+          <label>
+            <input type="checkbox" data-visibility-target="${uid}" ${checked}>
+            <span>
+              <div class="visibilityTargetName">${getDisplayName(uid)}</div>
+              <div class="visibilityTargetUid mono">${uid}</div>
+            </span>
+          </label>
+        </div>`;
+    }).join("");
+  }
+
+  usersList.querySelectorAll("[data-visibility-user]").forEach(btn=>{
+    btn.onclick=()=>{
+      selectedVisibilityUid = btn.dataset.visibilityUser;
+      renderVisibilityPanel();
+    };
+  });
+}
+
+async function saveVisibilitySettings(){
+  if(!selectedVisibilityUid) return showToast("Выбери пользователя", "warn");
+  const checked = {};
+  document.querySelectorAll("[data-visibility-target]").forEach(input=>{
+    if(input.checked) checked[input.dataset.visibilityTarget] = true;
+  });
+
+  await set(ref(db, `userVisibility/${selectedVisibilityUid}`), checked);
+  userVisibility[selectedVisibilityUid] = checked;
+  await logAction("visibility_update", `Обновлена видимость для ${getDisplayName(selectedVisibilityUid)}: ${Object.keys(checked).length}`);
+  renderVisibilityPanel();
+  showToast("Видимость сохранена", "success");
+}
+
+function bindVisibilityControls(){
+  if(qs("visibilitySaveBtn")) qs("visibilitySaveBtn").onclick = ()=>safeAction(saveVisibilitySettings(), "Видимость сохранена");
+  if(qs("visibilitySelectAllBtn")) qs("visibilitySelectAllBtn").onclick = ()=>{
+    document.querySelectorAll("[data-visibility-target]").forEach(input=>input.checked = true);
+  };
+  if(qs("visibilityClearAllBtn")) qs("visibilityClearAllBtn").onclick = ()=>{
+    document.querySelectorAll("[data-visibility-target]").forEach(input=>input.checked = false);
+  };
+}
+
+
 function renderUsersManagement(){
   const tbody = qs("usersManageTbody");
   if(!tbody) return;
@@ -4883,8 +5025,14 @@ function renderUsersManagement(){
         remove(ref(db, `users/${uid}`)),
         remove(ref(db, `history/${uid}`)),
         remove(ref(db, `live/${uid}`)),
-        remove(ref(db, `liveOwners/${uid}`))
+        remove(ref(db, `liveOwners/${uid}`)),
+        remove(ref(db, `userVisibility/${uid}`))
       ]);
+      const visibilityUpdates = {};
+      Object.keys(userVisibility || {}).forEach(ownerUid => {
+        if(ownerUid !== uid) visibilityUpdates[`userVisibility/${ownerUid}/${uid}`] = null;
+      });
+      if(Object.keys(visibilityUpdates).length) await update(ref(db), visibilityUpdates);
       if(selectedUid === uid) selectedUid = "";
       await logAction("user_delete", `Удалён пользователь ${uid} из базы`);
       await loadUsers();
@@ -5052,6 +5200,7 @@ if (qs("shareDurationPreset")) { qs("shareDurationPreset").addEventListener("cha
 if (qs("createManagedUserBtn")) qs("createManagedUserBtn").onclick = ()=>createManagedUser();
 if (qs("createTabUserBtn")) qs("createTabUserBtn").onclick = ()=>createManagedUserFromTab();
 if (qs("refreshUsersManageBtn")) qs("refreshUsersManageBtn").onclick = async()=>{ await loadUsers(); renderUsersManagement(); showToast("Список пользователей обновлён","success"); };
+bindVisibilityControls();
 if (qs("clearShareResultBtn")) qs("clearShareResultBtn").onclick = ()=>{ createdShareUrl=""; qs("shareResultBox").classList.add("hidden"); };
 if (qs("copyCreatedShareBtn")) qs("copyCreatedShareBtn").onclick = async()=>{ if(createdShareUrl){ await navigator.clipboard.writeText(createdShareUrl); showToast("Ссылка скопирована","success"); } };
 if (qs("openCreatedShareTopBtn")) qs("openCreatedShareTopBtn").onclick = ()=>{ if(createdShareUrl) window.open(createdShareUrl,"_blank","noopener,noreferrer"); else showToast("Нет активной ссылки","warn"); };
@@ -5066,7 +5215,7 @@ if (qs("cleanupSessionsBtn")) qs("cleanupSessionsBtn").onclick = ()=>cleanupExpi
 qs("sessionSearchInput").oninput=renderSessions;
 qs("sessionStatusFilter").onchange=renderSessions;
 
-qs("userSelect").onchange=()=>{ selectedUid=qs("userSelect").value; updateUsage(); updateTodaySummary(); renderHistory(); updateNowFromAvailableSources(); renderSessions(); };
+qs("userSelect").onchange=()=>{ selectedUid=qs("userSelect").value; if(qs("visibilityPanel") && !qs("visibilityPanel").classList.contains("hidden")){ selectedVisibilityUid = selectedUid; renderVisibilityPanel(); } updateUsage(); updateTodaySummary(); renderHistory(); updateNowFromAvailableSources(); renderSessions(); };
 qs("viewModeSelect").onchange=()=>{ updateUsage(); updateTodaySummary(); renderHistory(); updateNowFromAvailableSources(); renderSessions(); };
 if (qs("refreshUsersBtn")) qs("refreshUsersBtn").onclick = async()=>{ await loadUsers(); await loadAllData(); showToast("Пользователи обновлены","success"); };
 
