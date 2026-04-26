@@ -736,7 +736,7 @@
         </div>
         <div style="overflow:auto">
           <table>
-            <thead><tr><th>Имя</th><th>Email</th><th>UID</th><th>Действия</th></tr></thead>
+            <thead><tr><th>Имя</th><th>Email</th><th>UID</th><th>Роль</th><th>Действия</th></tr></thead>
             <tbody id="usersManageTbody"></tbody>
           </table>
         </div>
@@ -1036,6 +1036,7 @@ let historyByUid = {}, liveByUid = {}, allSessions = {}, selectedUid = "", allUs
 let currentFiltered = [], deletionsLog = [], actionLogs = [], appEventLogs = [], liveEventLogs = [];
 let liveAutoCenter = true, createdShareUrl = "", speedChart = null, distanceChart = null, currentNowSourceLabel = "—";
 let usersMeta = {};
+let adminsMap = {};
 let userVisibility = {};
 let selectedVisibilityUid = "";
 let adminSettings = {
@@ -2001,7 +2002,8 @@ async function safeAction(title, fn, successText){
 function getDisplayName(uid){
   if(!uid) return "";
   if(isLegacyUid(uid)) return "legacy/default";
-  return usersMeta?.[uid]?.name || usersMeta?.[uid]?.email || "Admin";
+  const meta = usersMeta?.[uid] || {};
+  return meta.name || meta.displayName || meta.email || `Пользователь ${String(uid).slice(0,8)}`;
 }
 
 function formatAccuracy(v){ return v != null ? `${Number(v).toFixed(2)} м` : "—"; }
@@ -2503,14 +2505,16 @@ function updateUsage(){
 }
 
 async function loadUsers(){
-  const [historySnap, liveSnap, usersSnap, visibilitySnap] = await Promise.all([
+  const [historySnap, liveSnap, usersSnap, visibilitySnap, adminsSnap] = await Promise.all([
     get(ref(db,"history")),
     get(ref(db,"live")),
     get(ref(db,"users")),
-    get(ref(db,"userVisibility"))
+    get(ref(db,"userVisibility")),
+    get(ref(db,"admins"))
   ]);
   usersMeta = usersSnap.val() || {};
   userVisibility = visibilitySnap.val() || {};
+  adminsMap = adminsSnap.val() || {};
   const userSet = new Set();
   Object.keys(usersMeta||{}).forEach(uid=>userSet.add(uid));
   Object.keys(historySnap.val()||{}).forEach(uid=>userSet.add(uid));
@@ -3630,10 +3634,31 @@ async function ensureUserMeta(user){
   if(!user?.uid) return;
   const r = ref(db, `users/${user.uid}`);
   const snap = await get(r);
+  const now = Date.now();
+  const provider = user.providerData?.[0]?.providerId || "unknown";
+  const name = user.displayName || (user.email ? user.email.split("@")[0] : `Пользователь ${user.uid.slice(0,8)}`);
   if(!snap.exists()){
-    await set(r, {name:"Admin", email:user.email||"", createdAt:Date.now(), updatedAt:Date.now()});
-  } else if(user.email && !snap.val()?.email){
-    await update(r, {email:user.email, updatedAt:Date.now()});
+    await set(r, {
+      uid: user.uid,
+      name,
+      displayName: name,
+      email: user.email || "",
+      provider,
+      createdAt: now,
+      lastLoginAt: now,
+      updatedAt: now
+    });
+  } else {
+    const cur = snap.val() || {};
+    const upd = {lastLoginAt: now, updatedAt: now};
+    if(user.email && !cur.email) upd.email = user.email;
+    if(name && (!cur.name || cur.name === "Admin")) {
+      upd.name = name;
+      upd.displayName = name;
+    }
+    if(!cur.uid) upd.uid = user.uid;
+    if(!cur.provider) upd.provider = provider;
+    await update(r, upd);
   }
 }
 
@@ -4971,61 +4996,109 @@ function renderUsersManagement(){
   const uids = Array.from(new Set([
     ...Object.keys(usersMeta || {}),
     ...Object.keys(historyByUid || {}),
-    ...Object.keys(liveByUid || {})
+    ...Object.keys(liveByUid || {}),
+    ...Object.keys(adminsMap || {})
   ])).filter(Boolean);
 
   if(!uids.length){
-    tbody.innerHTML = `<tr><td colspan="4" class="smallMuted">Пользователей пока нет.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" class="smallMuted">Пользователей пока нет.</td></tr>`;
     return;
   }
 
   uids.sort((a,b)=>getDisplayName(a).localeCompare(getDisplayName(b), "ru"));
   tbody.innerHTML = uids.map(uid=>{
-    const name = usersMeta?.[uid]?.name || "—";
-    const email = usersMeta?.[uid]?.email || "—";
+    const meta = usersMeta?.[uid] || {};
+    const name = meta.name || meta.displayName || "—";
+    const email = meta.email || "—";
+    const isAdmin = adminsMap?.[uid] === true;
+    const currentUserUid = auth.currentUser?.uid || "";
+    const roleText = isAdmin ? "Админ" : "Пользователь";
+    const roleClass = isAdmin ? "success" : "secondary";
+    const roleButton = isAdmin
+      ? `<button class="danger small" data-admin-remove="${uid}" ${uid === currentUserUid ? "data-self-admin='true'" : ""}>Забрать админа</button>`
+      : `<button class="success small" data-admin-add="${uid}">Дать админа</button>`;
+
     return `<tr>
       <td>${name}</td>
       <td>${email}</td>
       <td class="mono">${uid}</td>
+      <td><span class="pill ${roleClass}">${roleText}</span></td>
       <td>
         <div class="row">
           <button class="secondary small" data-user-rename="${uid}">Переименовать</button>
+          ${roleButton}
           <button class="danger small" data-user-delete="${uid}">Удалить</button>
         </div>
       </td>
     </tr>`;
   }).join("");
 
+  tbody.querySelectorAll("[data-admin-add]").forEach(btn=>btn.onclick=async()=>{
+    const uid = btn.dataset.adminAdd;
+    if(!uid) return;
+    if(!confirm(`Выдать права администратора пользователю ${getDisplayName(uid)}?`)) return;
+    try{
+      await set(ref(db, `admins/${uid}`), true);
+      adminsMap[uid] = true;
+      await logAction("admin_role_add", `Выданы права админа: ${uid}`);
+      renderUsersManagement();
+      renderVisibilityPanel();
+      showToast("Права админа выданы", "success");
+    }catch(e){
+      recordError("admin_role_add", e);
+      showToast("Ошибка прав админа: "+errText(e), "error", 3600);
+    }
+  });
+
+  tbody.querySelectorAll("[data-admin-remove]").forEach(btn=>btn.onclick=async()=>{
+    const uid = btn.dataset.adminRemove;
+    if(!uid) return;
+    const currentUserUid = auth.currentUser?.uid || "";
+    if(uid === currentUserUid && !confirm("Это твой текущий аккаунт. Если снять права, ты потеряешь доступ к админке. Точно снять?")) return;
+    if(!confirm(`Забрать права администратора у ${getDisplayName(uid)}?`)) return;
+    try{
+      await remove(ref(db, `admins/${uid}`));
+      delete adminsMap[uid];
+      await logAction("admin_role_remove", `Забраны права админа: ${uid}`);
+      renderUsersManagement();
+      renderVisibilityPanel();
+      showToast("Права админа забраны", "success");
+    }catch(e){
+      recordError("admin_role_remove", e);
+      showToast("Ошибка прав админа: "+errText(e), "error", 3600);
+    }
+  });
+
   tbody.querySelectorAll("[data-user-rename]").forEach(btn=>btn.onclick=async()=>{
     const uid = btn.dataset.userRename;
-    const current = usersMeta?.[uid]?.name || "";
+    const current = usersMeta?.[uid]?.name || usersMeta?.[uid]?.displayName || "";
     const next = prompt("Новое имя пользователя", current);
     if(!next) return;
     try{
-      await update(ref(db, `users/${uid}`), {name: next, updatedAt: Date.now()});
-      await logAction("user_rename", `Переименован ${uid} в ${next}`);
-      await loadUsers();
+      await update(ref(db, `users/${uid}`), {name: next.trim(), displayName: next.trim(), updatedAt: Date.now()});
+      usersMeta[uid] = {...(usersMeta[uid]||{}), name: next.trim(), displayName: next.trim(), updatedAt: Date.now()};
       renderUsersManagement();
-      showToast("Имя пользователя обновлено","success");
+      renderVisibilityPanel();
+      await loadUsers();
+      showToast("Имя обновлено","success");
     }catch(e){
-      recordError("renameUserFromTab", e);
+      recordError("renameManagedUser", e);
       showToast("Ошибка переименования: "+errText(e), "error", 3600);
     }
   });
 
   tbody.querySelectorAll("[data-user-delete]").forEach(btn=>btn.onclick=async()=>{
     const uid = btn.dataset.userDelete;
-    const label = getDisplayName(uid) || uid;
-    const ok = confirm(`Удалить пользователя ${label} из базы?
-
-Будут удалены профиль, history, live и привязка live-сессий. Firebase Auth аккаунт этим действием не удаляется.`);
-    if(!ok) return;
+    if(!uid) return;
+    const label = getDisplayName(uid);
+    if(!confirm(`Удалить данные пользователя ${label}? Auth-аккаунт в Firebase Authentication этим действием не удаляется.`)) return;
     try{
       await Promise.all([
         remove(ref(db, `users/${uid}`)),
         remove(ref(db, `history/${uid}`)),
         remove(ref(db, `live/${uid}`)),
         remove(ref(db, `liveOwners/${uid}`)),
+        remove(ref(db, `admins/${uid}`)),
         remove(ref(db, `userVisibility/${uid}`))
       ]);
       const visibilityUpdates = {};
@@ -5033,13 +5106,17 @@ function renderUsersManagement(){
         if(ownerUid !== uid) visibilityUpdates[`userVisibility/${ownerUid}/${uid}`] = null;
       });
       if(Object.keys(visibilityUpdates).length) await update(ref(db), visibilityUpdates);
-      if(selectedUid === uid) selectedUid = "";
-      await logAction("user_delete", `Удалён пользователь ${uid} из базы`);
+
+      delete usersMeta[uid];
+      delete adminsMap[uid];
+      delete userVisibility[uid];
+      await logAction("user_delete", `Удалён пользователь ${uid}`);
       await loadUsers();
       renderUsersManagement();
+      renderVisibilityPanel();
       showToast("Пользователь удалён из базы","success");
     }catch(e){
-      recordError("deleteUserFromTab", e);
+      recordError("deleteManagedUser", e);
       showToast("Ошибка удаления: "+errText(e), "error", 3600);
     }
   });
