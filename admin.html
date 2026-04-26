@@ -2261,6 +2261,7 @@ historyMap.on("zoomstart movestart dragstart", () => {
 
 const liveTrail = L.polyline([], {weight:5}).addTo(liveMap);
 const liveMarker = L.circleMarker([56.95,24.10], {radius:8,color:"#22c55e",fillColor:"#22c55e",fillOpacity:1}).addTo(liveMap);
+const liveUsersLayer = L.layerGroup().addTo(liveMap);
 const sessionTrail = L.polyline([], {weight:5}).addTo(sessionMap);
 const sessionMarker = L.circleMarker([56.95,24.10], {radius:8,color:"#22c55e",fillColor:"#22c55e",fillOpacity:1}).addTo(sessionMap);
 const geofencePreviewLayer = L.layerGroup().addTo(geofenceMap);
@@ -2754,28 +2755,104 @@ window.toggleHistorySort = function(field){
   renderHistory();
 };
 
+
+function setPrimaryLiveMarkerVisible(visible){
+  liveMarker.setStyle({
+    opacity: visible ? 1 : 0,
+    fillOpacity: visible ? 1 : 0,
+    radius: visible ? 8 : 0
+  });
+}
+
+function renderNowLiveMarkers(items){
+  liveUsersLayer.clearLayers();
+  liveTrail.setLatLngs([]);
+
+  const latlngs = [];
+  (items || []).forEach(item => {
+    const point = item?.point;
+    if(!point || point.latitude == null || point.longitude == null) return;
+
+    const lat = Number(point.latitude);
+    const lon = Number(point.longitude);
+    if(!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+
+    const st = statusByPoint(point);
+    const isOffline = st.kind === "offline";
+    const color = isOffline ? "#9ca3af" : st.color;
+    const uid = item.uid || "";
+    const label = item.label || getDisplayName(uid) || uid || "Пользователь";
+
+    const marker = L.circleMarker([lat, lon], {
+      radius: isOffline ? 8 : 9,
+      color,
+      fillColor: color,
+      fillOpacity: isOffline ? 0.65 : 1,
+      opacity: 1,
+      weight: isOffline ? 2 : 3
+    }).addTo(liveUsersLayer);
+
+    marker.bindPopup(`
+      <b>${label}</b><br>
+      ${st.text}<br>
+      ${fmtTime(point.timestamp)}<br>
+      ${Number(point.speedKmh ?? point.speed ?? 0).toFixed(1)} км/ч
+    `);
+
+    latlngs.push([lat, lon]);
+  });
+
+  if(latlngs.length > 1 && liveAutoCenter){
+    liveMap.fitBounds(L.latLngBounds(latlngs), {padding:[30,30]});
+  }else if(latlngs.length === 1 && liveAutoCenter){
+    liveMap.setView(latlngs[0], 16);
+  }
+}
+
+
 async function updateNowFromAvailableSources(){
+  liveTrail.setLatLngs([]);
+  liveUsersLayer.clearLayers();
+
   if(qs("viewModeSelect").value === "all"){
     const points = getAllLastPoints();
+    renderNowLiveMarkers(points);
+
     if(points.length){
-      const currentPoint = points[points.length - 1].point;
-      const latlngs = points.map(item => [Number(item.point.latitude), Number(item.point.longitude)]);
-      liveTrail.setLatLngs(latlngs);
-      liveMarker.setLatLng(latlngs[latlngs.length - 1]);
+      const currentPoint = points
+        .slice()
+        .sort((a,b)=>Number(a.point?.timestamp||0)-Number(b.point?.timestamp||0))
+        .at(-1)?.point || points[points.length - 1].point;
+
+      setPrimaryLiveMarkerVisible(false);
       await updateNowUI(currentPoint, `Все пользователи (${points.length})`);
+      setPrimaryLiveMarkerVisible(false);
+
       updateGpsProfilesUiFromData(currentPoint);
       await captureDeviceJournalEvents(currentPoint);
       notifyDeviceAlerts(currentPoint);
       return;
     }
+
+    setPrimaryLiveMarkerVisible(false);
+    await updateNowUI(null, "Нет live-точек");
+    return;
   }
 
   const selectedLive = getSelectedLiveData();
   if(selectedLive && selectedLive.lastPoint){
     const currentPoint = selectedLive.lastPoint;
-    const pts = Object.values(selectedLive.recentPoints || {}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
-    liveTrail.setLatLngs(pts.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]));
+
+    renderNowLiveMarkers([{
+      uid: selectedUid,
+      point: currentPoint,
+      label: getDisplayName(selectedUid)
+    }]);
+
+    setPrimaryLiveMarkerVisible(false);
     await updateNowUI(currentPoint, selectedUid ? `live/${selectedUid}` : "live");
+    setPrimaryLiveMarkerVisible(false);
+
     updateGpsProfilesUiFromData(currentPoint);
     await captureDeviceJournalEvents(currentPoint);
     notifyDeviceAlerts(currentPoint);
@@ -2791,22 +2868,35 @@ async function updateNowFromAvailableSources(){
     const [token, session] = active.sort((a,b)=>Number(getSessionRoot(b[1]).meta?.createdAt||0)-Number(getSessionRoot(a[1]).meta?.createdAt||0))[0];
     const root = getSessionRoot(session);
     const sessionPoint = root.public?.lastPoint || null;
-    const pts = Object.values(root.public?.recentPoints || {}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
-    liveTrail.setLatLngs(pts.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]));
+
+    if(sessionPoint){
+      renderNowLiveMarkers([{
+        uid: root.meta?.ownerUid || selectedUid || "",
+        point: sessionPoint,
+        label: getDisplayName(root.meta?.ownerUid || selectedUid || "") || `Live ${token}`
+      }]);
+    }else{
+      renderNowLiveMarkers([]);
+    }
+
+    setPrimaryLiveMarkerVisible(false);
     await updateNowUI(sessionPoint, `liveSessions/${token}`);
+    setPrimaryLiveMarkerVisible(false);
+
     updateGpsProfilesUiFromData(sessionPoint);
     await captureDeviceJournalEvents(sessionPoint);
     notifyDeviceAlerts(sessionPoint);
     return;
   }
 
-  const points = getVisibleHistoryPoints();
-  const point = points.length ? points[points.length - 1] : null;
+  // Вкладка "Сейчас" больше не показывает fallback из history.
+  // История должна быть только во вкладке "История".
+  setPrimaryLiveMarkerVisible(false);
   liveTrail.setLatLngs([]);
-  await updateNowUI(point, selectedUid ? `history/${selectedUid}` : "history");
-  updateGpsProfilesUiFromData(point);
-  await captureDeviceJournalEvents(point);
-  notifyDeviceAlerts(point);
+  liveUsersLayer.clearLayers();
+  await updateNowUI(null, "Нет активных live-данных");
+  updateGpsProfilesUiFromData(null);
+  notifyDeviceAlerts(null);
 }
 
 function updateHistorySortHeaders(){
