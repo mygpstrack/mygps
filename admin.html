@@ -5080,7 +5080,10 @@ function renderUsersManagement(){
     const uid = btn.dataset.adminRemove;
     if(!uid) return;
     const currentUserUid = auth.currentUser?.uid || "";
-    if(uid === currentUserUid && !confirm("Это твой текущий аккаунт. Если снять права, ты потеряешь доступ к админке. Точно снять?")) return;
+    if(uid === currentUserUid){
+      showToast("Нельзя снять права администратора с самого себя. Сначала выдай админку другому пользователю.", "warn", 4200);
+      return;
+    }
     if(!confirm(`Забрать права администратора у ${getDisplayName(uid)}?`)) return;
     try{
       await remove(ref(db, `admins/${uid}`));
