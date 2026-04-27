@@ -1111,17 +1111,21 @@ const app = initializeApp(firebaseConfig);
 const secondaryApp = initializeApp(firebaseConfig, "adminSecondary");
 const auth = getAuth(app);
 const secondaryAuth = getAuth(secondaryApp);
-
-// === FIX: safe Firebase path ===
-function safeRef(path){
-  if(!path) return null;
-  if(path.includes('undefined') || path.includes('null')) return null;
-  return ref(db, path);
-}
-
 const db = getDatabase(app);
 const provider = new GoogleAuthProvider();
 const qs = (id) => document.getElementById(id);
+
+function fbKeySafe(value){
+  return String(value || "")
+    .trim()
+    .replace(/[.#$\[\]\/]/g, "_")
+    .replace(/\s+/g, "_");
+}
+
+function hasBadFbPathPart(value){
+  return !String(value || "").trim() || /[.#$\[\]\/]/.test(String(value || ""));
+}
+
 
 let historyByUid = {}, liveByUid = {}, allSessions = {}, selectedUid = "", allUsers = [];
 let currentFiltered = [], deletionsLog = [], actionLogs = [], appEventLogs = [], liveEventLogs = [];
@@ -2414,17 +2418,18 @@ async function runSystemCheck(){
 
   const uid = auth.currentUser?.uid || "";
   const now = Date.now();
-  const testKey = `_system_check_${uid || "no_uid"}_${now}`;
+  const testKey = `_system_check_${fbKeySafe(uid || "no_uid")}_${now}`;
   const items = [];
 
   items.push(await safeCheck("Firebase connected", async () => {
     if(!auth.currentUser) throw new Error("Нет авторизованного пользователя");
-    await get(ref(db, `.info/connected`));
-    return `Вход выполнен: ${auth.currentUser.email || auth.currentUser.uid}`;
+    await get(ref(db, "adminSettings/config"));
+    return `Firebase доступен, вход выполнен: ${auth.currentUser.email || auth.currentUser.uid}`;
   }));
 
   items.push(await safeCheck("Admin права", async () => {
     if(!uid) throw new Error("UID не найден");
+    if(hasBadFbPathPart(uid)) throw new Error("UID содержит запрещённые символы для Firebase path");
     const snap = await get(ref(db, `admins/${uid}`));
     if(snap.val() !== true) throw new Error(`admins/${uid} не true`);
     return `admins/${uid} = true`;
@@ -2457,6 +2462,7 @@ async function runSystemCheck(){
 
   items.push(await safeCheck("live пишется", async () => {
     if(!uid) throw new Error("UID не найден");
+    if(hasBadFbPathPart(testKey)) throw new Error("testKey содержит запрещённые символы");
     const testRef = ref(db, `liveSessions/${testKey}`);
     await set(testRef, {meta:{active:false, createdAt:now, expiresAt:now, ownerUid:uid, systemCheck:true}});
     await remove(testRef);
