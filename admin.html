@@ -2734,6 +2734,103 @@ async function loadUsers(){
   await updateNowFromAvailableSources();
 }
 
+
+
+// fix_41: safety helpers for summary and live GPS-profile listener
+function normalizeAdminPointForFix41(p){
+  if(!p) return null;
+  const lat = Number(p.latitude ?? p.lat);
+  const lon = Number(p.longitude ?? p.lng ?? p.lon);
+  const ts = Number(p.timestamp ?? p.ts ?? p.time ?? 0);
+  if(!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  return { ...p, latitude: lat, longitude: lon, timestamp: ts };
+}
+
+function startOfTodayMsFix41(){
+  const d = new Date();
+  d.setHours(0,0,0,0);
+  return d.getTime();
+}
+
+function formatDurationFix41(ms){
+  const totalMin = Math.max(0, Math.round(Number(ms || 0) / 60000));
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  if(h && m) return `${h} ч ${m} мин`;
+  if(h) return `${h} ч`;
+  return `${m} мин`;
+}
+
+function pointSpeedKmhFix41(p){
+  const raw = Number(p?.speedKmh ?? p?.speed ?? 0);
+  return Number.isFinite(raw) ? Math.max(0, raw) : 0;
+}
+
+function updateTodaySummary(){
+  try{
+    const todayStart = startOfTodayMsFix41();
+    const source = (qs("viewModeSelect")?.value === "all")
+      ? Object.values(historyByUid || {}).flat()
+      : getSelectedHistoryPoints();
+
+    const points = (source || [])
+      .map(normalizeAdminPointForFix41)
+      .filter(p => p && Number(p.timestamp || 0) >= todayStart)
+      .sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+
+    let meters = 0;
+    for(let i=1;i<points.length;i++){
+      try{ meters += distanceMeters(points[i-1], points[i]); }catch(e){}
+    }
+
+    let moveMs = 0;
+    for(let i=1;i<points.length;i++){
+      const prev = points[i-1];
+      const cur = points[i];
+      const dt = Math.max(0, Number(cur.timestamp||0) - Number(prev.timestamp||0));
+      if(dt <= 5 * 60 * 1000 && pointSpeedKmhFix41(cur) > 1) moveMs += dt;
+    }
+
+    const lastTs = points.length ? Number(points[points.length - 1].timestamp || 0) : 0;
+    if(qs("todayKm")) qs("todayKm").textContent = `${(meters/1000).toFixed(2)} км`;
+    if(qs("todayMove")) qs("todayMove").textContent = points.length ? formatDurationFix41(moveMs) : "—";
+    if(qs("todayLast")) qs("todayLast").textContent = lastTs ? new Date(lastTs).toLocaleString("ru-RU") : "—";
+    if(qs("todayPoints")) qs("todayPoints").textContent = String(points.length);
+  }catch(e){
+    console.warn("updateTodaySummary skipped", e);
+  }
+}
+
+function notifyLiveGpsProfileChanges(liveSnapshot){
+  try{
+    const point = getCurrentPointForGpsProfiles?.();
+    updateGpsProfilesUiFromData?.(point || null);
+
+    const seen = [];
+    Object.entries(liveSnapshot || {}).forEach(([uid, data]) => {
+      const p = data?.lastPoint || data?.point || data;
+      const profile = p?.appliedGpsProfile || null;
+      if(profile) seen.push({ uid, profile });
+    });
+
+    if(!seen.length) return;
+    const json = JSON.stringify(seen.map(x => x.profile));
+    if(gpsProfilesLastSeenJson === null){
+      gpsProfilesLastSeenJson = json;
+      return;
+    }
+    if(json !== gpsProfilesLastSeenJson){
+      gpsProfilesLastSeenJson = json;
+      if(!suppressNextGpsProfilesToast){
+        showToast?.("GPS-профиль обновлён", "info", 2400);
+      }
+    }
+    suppressNextGpsProfilesToast = false;
+  }catch(e){
+    console.warn("notifyLiveGpsProfileChanges skipped", e);
+  }
+}
+
 async function loadAllData(){
   const [historySnap, liveSnap, usersSnap] = await Promise.all([
     get(ref(db,"history")),
