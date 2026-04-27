@@ -1359,6 +1359,18 @@ window.addEventListener("load", () => {
   setTimeout(updateUsageTrafficStatus, 1200);
 });
 
+
+document.addEventListener("click", async (e)=>{
+  const el = e.target.closest("[data-danger='1']");
+  if(!el) return;
+
+  const ok = await confirmDanger(el.id || "danger action");
+  if(!ok){
+    e.stopImmediatePropagation();
+    e.preventDefault();
+  }
+});
+
 </script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js">
 function setupJournalQuickFilters(){
@@ -7121,5 +7133,16 @@ document.addEventListener("click", (ev) => {
     setTimeout(loadAdminLogs, 100);
   }
 });
+
+
+// === Danger confirmation v66 ===
+async function confirmDanger(action){
+  const text = prompt("Подтверждение действия: " + action + "\nВведите DELETE для подтверждения");
+  if(text !== "DELETE"){
+    adminPopup("Отменено", "warn");
+    return false;
+  }
+  return true;
+}
 </script>
 </body></html>
