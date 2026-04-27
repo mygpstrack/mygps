@@ -7242,5 +7242,52 @@ document.addEventListener("click", (ev) => {
     setTimeout(adminLogsLoad, 100);
   }
 });
+
+
+// === Strict tab visibility fix v73 ===
+function strictShowOnlySelectedPanel(selectedId){
+  const panelIds = [
+    "nowPanel",
+    "historyPanel",
+    "reportsPanel",
+    "usagePanel",
+    "sessionsPanel",
+    "usersPanel",
+    "visibilityPanel",
+    "geofencesPanel",
+    "journalPanel",
+    "errorsPanel",
+    "systemCheckPanel",
+    "adminLogsPanel",
+    "settingsPanel"
+  ];
+
+  panelIds.forEach(id => {
+    const panel = qs(id);
+    if(panel){
+      panel.classList.toggle("hidden", id !== selectedId);
+    }
+  });
+
+  document.querySelectorAll(".tab-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.tab === selectedId);
+  });
+}
+
+document.addEventListener("click", (ev) => {
+  const btn = ev.target && ev.target.closest ? ev.target.closest(".tab-btn[data-tab]") : null;
+  if(!btn) return;
+
+  const selectedId = btn.dataset.tab;
+  if(!selectedId) return;
+
+  setTimeout(() => strictShowOnlySelectedPanel(selectedId), 0);
+  setTimeout(() => strictShowOnlySelectedPanel(selectedId), 80);
+}, true);
+
+window.addEventListener("load", () => {
+  const activeBtn = document.querySelector(".tab-btn.active[data-tab]");
+  strictShowOnlySelectedPanel(activeBtn ? activeBtn.dataset.tab : "nowPanel");
+});
 </script>
 </body></html>
