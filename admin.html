@@ -364,6 +364,15 @@
     .checkBadge.err{background:rgba(185,28,28,.25);border-color:#7f1d1d;color:#fecaca}
     .checkBadge.wait{background:rgba(59,130,246,.18);border-color:#1d4ed8;color:#bfdbfe}
 
+
+    /* Now panel live status warning */
+    .nowStatusChip{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;border:1px solid var(--border);font-weight:800;font-size:14px}
+    .nowStatusChip.online{background:rgba(22,163,74,.22);border-color:#166534;color:#bbf7d0}
+    .nowStatusChip.idle{background:rgba(180,83,9,.22);border-color:#92400e;color:#fde68a}
+    .nowStatusChip.offline{background:rgba(100,116,139,.18);border-color:#475569;color:#cbd5e1}
+    .nowLiveWarning{display:none;margin-top:12px;padding:12px 14px;border-radius:14px;border:1px solid rgba(234,179,8,.45);background:rgba(180,83,9,.18);color:#fde68a;font-weight:700;line-height:1.45}
+    .nowLiveWarning.show{display:block}
+
 </style>
 </head>
 <body>
@@ -499,6 +508,8 @@
         </div>
 
         
+        <div id="nowLiveWarning" class="nowLiveWarning">—</div>
+
         <div class="row">
           <button id="liveAutoCenterBtn">Автоцентр: вкл</button>
           <button id="refreshNowBtn" class="secondary">Обновить сейчас</button>
@@ -1084,7 +1095,12 @@
   </div>
 </div>
 <div id="loaderOverlay" class="loaderOverlay"><div class="loaderBox">Загрузка…</div></div>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="">
+window.addEventListener("load", () => {
+  try{ renderNowLiveHealth(null); }catch(e){}
+});
+
+</script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -1113,6 +1129,47 @@ const auth = getAuth(app);
 const secondaryAuth = getAuth(secondaryApp);
 
 // === NOW status improvements ===
+
+function renderNowLiveHealth(point){
+  const statusEl = qs("nowStatus");
+  const warningEl = qs("nowLiveWarning");
+  if(!statusEl || !warningEl) return;
+
+  const p = point || currentLivePoint || latestLivePoint || null;
+  const ts = Number(p?.timestamp || p?.ts || p?.time || 0);
+  const speed = Number(p?.speed || 0);
+  const hasCoords = p && ((p.latitude ?? p.lat) != null) && ((p.longitude ?? p.lng) != null);
+
+  let cls = "offline";
+  let text = "Нет live-точки";
+  let warning = "Live-точка отсутствует. Проверь, включён ли GPS/Live у выбранного пользователя.";
+
+  if(p && hasCoords && ts){
+    const ageMs = Math.max(0, Date.now() - ts);
+    if(ageMs > 5 * 60 * 1000){
+      cls = "offline";
+      text = "Offline";
+      warning = `Данные устарели: ${adminRelTime ? adminRelTime(ts) : Math.floor(ageMs/60000)+" мин"} назад.`;
+    }else if(speed > 3){
+      cls = "online";
+      text = "Online · движение";
+      warning = "";
+    }else{
+      cls = "idle";
+      text = "Стоит";
+      warning = "";
+    }
+  }else if(p && !hasCoords){
+    cls = "idle";
+    text = "Нет координат";
+    warning = "Последняя live-точка есть, но без координат.";
+  }
+
+  statusEl.innerHTML = `<span class="nowStatusChip ${cls}">${text}</span>`;
+  warningEl.textContent = warning;
+  warningEl.classList.toggle("show", !!warning);
+}
+
 function getNowStatusFromPoint(p){
   if(!p) return {text:"Нет данных", cls:"offline"};
   const ts = Number(p.timestamp||p.ts||0);
@@ -1122,6 +1179,15 @@ function getNowStatusFromPoint(p){
   if((p.speed||0) > 3) return {text:"Online (движение)", cls:"online"};
   return {text:"Стоит", cls:"idle"};
 }
+
+
+setInterval(() => {
+  try{
+    if(document.getElementById("nowPanel") && !document.getElementById("nowPanel").classList.contains("hidden")){
+      renderNowLiveHealth(null);
+    }
+  }catch(e){}
+}, 15000);
 
 const db = getDatabase(app);
 const provider = new GoogleAuthProvider();
