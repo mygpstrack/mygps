@@ -1342,135 +1342,163 @@ window.addEventListener("load", () => {
 });
 
 
-async function getObjectAt(path){
+
+// === Safe cleanup FIX: robust delegated handlers ===
+async function safeCleanupGetObject(path){
   const snap = await get(ref(db, path));
   return snap.exists() && snap.val() ? snap.val() : {};
 }
 
-function isEmptyProfileForCleanup(u){
+function safeCleanupIsEmptyProfile(u){
   if(!u || typeof u !== "object") return false;
-  const name = String(u.name || u.displayName || "").trim();
+  const name = String(u.name || u.displayName || u.nickname || "").trim();
   const email = String(u.email || "").trim();
-  const last = Number(u.lastSeen || u.lastSeenAt || u.updatedAt || u.lastUpdate || 0);
-  const hasRealProfile = !!name || !!email;
-  const recentlySeen = last && (Date.now() - last < 30 * 24 * 60 * 60 * 1000);
-  return !hasRealProfile && !recentlySeen;
+  const last = Number(u.lastSeen || u.lastSeenAt || u.updatedAt || u.lastUpdate || u.timestamp || 0);
+  const hasProfile = !!name || !!email;
+  const recent = last && (Date.now() - last < 30 * 24 * 60 * 60 * 1000);
+  return !hasProfile && !recent;
 }
 
-async function safeCleanup(previewOnly=false){
+function safeCleanupShow(text){
   const box = document.getElementById("safeCleanupResult");
-  if(box){
-    box.classList.remove("hidden");
-    box.textContent = previewOnly ? "Проверяю мусор…" : "Запускаю безопасную очистку…";
+  if(!box){
+    alert(text);
+    return;
   }
+  box.classList.remove("hidden");
+  box.textContent = text;
+}
+
+async function runSafeCleanup(previewOnly){
+  safeCleanupShow(previewOnly ? "Проверяю мусор…" : "Запускаю безопасную очистку…");
 
   const now = Date.now();
   const monthAgo = now - 30 * 24 * 60 * 60 * 1000;
+
   const result = {
     expiredSessions: 0,
     endedSessions: 0,
     oldEvents: 0,
     emptyProfiles: 0,
+    deleted: 0,
     errors: []
   };
 
   try{
-    const sessions = await getObjectAt("liveSessions");
+    const sessions = await safeCleanupGetObject("liveSessions");
     for(const [token, session] of Object.entries(sessions || {})){
-      const meta = session?.meta || {};
+      const meta = session && session.meta ? session.meta : {};
       const expiresAt = Number(meta.expiresAt || 0);
       const active = meta.active === true;
       const ended = meta.ended === true || meta.status === "ended" || active === false;
-      const isExpired = expiresAt && expiresAt < now;
+      const expired = expiresAt && expiresAt < now;
 
-      if(isExpired || ended){
-        if(isExpired) result.expiredSessions++;
+      if(expired || ended){
+        if(expired) result.expiredSessions++;
         else result.endedSessions++;
+
         if(!previewOnly){
-          try{ await remove(ref(db, `liveSessions/${token}`)); }catch(e){ result.errors.push(`liveSessions/${token}: ${e.message}`); }
-        }
-      }
-    }
-  }catch(e){ result.errors.push(`liveSessions: ${e.message}`); }
-
-  try{
-    const eventsRoot = await getObjectAt("events");
-    for(const [uid, events] of Object.entries(eventsRoot || {})){
-      for(const [eventId, ev] of Object.entries(events || {})){
-        const ts = Number(ev?.timestamp || ev?.ts || 0);
-        if(ts && ts < monthAgo){
-          result.oldEvents++;
-          if(!previewOnly){
-            try{ await remove(ref(db, `events/${uid}/${eventId}`)); }catch(e){ result.errors.push(`events/${uid}/${eventId}: ${e.message}`); }
+          try{
+            await remove(ref(db, `liveSessions/${token}`));
+            result.deleted++;
+          }catch(e){
+            result.errors.push(`liveSessions/${token}: ${e.message}`);
           }
         }
       }
     }
-  }catch(e){ result.errors.push(`events: ${e.message}`); }
+  }catch(e){
+    result.errors.push(`liveSessions: ${e.message}`);
+  }
 
-  try{
-    const journalRoot = await getObjectAt("eventJournal");
-    for(const [uid, events] of Object.entries(journalRoot || {})){
-      for(const [eventId, ev] of Object.entries(events || {})){
-        const ts = Number(ev?.timestamp || ev?.ts || 0);
-        if(ts && ts < monthAgo){
-          result.oldEvents++;
-          if(!previewOnly){
-            try{ await remove(ref(db, `eventJournal/${uid}/${eventId}`)); }catch(e){ result.errors.push(`eventJournal/${uid}/${eventId}: ${e.message}`); }
+  async function scanEventsRoot(rootName){
+    try{
+      const rootObj = await safeCleanupGetObject(rootName);
+      for(const [uid, events] of Object.entries(rootObj || {})){
+        if(!events || typeof events !== "object") continue;
+        for(const [eventId, ev] of Object.entries(events)){
+          const ts = Number(ev && (ev.timestamp || ev.ts) || 0);
+          if(ts && ts < monthAgo){
+            result.oldEvents++;
+            if(!previewOnly){
+              try{
+                await remove(ref(db, `${rootName}/${uid}/${eventId}`));
+                result.deleted++;
+              }catch(e){
+                result.errors.push(`${rootName}/${uid}/${eventId}: ${e.message}`);
+              }
+            }
           }
         }
       }
+    }catch(e){
+      result.errors.push(`${rootName}: ${e.message}`);
     }
-  }catch(e){ result.errors.push(`eventJournal: ${e.message}`); }
+  }
+
+  await scanEventsRoot("events");
+  await scanEventsRoot("eventJournal");
 
   try{
-    const users = await getObjectAt("users");
+    const users = await safeCleanupGetObject("users");
     for(const [uid, u] of Object.entries(users || {})){
-      if(isEmptyProfileForCleanup(u)){
+      if(safeCleanupIsEmptyProfile(u)){
         result.emptyProfiles++;
         if(!previewOnly){
-          try{ await remove(ref(db, `users/${uid}`)); }catch(e){ result.errors.push(`users/${uid}: ${e.message}`); }
+          try{
+            await remove(ref(db, `users/${uid}`));
+            result.deleted++;
+          }catch(e){
+            result.errors.push(`users/${uid}: ${e.message}`);
+          }
         }
       }
     }
-  }catch(e){ result.errors.push(`users: ${e.message}`); }
+  }catch(e){
+    result.errors.push(`users: ${e.message}`);
+  }
 
   const lines = [
-    previewOnly ? "Проверка завершена. Можно удалить:" : "Безопасная очистка завершена:",
+    previewOnly ? "Проверка завершена. Найдено:" : "Безопасная очистка завершена:",
     `• Истёкшие live-сессии: ${result.expiredSessions}`,
     `• Завершённые live-сессии: ${result.endedSessions}`,
     `• Старые события журнала: ${result.oldEvents}`,
     `• Пустые профили: ${result.emptyProfiles}`,
+    `• Удалено: ${previewOnly ? 0 : result.deleted}`,
     `• Ошибки: ${result.errors.length}`
   ];
+
   if(result.errors.length){
     lines.push("");
     lines.push("Ошибки:");
-    lines.push(...result.errors.slice(0, 10).map(e => `- ${e}`));
-    if(result.errors.length > 10) lines.push(`…ещё ${result.errors.length - 10}`);
+    lines.push(...result.errors.slice(0, 12).map(x => `- ${x}`));
+    if(result.errors.length > 12) lines.push(`…ещё ${result.errors.length - 12}`);
   }
 
-  if(box) box.textContent = lines.join("\n");
-  try{ updateUsageTrafficStatus(); }catch(e){}
+  safeCleanupShow(lines.join("\n"));
+
+  try{ if(typeof updateUsageTrafficStatus === "function") updateUsageTrafficStatus(); }catch(e){}
   try{ if(typeof loadSessions === "function") loadSessions(); }catch(e){}
   try{ if(typeof loadUsers === "function") loadUsers(); }catch(e){}
-  return result;
 }
 
-window.addEventListener("load", () => {
-  const runBtn = document.getElementById("safeCleanupBtn");
-  const previewBtn = document.getElementById("safeCleanupPreviewBtn");
-  if(runBtn && !runBtn.dataset.safeCleanupPatch){
-    runBtn.dataset.safeCleanupPatch = "1";
-    runBtn.onclick = async () => {
-      const ok = confirm("Запустить безопасную очистку? History не будет удалён.");
-      if(!ok) return;
-      await safeCleanup(false);
-    };
+document.addEventListener("click", async (ev) => {
+  const previewBtn = ev.target.closest && ev.target.closest("#safeCleanupPreviewBtn");
+  const runBtn = ev.target.closest && ev.target.closest("#safeCleanupBtn");
+
+  if(previewBtn){
+    ev.preventDefault();
+    ev.stopPropagation();
+    await runSafeCleanup(true);
+    return;
   }
-  if(previewBtn && !previewBtn.dataset.safeCleanupPatch){
-    previewBtn.dataset.safeCleanupPatch = "1";
-    previewBtn.onclick = async () => safeCleanup(true);
+
+  if(runBtn){
+    ev.preventDefault();
+    ev.stopPropagation();
+    const ok = confirm("Запустить безопасную очистку? History не будет удалён.");
+    if(!ok) return;
+    await runSafeCleanup(false);
   }
 });
 
