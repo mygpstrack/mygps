@@ -522,6 +522,7 @@
         <button class="tab-btn" data-tab="journalPanel">Журнал</button>
         <button class="tab-btn" data-tab="errorsPanel">Ошибки</button>
         <button class="tab-btn" data-tab="systemCheckPanel">Проверка</button>
+        
         <button class="tab-btn" data-tab="adminLogsPanel">Логи админа</button>
         <button class="tab-btn" data-tab="settingsPanel">Настройки</button>
       </div>
@@ -1027,19 +1028,17 @@
 
 
 
+    
+    </div>
+
+    
     <div id="adminLogsPanel" class="hidden">
       <div class="card">
         <h2>Логи админа</h2>
-        <p class="sub">Последние действия администратора.</p>
         <div class="toolbar">
-          <button id="refreshAdminLogsBtn" class="secondary">Обновить логи</button>
+          <button id="refreshAdminLogsBtn" class="secondary">Обновить</button>
         </div>
-        <div style="overflow:auto">
-          <table>
-            <thead><tr><th>Время</th><th>Админ</th><th>Тип</th><th>Режим</th><th>Удалено</th><th>Ошибки</th><th>Детали</th></tr></thead>
-            <tbody id="adminLogsTbody"></tbody>
-          </table>
-        </div>
+        <div id="adminLogsList" style="margin-top:10px"></div>
       </div>
     </div>
 
@@ -1358,6 +1357,41 @@ window.addEventListener("load", () => {
     if(usagePanel && !usagePanel.classList.contains("hidden")) updateUsageTrafficStatus();
   }, 3000);
   setTimeout(updateUsageTrafficStatus, 1200);
+});
+
+
+// admin logs clean v70
+async function loadAdminLogs(){
+  const box = document.getElementById("adminLogsList");
+  if(!box) return;
+  box.textContent = "Загрузка...";
+  try{
+    const snap = await get(ref(db,"adminLogs"));
+    if(!snap.exists()){
+      box.textContent = "Нет логов";
+      return;
+    }
+    const arr = Object.values(snap.val())
+      .sort((a,b)=>(b.timestamp||0)-(a.timestamp||0))
+      .slice(0,50);
+
+    box.innerHTML = arr.map(x=>{
+      return "<div style='margin-bottom:8px;padding:8px;border:1px solid #333'>"
+      + (x.email||x.uid||"—")
+      + " | " + (x.mode||"")
+      + "<br>" + new Date(x.timestamp||0).toLocaleString()
+      + "<br>Удалено: "+(x.result?.deleted||0)
+      + "</div>";
+    }).join("");
+  }catch(e){
+    box.textContent = "Ошибка";
+  }
+}
+
+document.addEventListener("click",(e)=>{
+  if(e.target?.dataset?.tab==="adminLogsPanel"){
+    setTimeout(loadAdminLogs,100);
+  }
 });
 
 </script>
