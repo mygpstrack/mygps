@@ -2409,7 +2409,12 @@ async function runSystemCheck(){
   const testKey = `_system_check_${uid || "no_uid"}_${now}`;
   const items = [];
 
-  items.push(await safeCheck("Firebase connected", async () => { return "OK"; }));
+  items.push(await safeCheck("Firebase connected", async () => {
+    if(!auth.currentUser) throw new Error("Нет авторизованного пользователя");
+    const snap = await get(ref(db, "users"));
+    const count = snap.exists() && snap.val() ? Object.keys(snap.val()).length : 0;
+    return `Firebase OK · users читается · пользователей: ${count}`;
+  }));
 
   items.push(await safeCheck("Admin права", async () => {
     if(!uid) throw new Error("UID не найден");
