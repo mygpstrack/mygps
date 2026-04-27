@@ -353,6 +353,17 @@
       transform:none!important;
     }
 
+
+    /* System check panel */
+    .checkRow{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:14px;background:rgba(255,255,255,.03);margin-top:10px}
+    .checkName{font-weight:800}
+    .checkDetails{color:var(--muted);font-size:13px;margin-top:4px;line-height:1.45}
+    .checkBadge{flex:0 0 auto;padding:6px 10px;border-radius:999px;border:1px solid var(--border);font-weight:800;font-size:12px}
+    .checkBadge.ok{background:rgba(22,163,74,.22);border-color:#166534;color:#bbf7d0}
+    .checkBadge.warn{background:rgba(180,83,9,.22);border-color:#92400e;color:#fde68a}
+    .checkBadge.err{background:rgba(185,28,28,.25);border-color:#7f1d1d;color:#fecaca}
+    .checkBadge.wait{background:rgba(59,130,246,.18);border-color:#1d4ed8;color:#bfdbfe}
+
 </style>
 </head>
 <body>
@@ -463,6 +474,7 @@
         <button class="tab-btn" data-tab="geofencesPanel">Геозоны</button>
         <button class="tab-btn" data-tab="journalPanel">Журнал</button>
         <button class="tab-btn" data-tab="errorsPanel">Ошибки</button>
+        <button class="tab-btn" data-tab="systemCheckPanel">Проверка</button>
         <button class="tab-btn" data-tab="settingsPanel">Настройки</button>
       </div>
     </div>
@@ -904,6 +916,26 @@
             <thead><tr><th>Время</th><th>Источник</th><th>Ошибка</th></tr></thead>
             <tbody id="errorsTbody"></tbody>
           </table>
+        </div>
+      </div>
+    </div>
+
+
+    <div id="systemCheckPanel" class="hidden">
+      <div class="card">
+        <h2>Проверка системы</h2>
+        <p class="sub">Быстрая проверка Firebase, прав админа и основных узлов базы.</p>
+        <div class="toolbar">
+          <button id="runSystemCheckBtn" class="success">Запустить проверку</button>
+        </div>
+        <div class="grid4" style="margin-top:12px">
+          <div class="stat"><div class="label">Firebase</div><div class="value" id="checkFirebaseSummary">—</div></div>
+          <div class="stat"><div class="label">Админ</div><div class="value" id="checkAdminSummary">—</div></div>
+          <div class="stat"><div class="label">Чтение</div><div class="value" id="checkReadSummary">—</div></div>
+          <div class="stat"><div class="label">Запись</div><div class="value" id="checkWriteSummary">—</div></div>
+        </div>
+        <div id="systemCheckRows" style="margin-top:12px">
+          <div class="emptyState">Проверка ещё не запускалась.</div>
         </div>
       </div>
     </div>
@@ -2002,13 +2034,14 @@ function restoreUiState(){
 
     if(state.activeTab){
       document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
-      document.querySelectorAll("#nowPanel,#historyPanel,#reportsPanel,#usagePanel,#sessionsPanel,#usersPanel,#visibilityPanel,#geofencesPanel,#journalPanel,#errorsPanel,#settingsPanel").forEach(p=>p.classList.add("hidden"));
+      document.querySelectorAll("#nowPanel,#historyPanel,#reportsPanel,#usagePanel,#sessionsPanel,#usersPanel,#visibilityPanel,#geofencesPanel,#journalPanel,#errorsPanel,#systemCheckPanel,#settingsPanel").forEach(p=>p.classList.add("hidden"));
       const btn = document.querySelector(`.tab-btn[data-tab="${state.activeTab}"]`);
       if(btn){
         btn.classList.add("active");
         const panel = qs(btn.dataset.tab);
         if(panel) panel.classList.remove("hidden");
         if(state.activeTab === "visibilityPanel") setTimeout(renderVisibilityPanel, 0);
+        if(state.activeTab === "systemCheckPanel") setTimeout(()=>runSystemCheck().catch(e=>recordError("runSystemCheck", e)), 0);
       }
     }
 
@@ -2323,15 +2356,130 @@ function setDateTimeRange(start,end){
 }
 function setDefaultPeriodToday(){ const now=new Date(), start=new Date(); start.setHours(0,0,0,0); setDateTimeRange(start,now); }
 
+
+
+function escapeHtml(value){
+  return String(value ?? "")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
+
+function setSystemCheckSummary(id, text){
+  const el = qs(id);
+  if(el) el.textContent = text;
+}
+
+function renderSystemCheckRows(items){
+  const host = qs("systemCheckRows");
+  if(!host) return;
+  host.innerHTML = items.map(item => {
+    const cls = item.status === "ok" ? "ok" : item.status === "warn" ? "warn" : item.status === "wait" ? "wait" : "err";
+    const label = item.status === "ok" ? "OK" : item.status === "warn" ? "Внимание" : item.status === "wait" ? "Проверка" : "Ошибка";
+    return `<div class="checkRow">
+      <div><div class="checkName">${escapeHtml(item.name)}</div><div class="checkDetails">${escapeHtml(item.details || "")}</div></div>
+      <div class="checkBadge ${cls}">${label}</div>
+    </div>`;
+  }).join("");
+}
+
+async function safeCheck(name, fn){
+  try{
+    const details = await fn();
+    return {name, status:"ok", details: details || "OK"};
+  }catch(e){
+    return {name, status:"err", details: e?.message || String(e)};
+  }
+}
+
+async function runSystemCheck(){
+  const btn = qs("runSystemCheckBtn");
+  if(btn){ btn.disabled = true; btn.textContent = "Проверяю…"; }
+
+  setSystemCheckSummary("checkFirebaseSummary", "…");
+  setSystemCheckSummary("checkAdminSummary", "…");
+  setSystemCheckSummary("checkReadSummary", "…");
+  setSystemCheckSummary("checkWriteSummary", "…");
+  renderSystemCheckRows([{name:"Проверка запущена", status:"wait", details:"Идёт проверка подключения и прав доступа."}]);
+
+  const uid = auth.currentUser?.uid || "";
+  const now = Date.now();
+  const testKey = `_system_check_${uid || "no_uid"}_${now}`;
+  const items = [];
+
+  items.push(await safeCheck("Firebase connected", async () => {
+    if(!auth.currentUser) throw new Error("Нет авторизованного пользователя");
+    await get(ref(db, `.info/connected`));
+    return `Вход выполнен: ${auth.currentUser.email || auth.currentUser.uid}`;
+  }));
+
+  items.push(await safeCheck("Admin права", async () => {
+    if(!uid) throw new Error("UID не найден");
+    const snap = await get(ref(db, `admins/${uid}`));
+    if(snap.val() !== true) throw new Error(`admins/${uid} не true`);
+    return `admins/${uid} = true`;
+  }));
+
+  items.push(await safeCheck("users читаются", async () => {
+    const snap = await get(ref(db, "users"));
+    const count = snap.exists() ? Object.keys(snap.val() || {}).filter(k => k !== "_init").length : 0;
+    return `Найдено пользователей: ${count}`;
+  }));
+
+  items.push(await safeCheck("history читается", async () => {
+    const snap = await get(ref(db, "history"));
+    const count = snap.exists() ? Object.keys(snap.val() || {}).filter(k => k !== "_init").length : 0;
+    return `UID в history: ${count}`;
+  }));
+
+  items.push(await safeCheck("journal читается", async () => {
+    const results = [];
+    for(const path of ["events", "eventJournal", "adminLogs"]){
+      try{
+        const snap = await get(ref(db, path));
+        results.push(`${path}: ${snap.exists() ? "есть" : "пусто"}`);
+      }catch(e){
+        results.push(`${path}: ошибка`);
+      }
+    }
+    return results.join(" · ");
+  }));
+
+  items.push(await safeCheck("live пишется", async () => {
+    if(!uid) throw new Error("UID не найден");
+    const testRef = ref(db, `liveSessions/${testKey}`);
+    await set(testRef, {meta:{active:false, createdAt:now, expiresAt:now, ownerUid:uid, systemCheck:true}});
+    await remove(testRef);
+    return "Тестовая запись/удаление в liveSessions выполнены";
+  }));
+
+  const okCount = items.filter(i => i.status === "ok").length;
+  const errCount = items.filter(i => i.status === "err").length;
+  renderSystemCheckRows(items);
+  setSystemCheckSummary("checkFirebaseSummary", items[0]?.status === "ok" ? "OK" : "Ошибка");
+  setSystemCheckSummary("checkAdminSummary", items[1]?.status === "ok" ? "OK" : "Ошибка");
+  setSystemCheckSummary("checkReadSummary", items.slice(2,5).every(i=>i.status === "ok") ? "OK" : "Ошибка");
+  setSystemCheckSummary("checkWriteSummary", items[5]?.status === "ok" ? "OK" : "Ошибка");
+  showToast(errCount ? `Проверка: ${okCount} OK, ${errCount} ошибок` : "Проверка системы: всё OK", errCount ? "warn" : "ok", 3500);
+
+  if(btn){ btn.disabled = false; btn.textContent = "Запустить проверку"; }
+}
+window.runSystemCheck = runSystemCheck;
+
+qs("runSystemCheckBtn")?.addEventListener("click", () => runSystemCheck().catch(e=>recordError("runSystemCheck", e)));
+
 document.querySelectorAll(".tab-btn").forEach(btn=>{
   btn.onclick=()=>{
     document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
-    document.querySelectorAll("#nowPanel,#historyPanel,#reportsPanel,#usagePanel,#sessionsPanel,#usersPanel,#visibilityPanel,#geofencesPanel,#journalPanel,#errorsPanel,#settingsPanel").forEach(p=>p.classList.add("hidden"));
+    document.querySelectorAll("#nowPanel,#historyPanel,#reportsPanel,#usagePanel,#sessionsPanel,#usersPanel,#visibilityPanel,#geofencesPanel,#journalPanel,#errorsPanel,#systemCheckPanel,#settingsPanel").forEach(p=>p.classList.add("hidden"));
     btn.classList.add("active");
     qs(btn.dataset.tab).classList.remove("hidden");
     if(btn.dataset.tab === "historyPanel") ensureHistoryLoaded().catch(e=>recordError("ensureHistoryLoaded", e));
     if(btn.dataset.tab === "journalPanel") window.loadLimitedEvents?.().catch(e=>recordError("loadLimitedEvents", e));
     if(btn.dataset.tab === "visibilityPanel") renderVisibilityPanel();
+    if(btn.dataset.tab === "systemCheckPanel") setTimeout(()=>runSystemCheck().catch(e=>recordError("runSystemCheck", e)), 0);
     setTimeout(()=>{ historyMap.invalidateSize(); liveMap.invalidateSize(); sessionMap.invalidateSize(); geofenceMap.invalidateSize(); speedChart?.resize(); distanceChart?.resize(); },50);
   };
 });
