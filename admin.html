@@ -1026,6 +1026,7 @@
     </div>
 
 
+
     <div id="adminLogsPanel" class="hidden">
       <div class="card">
         <h2>Логи админа</h2>
@@ -7050,78 +7051,6 @@ setInterval(() => {
 
 
 
-// === Admin logs UI v65 checked ===
-function renderAdminLogsRows(items){
-  const tbody = qs("adminLogsTbody");
-  if(!tbody) return;
-
-  if(!items || !items.length){
-    tbody.innerHTML = '<tr><td colspan="7">Логов пока нет</td></tr>';
-    return;
-  }
-
-  tbody.innerHTML = "";
-  items.forEach(item => {
-    const result = item.result || {};
-    const details = [
-      "expired: " + (result.expiredSessions || 0),
-      "ended: " + (result.endedSessions || 0),
-      "oldEvents: " + (result.oldEvents || 0),
-      "emptyProfiles: " + (result.emptyProfiles || 0)
-    ].join("<br>");
-
-    const tr = document.createElement("tr");
-    tr.innerHTML =
-      "<td>" + fmtTime(item.timestamp) + "</td>" +
-      "<td>" + escapeHtml(item.email || item.uid || "—") + "</td>" +
-      "<td>" + escapeHtml(item.type || "—") + "</td>" +
-      "<td>" + escapeHtml(item.mode || "—") + "</td>" +
-      "<td>" + (result.deleted || 0) + "</td>" +
-      "<td>" + (result.errors || 0) + "</td>" +
-      "<td class='smallMuted'>" + details + "</td>";
-
-    tbody.appendChild(tr);
-  });
-}
-
-async function loadAdminLogs(){
-  const tbody = qs("adminLogsTbody");
-  if(tbody) tbody.innerHTML = '<tr><td colspan="7">Загрузка…</td></tr>';
-
-  try{
-    const snap = await get(ref(db, "adminLogs"));
-    if(!snap.exists()){
-      renderAdminLogsRows([]);
-      return;
-    }
-
-    const items = Object.entries(snap.val() || {})
-      .map(([id, value]) => Object.assign({id: id}, value || {}))
-      .sort((a, b) => Number(b.timestamp || 0) - Number(a.timestamp || 0))
-      .slice(0, 100);
-
-    renderAdminLogsRows(items);
-  }catch(e){
-    if(tbody) tbody.innerHTML = '<tr><td colspan="7">Ошибка загрузки adminLogs: ' + escapeHtml(e.message || String(e)) + '</td></tr>';
-  }
-}
-
-function bindAdminLogsUi(){
-  const btn = qs("refreshAdminLogsBtn");
-  if(btn && !btn.dataset.bound){
-    btn.dataset.bound = "1";
-    btn.addEventListener("click", loadAdminLogs);
-  }
-}
-
-window.addEventListener("load", bindAdminLogsUi);
-document.addEventListener("click", (ev) => {
-  if(ev.target && ev.target.dataset && ev.target.dataset.tab === "adminLogsPanel"){
-    bindAdminLogsUi();
-    setTimeout(loadAdminLogs, 100);
-  }
-});
-
 
 // === Real danger confirmation v67 ===
 function requireDeleteWord(actionName){
@@ -7206,5 +7135,78 @@ window.addEventListener("load", setupRealDangerConfirmations);
 document.addEventListener("click", () => {
   setTimeout(setupRealDangerConfirmations, 50);
 }, true);
+
+
+// === Admin logs UI v68 single panel only ===
+function renderAdminLogsRows(items){
+  const tbody = qs("adminLogsTbody");
+  if(!tbody) return;
+
+  if(!items || !items.length){
+    tbody.innerHTML = '<tr><td colspan="7">Логов пока нет</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = "";
+  items.forEach(item => {
+    const result = item.result || {};
+    const details = [
+      "expired: " + (result.expiredSessions || 0),
+      "ended: " + (result.endedSessions || 0),
+      "oldEvents: " + (result.oldEvents || 0),
+      "emptyProfiles: " + (result.emptyProfiles || 0)
+    ].join("<br>");
+
+    const tr = document.createElement("tr");
+    tr.innerHTML =
+      "<td>" + fmtTime(item.timestamp) + "</td>" +
+      "<td>" + escapeHtml(item.email || item.uid || "—") + "</td>" +
+      "<td>" + escapeHtml(item.type || "—") + "</td>" +
+      "<td>" + escapeHtml(item.mode || "—") + "</td>" +
+      "<td>" + (result.deleted || 0) + "</td>" +
+      "<td>" + (result.errors || 0) + "</td>" +
+      "<td class='smallMuted'>" + details + "</td>";
+
+    tbody.appendChild(tr);
+  });
+}
+
+async function loadAdminLogs(){
+  const tbody = qs("adminLogsTbody");
+  if(tbody) tbody.innerHTML = '<tr><td colspan="7">Загрузка…</td></tr>';
+
+  try{
+    const snap = await get(ref(db, "adminLogs"));
+    if(!snap.exists()){
+      renderAdminLogsRows([]);
+      return;
+    }
+
+    const items = Object.entries(snap.val() || {})
+      .map(([id, value]) => Object.assign({id: id}, value || {}))
+      .sort((a, b) => Number(b.timestamp || 0) - Number(a.timestamp || 0))
+      .slice(0, 100);
+
+    renderAdminLogsRows(items);
+  }catch(e){
+    if(tbody) tbody.innerHTML = '<tr><td colspan="7">Ошибка загрузки adminLogs: ' + escapeHtml(e.message || String(e)) + '</td></tr>';
+  }
+}
+
+function bindAdminLogsUi(){
+  const btn = qs("refreshAdminLogsBtn");
+  if(btn && !btn.dataset.bound){
+    btn.dataset.bound = "1";
+    btn.addEventListener("click", loadAdminLogs);
+  }
+}
+
+window.addEventListener("load", bindAdminLogsUi);
+document.addEventListener("click", (ev) => {
+  if(ev.target && ev.target.dataset && ev.target.dataset.tab === "adminLogsPanel"){
+    bindAdminLogsUi();
+    setTimeout(loadAdminLogs, 100);
+  }
+});
 </script>
 </body></html>
