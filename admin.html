@@ -392,6 +392,17 @@
     #journalTbody tr.journal-geofence-row{background:rgba(180,83,9,.09)}
     #journalTbody tr.journal-alert-row{background:rgba(185,28,28,.10)}
 
+
+    /* Usage traffic status */
+    .trafficBadge{display:inline-flex;align-items:center;gap:8px;padding:7px 12px;border-radius:999px;border:1px solid var(--border);font-weight:900;font-size:14px}
+    .trafficBadge.ok{background:rgba(22,163,74,.22);border-color:#166534;color:#bbf7d0}
+    .trafficBadge.warn{background:rgba(180,83,9,.22);border-color:#92400e;color:#fde68a}
+    .trafficBadge.danger{background:rgba(185,28,28,.25);border-color:#7f1d1d;color:#fecaca}
+    .usageHintGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:12px}
+    .usageHint{padding:12px 14px;border-radius:14px;border:1px solid var(--border);background:rgba(255,255,255,.03);line-height:1.45}
+    .usageHint b{display:block;margin-bottom:4px}
+    @media(max-width:900px){.usageHintGrid{grid-template-columns:1fr}}
+
 </style>
 </head>
 <body>
@@ -689,6 +700,16 @@
           <div class="stat"><div class="label">Исп. трафик</div><div class="value" id="trafficUsed">—</div></div>
         </div>
         <div class="notice" id="usageNote">Трафик здесь — оценка объёма данных по Firebase.</div>
+        <div class="notice">
+          <strong>Статус трафика:</strong>
+          <span id="trafficStatusBadge" class="trafficBadge ok">Норма</span>
+          <div id="trafficStatusText" class="smallMuted" style="margin-top:8px">Пока нет оценки.</div>
+        </div>
+        <div class="usageHintGrid">
+          <div class="usageHint"><b>history</b><span id="usageHistoryHint">История должна читаться только во вкладке История и за выбранный период.</span></div>
+          <div class="usageHint"><b>live</b><span id="usageLiveHint">Вкладка Сейчас должна читать только live/lastPoint.</span></div>
+          <div class="usageHint"><b>liveSessions</b><span id="usageSessionsHint">Live web должен слушать только meta и public/lastPoint.</span></div>
+        </div>
       </div>
     </div>
 
@@ -1213,6 +1234,87 @@ window.addEventListener("load", () => {
     });
   }
   setTimeout(applyJournalRowHighlights, 1200);
+});
+
+
+function parseSizeToBytes(text){
+  text = String(text || "").replace(",", ".").trim().toLowerCase();
+  const num = parseFloat(text);
+  if(!Number.isFinite(num)) return 0;
+  if(text.includes("gb") || text.includes("гб")) return num * 1024 * 1024 * 1024;
+  if(text.includes("mb") || text.includes("мб")) return num * 1024 * 1024;
+  if(text.includes("kb") || text.includes("кб")) return num * 1024;
+  return num;
+}
+
+function updateUsageTrafficStatus(){
+  const historyText = document.getElementById("historySize")?.innerText || "";
+  const sessionsText = document.getElementById("sessionsSize")?.innerText || "";
+  const totalText = document.getElementById("totalSize")?.innerText || "";
+  const historyCountText = document.getElementById("historyCount")?.innerText || "0";
+
+  const historyBytes = parseSizeToBytes(historyText);
+  const sessionsBytes = parseSizeToBytes(sessionsText);
+  const totalBytes = parseSizeToBytes(totalText) || (historyBytes + sessionsBytes);
+  const historyCount = parseInt(String(historyCountText).replace(/\D+/g, ""), 10) || 0;
+
+  const badge = document.getElementById("trafficStatusBadge");
+  const text = document.getElementById("trafficStatusText");
+  const hHint = document.getElementById("usageHistoryHint");
+  const lHint = document.getElementById("usageLiveHint");
+  const sHint = document.getElementById("usageSessionsHint");
+  if(!badge || !text) return;
+
+  let level = "ok";
+  let label = "Норма";
+  let msg = "Объём выглядит нормальным. Продолжаем следить после 30-минутного теста.";
+
+  if(totalBytes > 5 * 1024 * 1024 || historyCount > 30000){
+    level = "danger";
+    label = "Очень высоко";
+    msg = "Объём большой. Сначала ограничить history/recentPoints и проверить listeners админки.";
+  }else if(totalBytes > 1 * 1024 * 1024 || historyCount > 10000){
+    level = "warn";
+    label = "Высоко";
+    msg = "Объём заметный. Нужно следить за history и liveSessions после теста.";
+  }
+
+  badge.className = `trafficBadge ${level}`;
+  badge.textContent = label;
+  text.textContent = msg;
+
+  if(hHint){
+    hHint.textContent = historyCount > 10000
+      ? `Много точек: ${historyCount}. Лучше чистить старую историю или читать только диапазон.`
+      : `Точек: ${historyCount}. Норма, если вкладка Сейчас не читает history.`;
+  }
+  if(lHint){
+    lHint.textContent = "Live должен оставаться лёгким: только текущие точки и lastPoint.";
+  }
+  if(sHint){
+    sHint.textContent = sessionsBytes > 512 * 1024
+      ? "liveSessions заметно вырос. Проверь очистку завершённых/истёкших сессий."
+      : "liveSessions выглядит нормально, если web слушает только meta и public/lastPoint.";
+  }
+}
+
+window.addEventListener("load", () => {
+  const refreshLikeButtons = ["refreshSessionsBtn","refreshHistoryBtn","refreshNowBtn"];
+  refreshLikeButtons.forEach(id => {
+    const btn = document.getElementById(id);
+    if(btn && !btn.dataset.usagePatch){
+      btn.dataset.usagePatch = "1";
+      btn.addEventListener("click", () => {
+        setTimeout(updateUsageTrafficStatus, 500);
+        setTimeout(updateUsageTrafficStatus, 1500);
+      });
+    }
+  });
+  setInterval(() => {
+    const usagePanel = document.getElementById("usagePanel");
+    if(usagePanel && !usagePanel.classList.contains("hidden")) updateUsageTrafficStatus();
+  }, 3000);
+  setTimeout(updateUsageTrafficStatus, 1200);
 });
 
 </script>
