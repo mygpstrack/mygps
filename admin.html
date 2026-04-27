@@ -1170,6 +1170,31 @@ function detectCurrentGpsMode(point){
   return sessionActive ? "Live" : "Обычный";
 }
 
+function getAllLastPoints(){
+  const points = [];
+
+  Object.entries(liveByUid || {}).forEach(([uid, live]) => {
+    const p = live?.lastPoint || live?.point || null;
+    if(p) points.push({uid, point:p});
+  });
+
+  Object.entries(allSessions || {}).forEach(([token, session]) => {
+    if(token === "_init") return;
+    const root = getSessionRoot(session);
+    const p = root?.public?.lastPoint || null;
+    const uid = root?.meta?.ownerUid || "";
+    if(p) points.push({uid, point:p});
+  });
+
+  Object.entries(historyByUid || {}).forEach(([uid, arr]) => {
+    if(Array.isArray(arr) && arr.length) points.push({uid, point:arr[arr.length - 1]});
+  });
+
+  return points
+    .filter(x => x?.point)
+    .sort((a,b)=>Number(b.point?.timestamp || b.point?.ts || 0)-Number(a.point?.timestamp || a.point?.ts || 0));
+}
+
 function getCurrentPointForGpsProfiles(){
   if(qs("viewModeSelect")?.value === "all"){
     const points = getAllLastPoints();
