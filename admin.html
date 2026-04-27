@@ -4760,10 +4760,25 @@ function getPointLng(p){
 function getPointTs(p){
   return Number(p?.timestamp ?? p?.ts ?? p?.time ?? 0);
 }
+
+function adminRelTime(ts){
+  ts = Number(ts || 0);
+  if(!ts) return "—";
+  const diff = Math.max(0, Date.now() - ts);
+  const sec = Math.floor(diff / 1000);
+  if(sec < 60) return `${sec} сек`;
+  const min = Math.floor(sec / 60);
+  if(min < 60) return `${min} мин`;
+  const h = Math.floor(min / 60);
+  if(h < 24) return `${h} ч`;
+  const d = Math.floor(h / 24);
+  return `${d} дн`;
+}
+
 function getSessionLastPointInfo(session, status){
   const root = getSessionRoot(session) || {};
   const p = root?.public?.lastPoint || Object.values(root?.public?.recentPoints || {}).filter(Boolean).sort((a,b)=>getPointTs(a)-getPointTs(b)).slice(-1)[0] || null;
-  if(!p) return {html: status === "active" ? '<span class="tag offline">⚠️ нет точки</span>' : '<span class="tag">нет</span>', age:'—', point:null, ts:0};
+  if(!p) return {html: status === "active" ? '<span class="tag idle">нет точки</span>' : '<span class="tag">нет</span>', age:'—', point:null, ts:0};
   const lat = getPointLat(p);
   const lng = getPointLng(p);
   const ts = getPointTs(p);
@@ -4771,9 +4786,9 @@ function getSessionLastPointInfo(session, status){
   const ageMs = ts ? Math.max(0, Date.now() - ts) : null;
   const stale = ageMs != null && ageMs > 5 * 60 * 1000;
   const html = hasCoords
-    ? `<span class="tag ${stale ? 'idle' : 'online'}">${stale ? '⚠️ старая' : '✅ есть'}</span><br><span class="smallMuted">${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)}</span>`
-    : '<span class="tag offline">⚠️ без координат</span>';
-  const age = ts ? `${relTime(ts)} назад` : 'нет времени';
+    ? `<span class="tag ${stale ? 'idle' : 'online'}">${stale ? 'старая' : 'есть'}</span><br><span class="smallMuted">${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)}</span>`
+    : '<span class="tag idle">без координат</span>';
+  const age = ts ? `${adminRelTime(ts)} назад` : 'нет времени';
   return {html, age, point:p, ts};
 }
 
