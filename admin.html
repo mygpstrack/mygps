@@ -1596,6 +1596,12 @@ setInterval(() => {
 }, 15000);
 
 const db = getDatabase(app);
+
+function trackedOnValue(...args){
+  const unsub = onValue(...args);
+  return rememberUnsub(unsub);
+}
+
 const provider = new GoogleAuthProvider();
 const qs = (id) => document.getElementById(id);
 
@@ -4587,7 +4593,7 @@ function startGpsProfilesRealtimeSync(){
     suppressNextGpsProfilesToast = false;
   };
 
-  onValue(ref(db, "adminSettings/config/gpsProfiles"), snap => {
+  trackedOnValue(ref(db, "adminSettings/config/gpsProfiles"), snap => {
     applyIncomingGpsProfiles(snap.val(), "приложения");
   });
 
@@ -6673,7 +6679,7 @@ onAuthStateChanged(auth, async user => {
   setDefaultPeriodToday();
   await ensureUserMeta(user);
 
-  onValue(ref(db, "live"), snap => {
+  trackedOnValue(ref(db, "live"), snap => {
     liveByUid=snap.val()||{};
     liveEventLogs = normalizeLiveEventJournalSnapshot(liveByUid);
     notifyLiveGpsProfileChanges(liveByUid);
@@ -6681,7 +6687,7 @@ onAuthStateChanged(auth, async user => {
     renderJournal();
     updateNowFromAvailableSources();
   });
-  onValue(ref(db, "history"), snap => {
+  trackedOnValue(ref(db, "history"), snap => {
     const raw=snap.val()||{};
     historyByUid={};
     Object.entries(raw).forEach(([uid,pointsObj])=>{
@@ -6705,9 +6711,9 @@ onAuthStateChanged(auth, async user => {
     renderHistory();
     updateNowFromAvailableSources();
   });
-  onValue(query(ref(db, "liveSessions"), limitToLast(ADMIN_SESSIONS_LIMIT)), snap => { allSessions=snap.val()||{}; updateUsage(); renderSessions(); updateActiveSessionToast(); updateNowFromAvailableSources(); });
-  onValue(ref(db, "adminLogs/deletions"), snap => { deletionsLog=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0)); renderJournal(); });
-  onValue(ref(db, "adminLogs/actions"), snap => { actionLogs=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0)); renderJournal(); });
+  trackedOnValue(query(ref(db, "liveSessions"), limitToLast(ADMIN_SESSIONS_LIMIT)), snap => { allSessions=snap.val()||{}; updateUsage(); renderSessions(); updateActiveSessionToast(); updateNowFromAvailableSources(); });
+  trackedOnValue(ref(db, "adminLogs/deletions"), snap => { deletionsLog=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0)); renderJournal(); });
+  trackedOnValue(ref(db, "adminLogs/actions"), snap => { actionLogs=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0)); renderJournal(); });
   let legacyEventJournalLogs = [];
   let androidEventLogs = [];
   window.loadLimitedEvents = async function loadLimitedEvents(){
@@ -7289,5 +7295,108 @@ window.addEventListener("load", () => {
   const activeBtn = document.querySelector(".tab-btn.active[data-tab]");
   strictShowOnlySelectedPanel(activeBtn ? activeBtn.dataset.tab : "nowPanel");
 });
+
+
+// === Traffic saver v74 ===
+const __trafficSaver = {
+  unsubs: new Set(),
+  paused: false,
+  lastVisibleTab: "nowPanel"
+};
+
+function rememberUnsub(unsub){
+  if(typeof unsub === "function"){
+    __trafficSaver.unsubs.add(unsub);
+  }
+  return unsub;
+}
+
+function stopRealtimeListeners(reason = ""){
+  try{
+    __trafficSaver.unsubs.forEach(fn => {
+      try{ fn(); }catch(e){}
+    });
+    __trafficSaver.unsubs.clear();
+    __trafficSaver.paused = true;
+    console.log("Traffic saver: realtime listeners stopped", reason);
+  }catch(e){
+    console.warn("Traffic saver stop error", e);
+  }
+}
+
+function getActiveTabId(){
+  const active = document.querySelector(".tab-btn.active[data-tab]");
+  return active ? active.dataset.tab : (__trafficSaver.lastVisibleTab || "nowPanel");
+}
+
+function refreshVisibleTabLight(){
+  const tab = getActiveTabId();
+  __trafficSaver.lastVisibleTab = tab;
+
+  setTimeout(() => {
+    try{
+      if(tab === "nowPanel"){
+        if(typeof refreshNow === "function") refreshNow();
+        if(typeof refreshLive === "function") refreshLive();
+      }else if(tab === "sessionsPanel" && typeof loadSessions === "function"){
+        loadSessions();
+      }else if(tab === "historyPanel" && typeof loadHistory === "function"){
+        // History is heavy: only reload if user is actually on the tab.
+        loadHistory();
+      }else if(tab === "journalPanel" && typeof loadJournal === "function"){
+        loadJournal();
+      }else if(tab === "adminLogsPanel" && typeof adminLogsLoad === "function"){
+        adminLogsLoad();
+      }else if(tab === "usersPanel" && typeof loadUsers === "function"){
+        loadUsers();
+      }
+    }catch(e){
+      console.warn("Traffic saver refresh error", e);
+    }
+  }, 200);
+}
+
+document.addEventListener("visibilitychange", () => {
+  if(document.hidden){
+    stopRealtimeListeners("page hidden");
+  }else{
+    __trafficSaver.paused = false;
+    refreshVisibleTabLight();
+  }
+});
+
+window.addEventListener("blur", () => {
+  // Browser/background safety: stop realtime after short delay if window stays unfocused.
+  setTimeout(() => {
+    if(document.hidden || !document.hasFocus()){
+      stopRealtimeListeners("window blur");
+    }
+  }, 1500);
+});
+
+window.addEventListener("focus", () => {
+  __trafficSaver.paused = false;
+  refreshVisibleTabLight();
+});
+
+document.addEventListener("click", (ev) => {
+  const btn = ev.target && ev.target.closest ? ev.target.closest(".tab-btn[data-tab]") : null;
+  if(!btn) return;
+
+  const tab = btn.dataset.tab;
+  __trafficSaver.lastVisibleTab = tab;
+
+  // When leaving live "Сейчас", stop any old realtime listeners.
+  // The selected tab will reload itself through existing handlers / refreshVisibleTabLight.
+  stopRealtimeListeners("tab switch");
+  setTimeout(refreshVisibleTabLight, 300);
+}, true);
+
+// Patch Firebase onValue after imports: wrap calls if this variable is accessible.
+try{
+  if(typeof window !== "undefined"){
+    window.stopAdminRealtimeListeners = stopRealtimeListeners;
+  }
+}catch(e){}
 </script>
 </body></html>
