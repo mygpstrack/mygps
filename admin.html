@@ -6945,5 +6945,69 @@ document.addEventListener("click", (ev) => {
   if(ev.target && ev.target.id === "safeCleanupBtn") bindSafeCleanupButtons();
 });
 
+
+// === Weather stale last point guard v63 ===
+function adminWeatherRelTime(ts){
+  ts = Number(ts || 0);
+  if(!ts) return "—";
+  const diff = Math.max(0, Date.now() - ts);
+  const min = Math.floor(diff / 60000);
+  if(min < 1) return "только что";
+  if(min < 60) return min + " мин назад";
+  const h = Math.floor(min / 60);
+  if(h < 24) return h + " ч назад";
+  return Math.floor(h / 24) + " дн назад";
+}
+
+function setDynamicWeatherStale(point){
+  const el = document.getElementById("headerWeatherDynamic");
+  if(!el) return false;
+
+  const ts = Number(point && (point.timestamp || point.ts || point.time || point.updatedAt) || 0);
+  if(!ts) return false;
+
+  const ageMs = Date.now() - ts;
+  if(ageMs > 6 * 60 * 60 * 1000){
+    el.innerHTML = '<span class="weatherIcon">📍</span><span class="weatherText"><span class="weatherCity">По точке</span><span class="weatherMeta">Точка устарела: ' + adminWeatherRelTime(ts) + '</span></span>';
+    return true;
+  }
+  return false;
+}
+
+(function patchWeatherFetchErrors(){
+  const originalFetch = window.fetch;
+  if(!originalFetch || window.__weatherFetchPatchInstalled) return;
+  window.__weatherFetchPatchInstalled = true;
+
+  window.fetch = function(input, init){
+    const url = String(input && input.url ? input.url : input || "");
+    const isWeather = url.includes("wttr.in") || url.includes("open-meteo.com");
+    return originalFetch(input, init).catch(err => {
+      if(isWeather){
+        console.warn("Weather request skipped/failed:", err && err.message ? err.message : err);
+        return new Response(JSON.stringify({error:true}), {
+          status: 200,
+          headers: {"Content-Type":"application/json"}
+        });
+      }
+      throw err;
+    });
+  };
+})();
+
+
+setInterval(() => {
+  try{
+    const candidates = [
+      window.currentLivePoint,
+      window.latestLivePoint,
+      window.lastLivePoint,
+      window.selectedLastPoint,
+      window.lastKnownPoint
+    ].filter(Boolean);
+    if(candidates.length) setDynamicWeatherStale(candidates[0]);
+  }catch(e){}
+}, 60000);
+
 </script>
 </body></html>
