@@ -403,6 +403,14 @@
     .usageHint b{display:block;margin-bottom:4px}
     @media(max-width:900px){.usageHintGrid{grid-template-columns:1fr}}
 
+
+    /* Safe cleanup */
+    .cleanupGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:12px}
+    .cleanupBox{padding:12px 14px;border-radius:14px;border:1px solid var(--border);background:rgba(255,255,255,.03);line-height:1.45}
+    .cleanupBox b{display:block;margin-bottom:4px}
+    .cleanupResult{margin-top:12px;padding:12px 14px;border-radius:14px;border:1px solid var(--border);background:rgba(255,255,255,.03);white-space:pre-wrap}
+    @media(max-width:900px){.cleanupGrid{grid-template-columns:1fr}}
+
 </style>
 </head>
 <body>
@@ -709,6 +717,22 @@
           <div class="usageHint"><b>history</b><span id="usageHistoryHint">История должна читаться только во вкладке История и за выбранный период.</span></div>
           <div class="usageHint"><b>live</b><span id="usageLiveHint">Вкладка Сейчас должна читать только live/lastPoint.</span></div>
           <div class="usageHint"><b>liveSessions</b><span id="usageSessionsHint">Live web должен слушать только meta и public/lastPoint.</span></div>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <h3>Безопасная очистка мусора</h3>
+          <p class="sub">Удаляет только временные и устаревшие данные. История маршрутов не трогается.</p>
+          <div class="cleanupGrid">
+            <div class="cleanupBox"><b>Live истёкшие</b><span>Сессии, у которых expiresAt уже прошёл.</span></div>
+            <div class="cleanupBox"><b>Live завершённые</b><span>Сессии active=false / ended.</span></div>
+            <div class="cleanupBox"><b>Журнал</b><span>События старше 30 дней.</span></div>
+            <div class="cleanupBox"><b>Пустые профили</b><span>Пользователи без имени, email и активности.</span></div>
+          </div>
+          <div class="toolbar">
+            <button id="safeCleanupBtn" class="warn">Запустить безопасную очистку</button>
+            <button id="safeCleanupPreviewBtn" class="secondary">Только проверить</button>
+          </div>
+          <div id="safeCleanupResult" class="cleanupResult hidden">—</div>
         </div>
       </div>
     </div>
@@ -1315,6 +1339,139 @@ window.addEventListener("load", () => {
     if(usagePanel && !usagePanel.classList.contains("hidden")) updateUsageTrafficStatus();
   }, 3000);
   setTimeout(updateUsageTrafficStatus, 1200);
+});
+
+
+async function getObjectAt(path){
+  const snap = await get(ref(db, path));
+  return snap.exists() && snap.val() ? snap.val() : {};
+}
+
+function isEmptyProfileForCleanup(u){
+  if(!u || typeof u !== "object") return false;
+  const name = String(u.name || u.displayName || "").trim();
+  const email = String(u.email || "").trim();
+  const last = Number(u.lastSeen || u.lastSeenAt || u.updatedAt || u.lastUpdate || 0);
+  const hasRealProfile = !!name || !!email;
+  const recentlySeen = last && (Date.now() - last < 30 * 24 * 60 * 60 * 1000);
+  return !hasRealProfile && !recentlySeen;
+}
+
+async function safeCleanup(previewOnly=false){
+  const box = document.getElementById("safeCleanupResult");
+  if(box){
+    box.classList.remove("hidden");
+    box.textContent = previewOnly ? "Проверяю мусор…" : "Запускаю безопасную очистку…";
+  }
+
+  const now = Date.now();
+  const monthAgo = now - 30 * 24 * 60 * 60 * 1000;
+  const result = {
+    expiredSessions: 0,
+    endedSessions: 0,
+    oldEvents: 0,
+    emptyProfiles: 0,
+    errors: []
+  };
+
+  try{
+    const sessions = await getObjectAt("liveSessions");
+    for(const [token, session] of Object.entries(sessions || {})){
+      const meta = session?.meta || {};
+      const expiresAt = Number(meta.expiresAt || 0);
+      const active = meta.active === true;
+      const ended = meta.ended === true || meta.status === "ended" || active === false;
+      const isExpired = expiresAt && expiresAt < now;
+
+      if(isExpired || ended){
+        if(isExpired) result.expiredSessions++;
+        else result.endedSessions++;
+        if(!previewOnly){
+          try{ await remove(ref(db, `liveSessions/${token}`)); }catch(e){ result.errors.push(`liveSessions/${token}: ${e.message}`); }
+        }
+      }
+    }
+  }catch(e){ result.errors.push(`liveSessions: ${e.message}`); }
+
+  try{
+    const eventsRoot = await getObjectAt("events");
+    for(const [uid, events] of Object.entries(eventsRoot || {})){
+      for(const [eventId, ev] of Object.entries(events || {})){
+        const ts = Number(ev?.timestamp || ev?.ts || 0);
+        if(ts && ts < monthAgo){
+          result.oldEvents++;
+          if(!previewOnly){
+            try{ await remove(ref(db, `events/${uid}/${eventId}`)); }catch(e){ result.errors.push(`events/${uid}/${eventId}: ${e.message}`); }
+          }
+        }
+      }
+    }
+  }catch(e){ result.errors.push(`events: ${e.message}`); }
+
+  try{
+    const journalRoot = await getObjectAt("eventJournal");
+    for(const [uid, events] of Object.entries(journalRoot || {})){
+      for(const [eventId, ev] of Object.entries(events || {})){
+        const ts = Number(ev?.timestamp || ev?.ts || 0);
+        if(ts && ts < monthAgo){
+          result.oldEvents++;
+          if(!previewOnly){
+            try{ await remove(ref(db, `eventJournal/${uid}/${eventId}`)); }catch(e){ result.errors.push(`eventJournal/${uid}/${eventId}: ${e.message}`); }
+          }
+        }
+      }
+    }
+  }catch(e){ result.errors.push(`eventJournal: ${e.message}`); }
+
+  try{
+    const users = await getObjectAt("users");
+    for(const [uid, u] of Object.entries(users || {})){
+      if(isEmptyProfileForCleanup(u)){
+        result.emptyProfiles++;
+        if(!previewOnly){
+          try{ await remove(ref(db, `users/${uid}`)); }catch(e){ result.errors.push(`users/${uid}: ${e.message}`); }
+        }
+      }
+    }
+  }catch(e){ result.errors.push(`users: ${e.message}`); }
+
+  const lines = [
+    previewOnly ? "Проверка завершена. Можно удалить:" : "Безопасная очистка завершена:",
+    `• Истёкшие live-сессии: ${result.expiredSessions}`,
+    `• Завершённые live-сессии: ${result.endedSessions}`,
+    `• Старые события журнала: ${result.oldEvents}`,
+    `• Пустые профили: ${result.emptyProfiles}`,
+    `• Ошибки: ${result.errors.length}`
+  ];
+  if(result.errors.length){
+    lines.push("");
+    lines.push("Ошибки:");
+    lines.push(...result.errors.slice(0, 10).map(e => `- ${e}`));
+    if(result.errors.length > 10) lines.push(`…ещё ${result.errors.length - 10}`);
+  }
+
+  if(box) box.textContent = lines.join("\n");
+  try{ updateUsageTrafficStatus(); }catch(e){}
+  try{ if(typeof loadSessions === "function") loadSessions(); }catch(e){}
+  try{ if(typeof loadUsers === "function") loadUsers(); }catch(e){}
+  return result;
+}
+
+window.addEventListener("load", () => {
+  const runBtn = document.getElementById("safeCleanupBtn");
+  const previewBtn = document.getElementById("safeCleanupPreviewBtn");
+  if(runBtn && !runBtn.dataset.safeCleanupPatch){
+    runBtn.dataset.safeCleanupPatch = "1";
+    runBtn.onclick = async () => {
+      const ok = confirm("Запустить безопасную очистку? History не будет удалён.");
+      if(!ok) return;
+      await safeCleanup(false);
+    };
+  }
+  if(previewBtn && !previewBtn.dataset.safeCleanupPatch){
+    previewBtn.dataset.safeCleanupPatch = "1";
+    previewBtn.onclick = async () => safeCleanup(true);
+  }
 });
 
 </script>
