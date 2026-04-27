@@ -941,22 +941,68 @@ onValue(ref(db, 'adminSettings'), snap => {
   };
 }, () => {});
 
+
+let slimSessionMeta = null;
+let slimLastPoint = null;
+let slimRecentPoints = {};
+
+function applySlimSession(){
+  if(!slimSessionMeta){
+    applySession(null);
+    return;
+  }
+  applySession({
+    meta: slimSessionMeta || {},
+    public: {
+      lastPoint: slimLastPoint || null,
+      recentPoints: slimRecentPoints || {}
+    }
+  });
+}
+
+function rememberSlimPoint(point){
+  if(!point) return;
+  const p = normalizePoint(point);
+  if(!Number.isFinite(p.lat) || !Number.isFinite(p.lng)) return;
+
+  const key = String(p.ts || Date.now());
+  slimRecentPoints[key] = point;
+
+  const entries = Object.entries(slimRecentPoints)
+    .sort((a,b)=>Number(normalizePoint(a[1]).ts||0)-Number(normalizePoint(b[1]).ts||0))
+    .slice(-10);
+
+  slimRecentPoints = Object.fromEntries(entries);
+}
+
 if(!sessionId){
   showEnd('Неверная ссылка (нет session).');
 }else{
-  const sessionRef=ref(db, `liveSessions/${sessionId}`);
+  const metaRef = ref(db, `liveSessions/${sessionId}/meta`);
+  const lastPointRef = ref(db, `liveSessions/${sessionId}/public/lastPoint`);
   let openRegistered = false;
 
-  onValue(sessionRef, snap => {
-    const data = snap.val();
-    if(data && !openRegistered){
+  onValue(metaRef, snap => {
+    const meta = snap.val();
+    slimSessionMeta = meta || null;
+    if(meta && !openRegistered){
       openRegistered = true;
-      registerSessionOpen(data?.meta || {});
+      registerSessionOpen(meta);
     }
-    applySession(data);
+    applySlimSession();
   }, err => {
     console.error(err);
-    showEnd('Не удалось загрузить live-сессию.');
+    showEnd('Не удалось загрузить live meta.');
+  });
+
+  onValue(lastPointRef, snap => {
+    const point = snap.val();
+    slimLastPoint = point || null;
+    rememberSlimPoint(point);
+    applySlimSession();
+  }, err => {
+    console.error(err);
+    showEnd('Не удалось загрузить live точку.');
   });
 }
 </script>
