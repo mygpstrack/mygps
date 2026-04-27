@@ -7398,5 +7398,84 @@ try{
     window.stopAdminRealtimeListeners = stopRealtimeListeners;
   }
 }catch(e){}
+
+
+// === Traffic throttle v75 ===
+const __adminRefreshThrottle = {
+  last: {},
+  timers: {}
+};
+
+function canRunRefresh(key, minMs){
+  const now = Date.now();
+  const last = __adminRefreshThrottle.last[key] || 0;
+  if(now - last < minMs) return false;
+  __adminRefreshThrottle.last[key] = now;
+  return true;
+}
+
+function scheduleAdminRefresh(key, minMs, fn){
+  clearTimeout(__adminRefreshThrottle.timers[key]);
+  __adminRefreshThrottle.timers[key] = setTimeout(() => {
+    if(!canRunRefresh(key, minMs)) return;
+    try{ fn(); }catch(e){ console.warn("throttled refresh error", key, e); }
+  }, 250);
+}
+
+// Replace noisy focus/tab refresh behavior with throttled calls.
+function refreshVisibleTabThrottled(){
+  const tab = getActiveTabId ? getActiveTabId() : "nowPanel";
+
+  if(tab === "nowPanel"){
+    scheduleAdminRefresh("nowPanel", 3000, () => {
+      if(typeof refreshNow === "function") refreshNow();
+      if(typeof refreshLive === "function") refreshLive();
+    });
+  }else if(tab === "sessionsPanel"){
+    scheduleAdminRefresh("sessionsPanel", 15000, () => {
+      if(typeof loadSessions === "function") loadSessions();
+    });
+  }else if(tab === "historyPanel"){
+    scheduleAdminRefresh("historyPanel", 30000, () => {
+      if(typeof loadHistory === "function") loadHistory();
+    });
+  }else if(tab === "journalPanel"){
+    scheduleAdminRefresh("journalPanel", 30000, () => {
+      if(typeof loadJournal === "function") loadJournal();
+    });
+  }else if(tab === "adminLogsPanel"){
+    scheduleAdminRefresh("adminLogsPanel", 30000, () => {
+      if(typeof adminLogsLoad === "function") adminLogsLoad();
+      if(typeof loadAdminLogs === "function") loadAdminLogs();
+    });
+  }else if(tab === "usersPanel"){
+    scheduleAdminRefresh("usersPanel", 30000, () => {
+      if(typeof loadUsers === "function") loadUsers();
+    });
+  }
+}
+
+window.addEventListener("focus", () => {
+  // Delay + throttle to avoid repeated Firebase spikes when browser focus changes.
+  setTimeout(refreshVisibleTabThrottled, 1200);
+});
+
+document.addEventListener("visibilitychange", () => {
+  if(!document.hidden){
+    setTimeout(refreshVisibleTabThrottled, 1200);
+  }
+});
+
+document.addEventListener("click", (ev) => {
+  const btn = ev.target && ev.target.closest ? ev.target.closest(".tab-btn[data-tab]") : null;
+  if(!btn) return;
+  setTimeout(refreshVisibleTabThrottled, 500);
+}, true);
+
+
+// === Traffic saver override v75 ===
+try{
+  refreshVisibleTabLight = refreshVisibleTabThrottled;
+}catch(e){}
 </script>
 </body></html>
