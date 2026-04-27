@@ -1359,18 +1359,6 @@ window.addEventListener("load", () => {
   setTimeout(updateUsageTrafficStatus, 1200);
 });
 
-
-document.addEventListener("click", async (e)=>{
-  const el = e.target.closest("[data-danger='1']");
-  if(!el) return;
-
-  const ok = await confirmDanger(el.id || "danger action");
-  if(!ok){
-    e.stopImmediatePropagation();
-    e.preventDefault();
-  }
-});
-
 </script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js">
 function setupJournalQuickFilters(){
@@ -7135,14 +7123,88 @@ document.addEventListener("click", (ev) => {
 });
 
 
-// === Danger confirmation v66 ===
-async function confirmDanger(action){
-  const text = prompt("Подтверждение действия: " + action + "\nВведите DELETE для подтверждения");
-  if(text !== "DELETE"){
-    adminPopup("Отменено", "warn");
+// === Real danger confirmation v67 ===
+function requireDeleteWord(actionName){
+  const value = prompt("Опасное действие: " + actionName + "\n\nВведите DELETE для подтверждения.");
+  if(value !== "DELETE"){
+    try{ adminPopup("Отменено: " + actionName, "warn"); }catch(e){}
     return false;
   }
   return true;
 }
+
+function setupRealDangerConfirmations(){
+  const dangerMap = {
+    deleteHistoryBtn: "Очистить history",
+    deleteLiveBtn: "Очистить live",
+    deleteAllDbBtn: "Очистить всю базу",
+    deleteSelectedPointsBtn: "Удалить выбранные точки истории",
+    deleteRangeBtn: "Удалить период истории",
+    deleteEmptyProfilesBtn: "Удалить пустые профили",
+    endAllActiveSessionsBtn: "Остановить все активные live-сессии",
+    cleanupSessionsBtn: "Очистить истёкшие live-сессии",
+    cleanupEndedSessionsBtn: "Очистить завершённые live-сессии",
+    cleanupOldEventsBtn: "Очистить старые события",
+    clearOldEventsBtn: "Очистить события старше 30 дней"
+  };
+
+  Object.entries(dangerMap).forEach(([id, label]) => {
+    const btn = qs(id);
+    if(!btn || btn.dataset.deleteConfirmBound === "1") return;
+
+    const oldClick = btn.onclick;
+    btn.dataset.deleteConfirmBound = "1";
+    btn.onclick = null;
+
+    btn.addEventListener("click", (ev) => {
+      if(!requireDeleteWord(label)){
+        ev.preventDefault();
+        ev.stopImmediatePropagation();
+        ev.stopPropagation();
+        return false;
+      }
+      if(typeof oldClick === "function"){
+        return oldClick.call(btn, ev);
+      }
+    }, true);
+  });
+
+  // Dynamic table buttons: users/admin/sessions are created later.
+  if(!window.__realDangerDocumentGuard){
+    window.__realDangerDocumentGuard = true;
+    document.addEventListener("click", (ev) => {
+      const target = ev.target && ev.target.closest ? ev.target.closest("button") : null;
+      if(!target) return;
+
+      const text = (target.innerText || target.textContent || "").toLowerCase();
+      const danger =
+        text.includes("удалить") ||
+        text.includes("очистить") ||
+        text.includes("снять админ") ||
+        text.includes("завершить") ||
+        text.includes("остановить");
+
+      if(!danger) return;
+
+      // Already handled above, or safe cleanup has its own confirmation.
+      if(target.id === "safeCleanupBtn" || target.id === "safeCleanupPreviewBtn") return;
+
+      // Avoid double prompt for buttons already bound by id handler.
+      if(target.dataset.deleteConfirmBound === "1") return;
+
+      const label = (target.innerText || target.textContent || "опасное действие").trim();
+      if(!requireDeleteWord(label)){
+        ev.preventDefault();
+        ev.stopImmediatePropagation();
+        ev.stopPropagation();
+      }
+    }, true);
+  }
+}
+
+window.addEventListener("load", setupRealDangerConfirmations);
+document.addEventListener("click", () => {
+  setTimeout(setupRealDangerConfirmations, 50);
+}, true);
 </script>
 </body></html>
