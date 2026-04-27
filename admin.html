@@ -1061,7 +1061,7 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-import { getDatabase, ref, get, onValue, remove, update, push, set } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
+import { getDatabase, ref, get, onValue, remove, update, push, set, query, limitToLast } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
 
 const firebaseConfig = {
   apiKey:"AIzaSyCXNCY-IpkhAXb8jNPhN8gf2UdOfPBc5gM",
@@ -1204,14 +1204,18 @@ function updateGpsProfilesUiFromData(point){
   const normalLine = formatGpsProfileLine(normal);
   const liveLine = formatGpsProfileLine(live);
 
-  const deviceNormal = (
+  const deviceNormalRaw = (
     point?.appliedGpsProfile?.normal ||
     (point?.appliedGpsNormalIntervalMs != null || point?.appliedGpsNormalDistanceM != null)
   );
-  const deviceLive = (
+  const deviceLiveRaw = (
     point?.appliedGpsProfile?.live ||
     (point?.appliedGpsLiveIntervalMs != null || point?.appliedGpsLiveDistanceM != null)
   );
+  const manualHoldActive = manualGpsPresetKind && Date.now() < manualGpsPresetUntilMs;
+
+  const deviceNormal = !manualHoldActive && deviceNormalRaw;
+  const deviceLive = !manualHoldActive && deviceLiveRaw;
 
   const normalApplied = deviceNormal
     ? formatGpsProfileLine({
@@ -1227,13 +1231,16 @@ function updateGpsProfilesUiFromData(point){
       })
     : liveLine;
 
-  if(modeEl) modeEl.textContent = currentMode;
+  const selectedPresetKey = manualHoldActive ? manualGpsPresetKind : (detectGpsPresetKeyFromProfiles(adminSettings.gpsProfiles) || "balanced");
+  const selectedPresetLabel = GPS_PRESETS[selectedPresetKey]?.label || "Баланс";
+
+  if(modeEl) modeEl.textContent = selectedPresetLabel;
   if(normalEl) normalEl.textContent = normalApplied;
   if(liveEl) liveEl.textContent = liveApplied;
 
   const hasDeviceApplied = !!(deviceNormal || deviceLive);
   if(sourceEl){
-    sourceEl.textContent = hasDeviceApplied ? "Устройство" : "Админка";
+    sourceEl.textContent = manualHoldActive ? "Админка" : (hasDeviceApplied ? "Устройство" : "Админка");
   }
 
   if(currentEl){
@@ -1261,6 +1268,11 @@ let eventJournalNotifyInitialized = false;
 let eventJournalSeenNotifyKeys = new Set();
 let liveGpsProfileNotifyInitialized = false;
 let liveGpsProfileSignatures = {};
+let historyLoaded = false;
+let eventsLoaded = false;
+const ADMIN_HISTORY_LIMIT_PER_USER = 500;
+const ADMIN_EVENTS_LIMIT_PER_USER = 120;
+const ADMIN_SESSIONS_LIMIT = 80;
 
 function windDirShort(deg){
   const dirs=["С","СВ","В","ЮВ","Ю","ЮЗ","З","СЗ"];
@@ -2223,6 +2235,8 @@ document.querySelectorAll(".tab-btn").forEach(btn=>{
     document.querySelectorAll("#nowPanel,#historyPanel,#reportsPanel,#usagePanel,#sessionsPanel,#usersPanel,#visibilityPanel,#geofencesPanel,#journalPanel,#errorsPanel,#settingsPanel").forEach(p=>p.classList.add("hidden"));
     btn.classList.add("active");
     qs(btn.dataset.tab).classList.remove("hidden");
+    if(btn.dataset.tab === "historyPanel") ensureHistoryLoaded().catch(e=>recordError("ensureHistoryLoaded", e));
+    if(btn.dataset.tab === "journalPanel") window.loadLimitedEvents?.().catch(e=>recordError("loadLimitedEvents", e));
     if(btn.dataset.tab === "visibilityPanel") renderVisibilityPanel();
     setTimeout(()=>{ historyMap.invalidateSize(); liveMap.invalidateSize(); sessionMap.invalidateSize(); geofenceMap.invalidateSize(); speedChart?.resize(); distanceChart?.resize(); },50);
   };
@@ -2575,232 +2589,71 @@ async function loadUsers(){
     }
   };
 
-  const [historySnap, liveSnap, usersSnap, visibilitySnap, adminsSnap] = await Promise.all([
-    safeGet("history"),
+  // Traffic fix: do not read the whole history tree just to build the user list.
+  const [liveSnap, usersSnap, visibilitySnap, adminsSnap] = await Promise.all([
     safeGet("live"),
     safeGet("users"),
     safeGet("userVisibility"),
     safeGet("admins")
   ]);
 
-  const historyVal = historySnap.val() || {};
   const liveVal = liveSnap.val() || {};
-
   usersMeta = usersSnap.val() || {};
+  liveByUid = liveVal;
   userVisibility = visibilitySnap.val() || {};
   adminsMap = adminsSnap.val() || {};
 
-  const userSet = new Set();
-  Object.keys(usersMeta||{}).forEach(uid=>userSet.add(uid));
-  Object.keys(historyVal||{}).forEach(uid=>userSet.add(uid));
-  Object.keys(liveVal||{}).forEach(uid=>userSet.add(uid));
-  Object.keys(adminsMap||{}).forEach(uid=>userSet.add(uid));
+  const ids = new Set([
+    ...Object.keys(usersMeta || {}),
+    ...Object.keys(liveVal || {}),
+    ...Object.keys(adminsMap || {})
+  ].filter(uid => uid && uid !== "_init"));
 
-  allUsers = Array.from(userSet).filter(Boolean).sort((a,b)=>{
-    if(a==="default" && b!=="default") return 1;
-    if(a!=="default" && b==="default") return -1;
-    return getDisplayName(a).localeCompare(getDisplayName(b), "ru");
-  });
+  allUsers = [...ids].sort((a,b)=>getDisplayName(a).localeCompare(getDisplayName(b), "ru"));
+  if(!selectedUid && allUsers.length) selectedUid = allUsers[0];
 
-  const select = qs("userSelect"), prev = selectedUid;
-  select.innerHTML = allUsers.length ? allUsers.map(uid=>`<option value="${uid}">${userLabel(uid)}</option>`).join("") : `<option value="">Нет пользователей</option>`;
-  selectedUid = (prev && allUsers.includes(prev)) ? prev : (allUsers.find(uid=>uid!=="default") || allUsers[0] || "");
-  if(selectedUid) select.value = selectedUid;
-
-  renderVisibilityPanel();
-  renderUsersManagement();
+  renderUserSelect();
+  renderUsersManagement?.();
+  renderVisibilityPanel?.();
+  updateUsage();
+  await updateNowFromAvailableSources();
 }
-
-function getSelectedHistoryPoints(){ return selectedUid ? (historyByUid[selectedUid] || []) : []; }
-
-function normalizeLivePointFromRoot(live){
-  if(!live || typeof live !== "object") return null;
-  const lastPoint = live.lastPoint && typeof live.lastPoint === "object" ? live.lastPoint : {};
-  const lat = Number(lastPoint.latitude ?? lastPoint.lat ?? live.latitude ?? live.lat ?? NaN);
-  const lon = Number(lastPoint.longitude ?? lastPoint.lon ?? lastPoint.lng ?? live.longitude ?? live.lon ?? live.lng ?? NaN);
-  if(!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
-
-  return {
-    ...live,
-    ...lastPoint,
-    latitude: lat,
-    longitude: lon,
-    lat,
-    lon,
-    lng: lon,
-    timestamp: Number(lastPoint.timestamp ?? live.timestamp ?? live.updatedAt ?? live.lastUpdated ?? 0),
-    accuracy: lastPoint.accuracy ?? live.accuracy,
-    speedKmh: lastPoint.speedKmh ?? live.speedKmh,
-    speedRawKmh: lastPoint.speedRawKmh ?? live.speedRawKmh,
-    speedSource: lastPoint.speedSource ?? live.speedSource,
-    movementState: lastPoint.movementState ?? live.movementState,
-    stopDurationMs: lastPoint.stopDurationMs ?? live.stopDurationMs,
-    batteryLevel: lastPoint.batteryLevel ?? live.batteryLevel ?? live.battery,
-    isCharging: lastPoint.isCharging ?? live.isCharging,
-    satellitesVisible: lastPoint.satellitesVisible ?? live.satellitesVisible,
-    satellitesUsed: lastPoint.satellitesUsed ?? live.satellitesUsed,
-    gpsMode: lastPoint.gpsMode ?? live.gpsMode,
-    trackingMode: lastPoint.trackingMode ?? live.trackingMode,
-    appliedGpsProfile: lastPoint.appliedGpsProfile ?? live.appliedGpsProfile,
-    appliedGpsNormalIntervalMs: lastPoint.appliedGpsNormalIntervalMs ?? live.appliedGpsNormalIntervalMs,
-    appliedGpsNormalDistanceM: lastPoint.appliedGpsNormalDistanceM ?? live.appliedGpsNormalDistanceM,
-    appliedGpsLiveIntervalMs: lastPoint.appliedGpsLiveIntervalMs ?? live.appliedGpsLiveIntervalMs,
-    appliedGpsLiveDistanceM: lastPoint.appliedGpsLiveDistanceM ?? live.appliedGpsLiveDistanceM
-  };
-}
-
-function getSelectedLiveData(){
-  if(!selectedUid) return null;
-  const live = liveByUid[selectedUid] || null;
-  if(!live) return null;
-  return {
-    ...live,
-    lastPoint: normalizeLivePointFromRoot(live)
-  };
-}
-
-function getVisibleHistoryPoints(){ return qs("viewModeSelect").value==="all" ? Object.values(historyByUid).flat().sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0)) : getSelectedHistoryPoints(); }
-function getAllLastPoints(){ return Object.entries(liveByUid).map(([uid,live])=>({uid,point:normalizeLivePointFromRoot(live)})).filter(item=>item.point && item.point.latitude!=null && item.point.longitude!=null); }
-
-function getAppliedGpsSignatureFromPoint(point){
-  if(!point || typeof point !== "object") return "";
-  const hasApplied =
-    !!point.appliedGpsProfile ||
-    point.appliedGpsNormalIntervalMs != null ||
-    point.appliedGpsNormalDistanceM != null ||
-    point.appliedGpsLiveIntervalMs != null ||
-    point.appliedGpsLiveDistanceM != null;
-  if(!hasApplied) return "";
-
-  const normal = {
-    intervalMs: Number(point?.appliedGpsProfile?.normal?.intervalMs ?? point?.appliedGpsNormalIntervalMs ?? 0),
-    minDistanceM: Number(point?.appliedGpsProfile?.normal?.minDistanceM ?? point?.appliedGpsNormalDistanceM ?? 0)
-  };
-  const live = {
-    intervalMs: Number(point?.appliedGpsProfile?.live?.intervalMs ?? point?.appliedGpsLiveIntervalMs ?? 0),
-    minDistanceM: Number(point?.appliedGpsProfile?.live?.minDistanceM ?? point?.appliedGpsLiveDistanceM ?? 0)
-  };
-
-  if(!normal.intervalMs && !normal.minDistanceM && !live.intervalMs && !live.minDistanceM) return "";
-  return JSON.stringify({ normal, live });
-}
-
-function getAppliedGpsHumanTextFromSignature(sig){
-  try{
-    const parsed = JSON.parse(sig);
-    return `обычный ${formatGpsProfileLine(parsed.normal)} • live ${formatGpsProfileLine(parsed.live)}`;
-  }catch(e){
-    return "GPS-профиль изменён";
-  }
-}
-
-function notifyLiveGpsProfileChanges(rawLiveByUid){
-  const next = {};
-  Object.entries(rawLiveByUid || {}).forEach(([uid, live]) => {
-    const point = normalizeLivePointFromRoot(live);
-    const sig = getAppliedGpsSignatureFromPoint(point);
-    if(!sig) return;
-    next[uid] = sig;
-
-    const prev = liveGpsProfileSignatures[uid];
-    if(liveGpsProfileNotifyInitialized && prev && prev !== sig){
-      const selectedOnly = qs("viewModeSelect")?.value !== "all";
-      if(!selectedOnly || !selectedUid || uid === selectedUid){
-        const name = getDisplayName(uid) || uid || "устройство";
-        showToast(`📡 ${name}: частота GPS изменилась — ${getAppliedGpsHumanTextFromSignature(sig)}`, "info", 4200);
-      }
-    }
-  });
-  liveGpsProfileSignatures = next;
-  liveGpsProfileNotifyInitialized = true;
-}
-
-
-function updateTodaySummary(){
-  try{
-    const now = Date.now();
-    const start = new Date();
-    start.setHours(0,0,0,0);
-    const startTs = start.getTime();
-    const endTs = now;
-    const moveThreshold = Number(adminSettings.moveSpeedThresholdKmh ?? 3);
-    const junkAccuracy = Number(adminSettings.junkAccuracyMeters ?? 100);
-    const impossibleSpeedKmh = Number(adminSettings.impossibleSpeedKmh ?? 250);
-    const summaryMaxGapMs = 2 * 60 * 1000;
-
-    const visible = getVisibleHistoryPoints()
-      .filter(Boolean)
-      .filter(p => {
-        const ts = Number(p.timestamp || 0);
-        return ts >= startTs && ts <= endTs;
-      })
-      .sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
-
-    qs("todayPoints").textContent = String(visible.length);
-
-    if(!visible.length){
-      qs("todayKm").textContent = "0 км";
-      qs("todayMove").textContent = "—";
-      if(qs("todayStop")) qs("todayStop").textContent = "—";
-      qs("todayLast").textContent = "—";
-      return;
-    }
-
-    let meters = 0;
-    let moveMs = 0;
-
-    for(let i=1;i<visible.length;i++){
-      const prev = visible[i-1];
-      const cur = visible[i];
-      const dt = Math.max(0, Number(cur.timestamp||0) - Number(prev.timestamp||0));
-      if(dt <= 0 || dt > summaryMaxGapMs) continue;
-
-      const prevAcc = Number(prev.accuracy || 9999);
-      const curAcc = Number(cur.accuracy || 9999);
-      if(prevAcc > junkAccuracy || curAcc > junkAccuracy) continue;
-
-      const segmentMeters = distanceMeters(prev, cur);
-      const calcSpeed = (segmentMeters / Math.max(1, dt / 1000)) * 3.6;
-      if(calcSpeed > impossibleSpeedKmh) continue;
-
-      meters += segmentMeters;
-
-      const spPrev = Number(prev.speed || 0);
-      const spCur = Number(cur.speed || 0);
-      const avgSp = (spPrev + spCur) / 2;
-      const effectiveSpeed = Math.max(avgSp, calcSpeed);
-
-      if(effectiveSpeed >= moveThreshold) moveMs += dt;
-    }
-
-    const last = visible[visible.length - 1];
-    qs("todayKm").textContent = `${(meters/1000).toFixed(2)} км`;
-    qs("todayMove").textContent = formatDuration(moveMs);
-    if(qs("todayStop")) qs("todayStop").textContent = "—";
-    qs("todayLast").textContent = fmtTime(last.timestamp);
-  }catch(e){
-    console.warn("updateTodaySummary error", e);
-  }
-}
-
 
 async function loadAllData(){
+  const uid = selectedUid || allUsers[0] || "";
+  if(!uid){
+    historyByUid = {};
+    historyLoaded = true;
+    renderHistory();
+    updateUsage();
+    await updateNowFromAvailableSources();
+    return;
+  }
+
   const [historySnap, liveSnap, usersSnap] = await Promise.all([
-    get(ref(db,"history")),
+    get(query(ref(db, `history/${uid}`), limitToLast(ADMIN_HISTORY_LIMIT_PER_USER))),
     get(ref(db,"live")),
     get(ref(db,"users"))
   ]);
-  usersMeta = usersSnap.val() || {};
-  historyByUid = {};
-  liveByUid = liveSnap.val() || {};
+
+  usersMeta = usersSnap.val() || usersMeta || {};
+  liveByUid = liveSnap.val() || liveByUid || {};
+  historyByUid = historyByUid || {};
   const histRaw = historySnap.val() || {};
-  Object.entries(histRaw).forEach(([uid, pointsObj])=>{
-    historyByUid[uid] = Object.values(pointsObj||{}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
-  });
+  historyByUid[uid] = Object.values(histRaw)
+    .filter(Boolean)
+    .sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+
+  historyLoaded = true;
   updateUsage();
   updateTodaySummary();
   renderHistory();
   await updateNowFromAvailableSources();
+}
+
+async function ensureHistoryLoaded(){
+  if(historyLoaded && selectedUid && historyByUid?.[selectedUid]) return;
+  await loadAllData();
 }
 
 const historySortState = { field: "timestamp", dir: "desc" };
@@ -3628,10 +3481,10 @@ function getGpsPresetKind(profile){
 function ensureGpsProfiles(){ adminSettings.gpsProfiles = normalizeGpsProfilesShape(adminSettings.gpsProfiles); }
 function fillSelectOptions(selectId, values, labels){ const el = qs(selectId); if(!el) return; el.innerHTML = ""; labels.forEach((label, idx)=>{ const opt = document.createElement('option'); opt.value = String(values[idx]); opt.textContent = label; el.appendChild(opt); }); }
 function initGpsSettingsControls(){
-  fillSelectOptions('gpsNormalIntervalSelect', [1000,2000,20000], ["1 сек","2 сек","20 сек"]);
-  fillSelectOptions('gpsLiveIntervalSelect', [1000,2000,10000], ["1 сек","2 сек","10 сек"]);
-  fillSelectOptions('gpsNormalDistanceSelect', [1,5,30], ["1 м","5 м","30 м"]);
-  fillSelectOptions('gpsLiveDistanceSelect', [1,3,15], ["1 м","3 м","15 м"]);
+  fillSelectOptions('gpsNormalIntervalSelect', [1000,20000,60000], ["1 сек","20 сек","60 сек"]);
+  fillSelectOptions('gpsLiveIntervalSelect', [1000,10000,30000], ["1 сек","10 сек","30 сек"]);
+  fillSelectOptions('gpsNormalDistanceSelect', [1,30,80], ["1 м","30 м","80 м"]);
+  fillSelectOptions('gpsLiveDistanceSelect', [1,15,50], ["1 м","15 м","50 м"]);
 }
 function setGpsPresetButtonsActive(kind){ setGpsPresetActiveButton(kind); }
 function setGpsProfileControlsFromState(){
@@ -3642,7 +3495,7 @@ function setGpsProfileControlsFromState(){
   if(qs('gpsLiveDistanceSelect')) qs('gpsLiveDistanceSelect').value = String(p.live.minDistanceM);
   setGpsPresetButtonsActive(getGpsPresetKind(p)); refreshGpsProfileCurrentText(); updateGpsProfilesUiFromData(getCurrentPointForGpsProfiles());
 }
-function readGpsProfilesFromControls(){ return normalizeGpsProfilesShape({ normal: { intervalMs: Number(qs('gpsNormalIntervalSelect')?.value || 2000), minDistanceM: Number(qs('gpsNormalDistanceSelect')?.value || 5) }, live: { intervalMs: Number(qs('gpsLiveIntervalSelect')?.value || 2000), minDistanceM: Number(qs('gpsLiveDistanceSelect')?.value || 3) } }); }
+function readGpsProfilesFromControls(){ return normalizeGpsProfilesShape({ normal: { intervalMs: Number(qs('gpsNormalIntervalSelect')?.value || 20000), minDistanceM: Number(qs('gpsNormalDistanceSelect')?.value || 30) }, live: { intervalMs: Number(qs('gpsLiveIntervalSelect')?.value || 10000), minDistanceM: Number(qs('gpsLiveDistanceSelect')?.value || 15) } }); }
 function detectGpsPresetKeyFromProfiles(profiles){
   const p = normalizeGpsProfilesShape(profiles);
   for(const [key, preset] of Object.entries(GPS_PRESETS)){
@@ -3664,7 +3517,7 @@ function gpsPresetKindFromAndroidPreset(preset){
   return "balanced";
 }
 
-function holdManualGpsPreset(kind, ms = 15000){
+function holdManualGpsPreset(kind, ms = 120000){
   manualGpsPresetKind = gpsPresetKindFromAndroidPreset(kind);
   manualGpsPresetUntilMs = Date.now() + ms;
 }
@@ -3750,7 +3603,10 @@ function showGpsProfileSelectionNow(sourceLabel = "Админка"){
   if(qs("gpsAppliedLiveText")) qs("gpsAppliedLiveText").textContent = formatGpsProfileLine(profiles.live);
   if(qs("gpsProfileSourceText")) qs("gpsProfileSourceText").textContent = sourceLabel;
   const modeEl = qs("gpsProfileModeText");
-  if(modeEl && (modeEl.textContent === "—" || !modeEl.textContent.trim())) modeEl.textContent = detectCurrentGpsMode(getCurrentPointForGpsProfiles());
+  if(modeEl){
+    const key = manualGpsPresetKind || detectGpsPresetKeyFromProfiles(profiles) || "balanced";
+    modeEl.textContent = GPS_PRESETS[key]?.label || "Баланс";
+  }
   syncGpsPresetButtons();
 }
 function refreshGpsProfileCurrentText(){
@@ -3812,7 +3668,7 @@ function bindGpsSettingsControls(){
 
 function normalizeGpsProfilesShape(value){
   const src = value && typeof value === "object" ? value : {}; const normal = src.normal && typeof src.normal === "object" ? src.normal : {}; const live = src.live && typeof src.live === "object" ? src.live : {};
-  const candidate = { normal: { intervalMs: Number(normal.intervalMs || 2000), minDistanceM: Number(normal.minDistanceM || 5) }, live: { intervalMs: Number(live.intervalMs || 2000), minDistanceM: Number(live.minDistanceM || 3) } };
+  const candidate = { normal: { intervalMs: Number(normal.intervalMs || 20000), minDistanceM: Number(normal.minDistanceM || 30) }, live: { intervalMs: Number(live.intervalMs || 10000), minDistanceM: Number(live.minDistanceM || 15) } };
   for(const preset of Object.values(GPS_PRESETS)){ if(candidate.normal.intervalMs === preset.normal.intervalMs && candidate.normal.minDistanceM === preset.normal.minDistanceM && candidate.live.intervalMs === preset.live.intervalMs && candidate.live.minDistanceM === preset.live.minDistanceM) return cloneGpsProfile(preset); }
   return gpsPresetProfile(GPS_DEFAULT_PRESET);
 }
@@ -3979,28 +3835,14 @@ function adminPresetToAndroidPreset(kind){
 
 function profilesForAndroidPreset(preset){
   const p = adminPresetToAndroidPreset(preset);
-  if(p === "accurate"){
-    return {
-      normal: { intervalMs: 1000, minDistanceM: 1 },
-      live: { intervalMs: 1000, minDistanceM: 1 }
-    };
-  }
-  if(p === "economy"){
-    return {
-      normal: { intervalMs: 20000, minDistanceM: 30 },
-      live: { intervalMs: 10000, minDistanceM: 15 }
-    };
-  }
-  return {
-    normal: { intervalMs: 2000, minDistanceM: 5 },
-    live: { intervalMs: 2000, minDistanceM: 3 }
-  };
+  const key = p === "accurate" ? "fast" : p === "economy" ? "eco" : "balanced";
+  return gpsPresetProfile(key);
 }
 
 function gpsPresetKeyFromProfiles(profiles){
-  const p = normalizeGpsProfilesShape(profiles);
-  if(p.normal.intervalMs === 1000 && Number(p.normal.minDistanceM) === 1 && p.live.intervalMs === 1000 && Number(p.live.minDistanceM) === 1) return "accurate";
-  if(p.normal.intervalMs === 20000 && Number(p.normal.minDistanceM) === 30 && p.live.intervalMs === 10000 && Number(p.live.minDistanceM) === 15) return "economy";
+  const key = detectGpsPresetKeyFromProfiles(profiles);
+  if(key === "fast") return "accurate";
+  if(key === "eco") return "economy";
   return "balanced";
 }
 
@@ -4183,7 +4025,7 @@ async function renderBackups(){
   });
   tbody.querySelectorAll("[data-dl]").forEach(btn=>btn.onclick=async()=>{ const key=btn.dataset.dl; const snap=await get(ref(db,`backups/${key}`)); downloadText(`backup_${key}.json`, JSON.stringify(snap.val(), null, 2), "application/json"); showToast("Backup скачан","success"); });
   tbody.querySelectorAll("[data-del]").forEach(btn=>btn.onclick=async()=>{ const key=btn.dataset.del; if(!confirm(`Удалить backup ${key}?`)) return; await remove(ref(db,`backups/${key}`)); await renderBackups(); showToast("Backup удалён","success"); });
-  tbody.querySelectorAll("[data-rs]").forEach(btn=>btn.onclick=async()=>{ const key=btn.dataset.rs; const code=prompt("Для восстановления введи RESTORE"); if(code!=="RESTORE") return showToast("Восстановление отменено","warn"); const snap=await get(ref(db,`backups/${key}`)); const b=snap.val(); if(!b) return; await update(ref(db),{history:b.history||null, live:b.live||null, liveSessions:b.liveSessions||null, users:b.users||null, adminSettings:b.adminSettings||null}); await logAction("backup_restore", `Восстановлен backup ${key}`); await loadAdminSettings(); await loadUsers(); await loadAllData(); await loadSessions(); showToast("Backup восстановлен","success",3400); });
+  tbody.querySelectorAll("[data-rs]").forEach(btn=>btn.onclick=async()=>{ const key=btn.dataset.rs; const code=prompt("Для восстановления введи RESTORE"); if(code!=="RESTORE") return showToast("Восстановление отменено","warn"); const snap=await get(ref(db,`backups/${key}`)); const b=snap.val(); if(!b) return; await update(ref(db),{history:b.history||null, live:b.live||null, liveSessions:b.liveSessions||null, users:b.users||null, adminSettings:b.adminSettings||null}); await logAction("backup_restore", `Восстановлен backup ${key}`); await loadAdminSettings(); await loadUsers(); await loadSessions(); showToast("Backup восстановлен","success",3400); });
   const metaSnap = await get(ref(db,"adminSettings/backupMeta"));
   const meta = metaSnap.val() || {};
   if(qs("lastBackupText")) qs("lastBackupText").textContent = `Последний backup: ${fmtTime(meta.lastBackupAt)}`;
@@ -4249,13 +4091,14 @@ async function logDeviceEvent(kind, description, extra = {}){
 
 function buildShareUrl(token){ return `https://mygpstrack.github.io/mygps/live.html?session=${encodeURIComponent(token)}`; }
 function getRecentSourcePoints(){
-  const limit=30;
-  const livePoints = Object.values(getSelectedLiveData()?.recentPoints || {}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
-  const historyPoints = getSelectedHistoryPoints().filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
-  if(livePoints.length) return livePoints.slice(-limit);
-  return historyPoints.slice(-limit);
+  const uid = selectedUid || "";
+  const fromHistory = uid && Array.isArray(historyByUid?.[uid]) ? historyByUid[uid] : [];
+  const fromLive = uid && liveByUid?.[uid]?.lastPoint ? [liveByUid[uid].lastPoint] : [];
+  const points = [...fromHistory.slice(-5), ...fromLive]
+    .filter(Boolean)
+    .sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+  return points.slice(-5);
 }
-function generateSessionToken(){ const arr=new Uint8Array(24); crypto.getRandomValues(arr); return Array.from(arr,b=>b.toString(16).padStart(2,"0")).join(""); }
 
 async function createLiveSession(){
   if(!selectedUid && allUsers.length===1){ selectedUid = allUsers[0]; qs("userSelect").value = selectedUid; }
@@ -4412,7 +4255,8 @@ function updateActiveSessionNotice(){
 }
 
 async function loadSessions(){
-  const snap = await get(ref(db, "liveSessions"));
+  // Traffic fix: read only recent sessions instead of whole liveSessions tree.
+  const snap = await get(query(ref(db, "liveSessions"), limitToLast(ADMIN_SESSIONS_LIMIT)));
   allSessions = snap.val() || {};
   updateUsage();
   renderSessions();
@@ -5694,7 +5538,7 @@ if (qs("shareDurationPreset")) { qs("shareDurationPreset").addEventListener("cha
 if (qs("createManagedUserBtn")) qs("createManagedUserBtn").onclick = ()=>createManagedUser();
 if (qs("createTabUserBtn")) qs("createTabUserBtn").onclick = ()=>createManagedUserFromTab();
 if (qs("refreshUsersManageBtn")) qs("refreshUsersManageBtn").onclick = async()=>{ await loadUsers(); renderUsersManagement(); renderEmptyProfilesList(); showToast("Список пользователей обновлён","success"); };
-if (qs("refreshJournalBtn")) qs("refreshJournalBtn").onclick = ()=>{ renderJournal(); showToast("Журнал обновлён","success"); };
+if (qs("refreshJournalBtn")) qs("refreshJournalBtn").onclick = async()=>{ await window.loadLimitedEvents?.(); renderJournal(); showToast("Журнал обновлён","success"); };
 if (qs("clearOldEventsBtn")) qs("clearOldEventsBtn").onclick = async()=>{
   const cutoff = Date.now() - 30*24*60*60*1000;
   if(!confirm("Удалить события старше 30 дней из events?")) return;
@@ -5882,34 +5726,46 @@ onAuthStateChanged(auth, async user => {
     renderJournal();
     updateNowFromAvailableSources();
   });
-  onValue(ref(db, "history"), snap => {
-    const raw=snap.val()||{};
-    historyByUid={};
-    Object.entries(raw).forEach(([uid,pointsObj])=>{
-      historyByUid[uid]=Object.values(pointsObj||{}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
-    });
-    updateUsage(); renderHistory(); updateNowFromAvailableSources();
-  });
-  onValue(ref(db, "liveSessions"), snap => { allSessions=snap.val()||{}; updateUsage(); renderSessions(); updateActiveSessionToast(); updateNowFromAvailableSources(); });
+  // Low traffic: history is NOT listened globally.
+  // It is loaded only for selected user when the History tab is opened or refresh is pressed.
+  onValue(query(ref(db, "liveSessions"), limitToLast(ADMIN_SESSIONS_LIMIT)), snap => { allSessions=snap.val()||{}; updateUsage(); renderSessions(); updateActiveSessionToast(); updateNowFromAvailableSources(); });
   onValue(ref(db, "adminLogs/deletions"), snap => { deletionsLog=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0)); renderJournal(); });
   onValue(ref(db, "adminLogs/actions"), snap => { actionLogs=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0)); renderJournal(); });
   let legacyEventJournalLogs = [];
   let androidEventLogs = [];
+  window.loadLimitedEvents = async function loadLimitedEvents(){
+    const uids = (allUsers && allUsers.length ? allUsers : Object.keys(usersMeta || {})).slice(0, 100);
+    const chunks = await Promise.all(uids.map(async uid => {
+      try{
+        const snap = await get(query(ref(db, `events/${uid}`), limitToLast(ADMIN_EVENTS_LIMIT_PER_USER)));
+        return normalizeEventsSnapshot({[uid]: snap.val() || {}});
+      }catch(e){
+        recordError(`events/${uid}`, e);
+        return [];
+      }
+    }));
+    androidEventLogs = chunks.flat().sort((a,b)=>Number(b.ts||0)-Number(a.ts||0));
+    eventsLoaded = true;
+    refreshCombinedAppEvents();
+  }
+
   function refreshCombinedAppEvents(){
     appEventLogs = [...androidEventLogs, ...legacyEventJournalLogs].sort((a,b)=>Number(b.ts||0)-Number(a.ts||0));
     renderJournal();
   }
-  onValue(ref(db, "events"), snap => { androidEventLogs = normalizeEventsSnapshot(snap.val()||{}); refreshCombinedAppEvents(); });
-  onValue(ref(db, "eventJournal"), snap => { legacyEventJournalLogs = normalizeEventJournalSnapshot(snap.val()||{}); refreshCombinedAppEvents(); notifyNewEventJournalGeofences(legacyEventJournalLogs).catch(e=>recordError("eventJournalNotify", e)); });
+  // Traffic fix: load events once with shallow per-user limit instead of listening to the whole events tree.
+  window.loadLimitedEvents?.().catch(e=>recordError("loadLimitedEvents", e));
+  get(ref(db, "eventJournal")).then(snap => { legacyEventJournalLogs = normalizeEventJournalSnapshot(snap.val()||{}).slice(0, 300); refreshCombinedAppEvents(); notifyNewEventJournalGeofences(legacyEventJournalLogs).catch(e=>recordError("eventJournalNotify", e)); }).catch(e=>recordError("eventJournalLoad", e));
 
   await loadAdminSettings();
   startGpsProfilesRealtimeSync();
   await loadUsers();
   restoreUiState();
-  await loadAllData();
+  if(document.querySelector(".tab-btn.active")?.dataset?.tab === "historyPanel") await ensureHistoryLoaded();
   await loadSessions();
   await renderBackups();
-  await createMonthlyBackup(false);
+  // Low traffic: automatic full backup disabled on open; use Backup button manually.
+  // await createMonthlyBackup(false);
   updateRigaWeather();
   const headerPoint = getSelectedLiveData()?.lastPoint || getSelectedHistoryPoints().slice(-1)[0];
   if(headerPoint && headerPoint.latitude != null && headerPoint.longitude != null){
