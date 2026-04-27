@@ -1111,6 +1111,14 @@ const app = initializeApp(firebaseConfig);
 const secondaryApp = initializeApp(firebaseConfig, "adminSecondary");
 const auth = getAuth(app);
 const secondaryAuth = getAuth(secondaryApp);
+
+// === FIX: safe Firebase path ===
+function safeRef(path){
+  if(!path) return null;
+  if(path.includes('undefined') || path.includes('null')) return null;
+  return ref(db, path);
+}
+
 const db = getDatabase(app);
 const provider = new GoogleAuthProvider();
 const qs = (id) => document.getElementById(id);
