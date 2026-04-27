@@ -6919,6 +6919,27 @@ async function runSafeCleanup(previewOnly){
   setSafeCleanupResult(text);
   adminPopup(result.errors.length ? "Готово, но есть ошибки" : (previewOnly ? "Проверка завершена" : "Очистка завершена"), result.errors.length ? "warn" : "success");
 
+
+  try{
+    await push(ref(db, "adminLogs"), {
+      type: "safe_cleanup",
+      mode: previewOnly ? "preview" : "run",
+      timestamp: Date.now(),
+      uid: auth && auth.currentUser ? auth.currentUser.uid : "unknown",
+      email: auth && auth.currentUser ? (auth.currentUser.email || "") : "",
+      result: {
+        expiredSessions: result.expiredSessions,
+        endedSessions: result.endedSessions,
+        oldEvents: result.oldEvents,
+        emptyProfiles: result.emptyProfiles,
+        deleted: previewOnly ? 0 : result.deleted,
+        errors: result.errors.length
+      }
+    });
+  }catch(e){
+    console.warn("safe_cleanup adminLogs write failed", e);
+  }
+
   try{ if(typeof updateUsageTrafficStatus === "function") updateUsageTrafficStatus(); }catch(e){}
   try{ if(typeof loadSessions === "function") loadSessions(); }catch(e){}
   try{ if(typeof loadUsers === "function") loadUsers(); }catch(e){}
