@@ -385,6 +385,13 @@
     .journalTypeBadge.battery{background:rgba(185,28,28,.22);border-color:#7f1d1d;color:#fecaca}
     .journalTypeBadge.system{background:rgba(100,116,139,.18);border-color:#475569;color:#cbd5e1}
 
+
+    /* Journal row highlighting */
+    #journalTbody tr.journal-live-row{background:rgba(37,99,235,.08)}
+    #journalTbody tr.journal-gps-row{background:rgba(22,163,74,.07)}
+    #journalTbody tr.journal-geofence-row{background:rgba(180,83,9,.09)}
+    #journalTbody tr.journal-alert-row{background:rgba(185,28,28,.10)}
+
 </style>
 </head>
 <body>
@@ -1176,6 +1183,37 @@ function setupJournalQuickFilters(){
 }
 
 window.addEventListener("load", setupJournalQuickFilters);
+
+
+function applyJournalRowHighlights(){
+  const rows = document.querySelectorAll("#journalTbody tr");
+  rows.forEach(tr => {
+    const txt = (tr.innerText || "").toLowerCase();
+    tr.classList.remove("journal-live-row","journal-gps-row","journal-geofence-row","journal-alert-row");
+
+    if(txt.includes("battery") || txt.includes("батар") || txt.includes("offline") || txt.includes("ошиб") || txt.includes("нет gps") || txt.includes("нет сигнала")){
+      tr.classList.add("journal-alert-row");
+    }else if(txt.includes("geofence") || txt.includes("геозон")){
+      tr.classList.add("journal-geofence-row");
+    }else if(txt.includes("gps")){
+      tr.classList.add("journal-gps-row");
+    }else if(txt.includes("live")){
+      tr.classList.add("journal-live-row");
+    }
+  });
+}
+
+window.addEventListener("load", () => {
+  const btn = document.getElementById("refreshJournalBtn");
+  if(btn && !btn.dataset.highlightPatch){
+    btn.dataset.highlightPatch = "1";
+    btn.addEventListener("click", () => {
+      setTimeout(applyJournalRowHighlights, 300);
+      setTimeout(applyJournalRowHighlights, 900);
+    });
+  }
+  setTimeout(applyJournalRowHighlights, 1200);
+});
 
 </script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js">
