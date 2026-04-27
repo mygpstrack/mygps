@@ -373,6 +373,18 @@
     .nowLiveWarning{display:none;margin-top:12px;padding:12px 14px;border-radius:14px;border:1px solid rgba(234,179,8,.45);background:rgba(180,83,9,.18);color:#fde68a;font-weight:700;line-height:1.45}
     .nowLiveWarning.show{display:block}
 
+
+    /* Journal quick filters */
+    .journalQuickFilters{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+    .journalQuickFilters button{width:auto;background:#374151}
+    .journalQuickFilters button.active{background:#2563eb}
+    .journalTypeBadge{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:999px;border:1px solid var(--border);font-weight:800;font-size:12px}
+    .journalTypeBadge.live{background:rgba(37,99,235,.22);border-color:#1d4ed8;color:#bfdbfe}
+    .journalTypeBadge.gps{background:rgba(22,163,74,.22);border-color:#166534;color:#bbf7d0}
+    .journalTypeBadge.geofence{background:rgba(180,83,9,.22);border-color:#92400e;color:#fde68a}
+    .journalTypeBadge.battery{background:rgba(185,28,28,.22);border-color:#7f1d1d;color:#fecaca}
+    .journalTypeBadge.system{background:rgba(100,116,139,.18);border-color:#475569;color:#cbd5e1}
+
 </style>
 </head>
 <body>
@@ -888,6 +900,7 @@
               <option value="gps_start">GPS включён</option>
               <option value="gps_stop">GPS остановлен</option>
               <option value="live_created">Live-ссылка создана</option>
+              <option value="live_stop">Live остановлен</option>
               <option value="live_link_opened">Live-ссылка открыта</option>
               <option value="geofence_enter">Вход в геозону</option>
               <option value="geofence_exit">Выход из геозоны</option>
@@ -908,6 +921,14 @@
         <div class="toolbar">
           <button id="refreshJournalBtn" class="secondary">Обновить журнал</button>
           <button id="clearOldEventsBtn" class="warn">Очистить старше 30 дней</button>
+        </div>
+        <div class="journalQuickFilters">
+          <button class="small" data-journal-quick="">Все</button>
+          <button class="small" data-journal-quick="live_created,live_stop,live_link_opened">Live</button>
+          <button class="small" data-journal-quick="gps_start,gps_stop,gps_no_signal">GPS</button>
+          <button class="small" data-journal-quick="geofence_enter,geofence_exit">Геозоны</button>
+          <button class="small" data-journal-quick="battery_low">Батарея</button>
+          <button class="small" data-journal-quick="user_offline">Offline</button>
         </div>
         <div style="overflow:auto">
           <table>
@@ -1099,6 +1120,15 @@
 window.addEventListener("load", () => {
   try{ renderNowLiveHealth(null); }catch(e){}
 });
+
+
+const journalTypeFilterEl = document.getElementById("journalTypeFilter");
+if(journalTypeFilterEl){
+  journalTypeFilterEl.addEventListener("change", () => {
+    journalTypeFilterEl.dataset.quickTypes = "";
+    document.querySelectorAll("[data-journal-quick]").forEach(b => b.classList.remove("active"));
+  });
+}
 
 </script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
@@ -5101,6 +5131,52 @@ function normalizeEventJournalSnapshot(data){
   });
   return out.sort((a,b)=>Number(b.ts||0)-Number(a.ts||0));
 }
+
+function journalGroupForType(type){
+  type = String(type || "");
+  if(type.startsWith("live_")) return "live";
+  if(type.startsWith("gps_")) return "gps";
+  if(type.startsWith("geofence_")) return "geofence";
+  if(type.includes("battery")) return "battery";
+  return "system";
+}
+function journalTypeLabel(type){
+  const labels = {
+    login:"Вход",
+    logout:"Выход",
+    gps_start:"GPS старт",
+    gps_stop:"GPS стоп",
+    live_created:"Live создан",
+    live_stop:"Live стоп",
+    live_link_opened:"Live открыт",
+    geofence_enter:"Вход в геозону",
+    geofence_exit:"Выход из геозоны",
+    battery_low:"Батарея",
+    gps_no_signal:"Нет GPS",
+    user_offline:"Offline"
+  };
+  return labels[type] || type || "—";
+}
+function journalTypeBadge(type){
+  const group = journalGroupForType(type);
+  return `<span class="journalTypeBadge ${group}">${journalTypeLabel(type)}</span>`;
+}
+function setupJournalQuickFilters(){
+  document.querySelectorAll("[data-journal-quick]").forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll("[data-journal-quick]").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      const select = qs("journalTypeFilter");
+      if(!select) return;
+      const value = btn.getAttribute("data-journal-quick") || "";
+      select.dataset.quickTypes = value;
+      select.value = "";
+      try{ renderJournal(); }catch(e){ try{ loadJournal(); }catch(_){} }
+    };
+  });
+}
+window.addEventListener("load", setupJournalQuickFilters);
+
 function renderJournal(){
   const tbody=qs("journalTbody");
   if(!tbody) return;
