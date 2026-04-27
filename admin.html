@@ -729,8 +729,8 @@
             <div class="cleanupBox"><b>Пустые профили</b><span>Пользователи без имени, email и активности.</span></div>
           </div>
           <div class="toolbar">
-            <button id="safeCleanupBtn" class="warn" onclick="window.runSafeCleanupFromButton(false)">Запустить безопасную очистку</button>
-            <button id="safeCleanupPreviewBtn" class="secondary" onclick="window.runSafeCleanupFromButton(true)">Только проверить</button>
+            <button id="safeCleanupBtn" class="warn" >Запустить безопасную очистку</button>
+            <button id="safeCleanupPreviewBtn" class="secondary" >Только проверить</button>
           </div>
           <div id="safeCleanupResult" class="cleanupResult hidden">—</div>
         </div>
@@ -1344,223 +1344,7 @@ window.addEventListener("load", () => {
 
 
 
-// === Safe cleanup FIX 59: direct button handlers + top toast ===
-function adminTopToast(message, type="info"){
-  try{
-    if(typeof showToast === "function"){
-      showToast(message, type);
-      return;
-    }
-  }catch(e){}
 
-  let box = document.getElementById("adminTopToastFallback");
-  if(!box){
-    box = document.createElement("div");
-    box.id = "adminTopToastFallback";
-    box.style.cssText = [
-      "position:fixed",
-      "top:18px",
-      "right:18px",
-      "z-index:999999",
-      "max-width:420px",
-      "padding:14px 16px",
-      "border-radius:16px",
-      "color:#fff",
-      "font-weight:800",
-      "box-shadow:0 12px 34px rgba(0,0,0,.35)",
-      "border:1px solid rgba(255,255,255,.16)",
-      "background:#1f2937",
-      "white-space:pre-line",
-      "line-height:1.35"
-    ].join(";");
-    document.body.appendChild(box);
-  }
-
-  const bg = type === "error" ? "#b91c1c" : type === "success" ? "#15803d" : type === "warn" ? "#b45309" : "#1f2937";
-  box.style.background = bg;
-  box.textContent = message;
-  box.style.display = "block";
-
-  clearTimeout(window.__adminTopToastTimer);
-  window.__adminTopToastTimer = setTimeout(() => {
-    box.style.display = "none";
-  }, 4500);
-}
-
-async function safeCleanupRead(path){
-  const snap = await get(ref(db, path));
-  return snap.exists() && snap.val() ? snap.val() : {};
-}
-
-function safeCleanupEmptyProfile(user){
-  if(!user || typeof user !== "object") return false;
-  const name = String(user.name || user.displayName || user.nickname || "").trim();
-  const email = String(user.email || "").trim();
-  const last = Number(user.lastSeen || user.lastSeenAt || user.updatedAt || user.lastUpdate || user.timestamp || 0);
-  const hasProfile = !!name || !!email;
-  const recent = last && (Date.now() - last < 30 * 24 * 60 * 60 * 1000);
-  return !hasProfile && !recent;
-}
-
-function safeCleanupSetResult(text){
-  const box = document.getElementById("safeCleanupResult");
-  if(box){
-    box.classList.remove("hidden");
-    box.textContent = text;
-  }
-}
-
-async function runSafeCleanupCore(previewOnly){
-  const now = Date.now();
-  const monthAgo = now - 30 * 24 * 60 * 60 * 1000;
-  const result = {
-    expiredSessions: 0,
-    endedSessions: 0,
-    oldEvents: 0,
-    emptyProfiles: 0,
-    deleted: 0,
-    errors: []
-  };
-
-  try{
-    const sessions = await safeCleanupRead("liveSessions");
-    for(const [token, session] of Object.entries(sessions || {})){
-      const meta = session?.meta || {};
-      const expiresAt = Number(meta.expiresAt || 0);
-      const active = meta.active === true;
-      const ended = meta.ended === true || meta.status === "ended" || active === false;
-      const expired = expiresAt && expiresAt < now;
-
-      if(expired || ended){
-        if(expired) result.expiredSessions++;
-        else result.endedSessions++;
-
-        if(!previewOnly){
-          try{
-            await remove(ref(db, `liveSessions/${token}`));
-            result.deleted++;
-          }catch(e){
-            result.errors.push(`liveSessions/${token}: ${e.message}`);
-          }
-        }
-      }
-    }
-  }catch(e){
-    result.errors.push(`liveSessions: ${e.message}`);
-  }
-
-  async function scanEvents(rootName){
-    try{
-      const rootObj = await safeCleanupRead(rootName);
-      for(const [uid, events] of Object.entries(rootObj || {})){
-        if(!events || typeof events !== "object") continue;
-        for(const [eventId, ev] of Object.entries(events)){
-          const ts = Number(ev?.timestamp || ev?.ts || 0);
-          if(ts && ts < monthAgo){
-            result.oldEvents++;
-            if(!previewOnly){
-              try{
-                await remove(ref(db, `${rootName}/${uid}/${eventId}`));
-                result.deleted++;
-              }catch(e){
-                result.errors.push(`${rootName}/${uid}/${eventId}: ${e.message}`);
-              }
-            }
-          }
-        }
-      }
-    }catch(e){
-      result.errors.push(`${rootName}: ${e.message}`);
-    }
-  }
-
-  await scanEvents("events");
-  await scanEvents("eventJournal");
-
-  try{
-    const users = await safeCleanupRead("users");
-    for(const [uid, user] of Object.entries(users || {})){
-      if(safeCleanupEmptyProfile(user)){
-        result.emptyProfiles++;
-        if(!previewOnly){
-          try{
-            await remove(ref(db, `users/${uid}`));
-            result.deleted++;
-          }catch(e){
-            result.errors.push(`users/${uid}: ${e.message}`);
-          }
-        }
-      }
-    }
-  }catch(e){
-    result.errors.push(`users: ${e.message}`);
-  }
-
-  return result;
-}
-
-function safeCleanupFormat(result, previewOnly){
-  const lines = [
-    previewOnly ? "Проверка завершена. Найдено:" : "Безопасная очистка завершена:",
-    `• Истёкшие live-сессии: ${result.expiredSessions}`,
-    `• Завершённые live-сессии: ${result.endedSessions}`,
-    `• Старые события журнала: ${result.oldEvents}`,
-    `• Пустые профили: ${result.emptyProfiles}`,
-    `• Удалено: ${previewOnly ? 0 : result.deleted}`,
-    `• Ошибки: ${result.errors.length}`
-  ];
-
-  if(result.errors.length){
-    lines.push("");
-    lines.push("Ошибки:");
-    lines.push(...result.errors.slice(0, 10).map(x => `- ${x}`));
-    if(result.errors.length > 10) lines.push(`…ещё ${result.errors.length - 10}`);
-  }
-
-  return lines.join("\n");
-}
-
-window.runSafeCleanupFromButton = async function(previewOnly){
-  try{
-    adminTopToast(previewOnly ? "Проверяю мусор…" : "Запускаю безопасную очистку…", "info");
-    safeCleanupSetResult(previewOnly ? "Проверяю мусор…" : "Запускаю безопасную очистку…");
-
-    if(!previewOnly){
-      const ok = confirm("Запустить безопасную очистку? History не будет удалён.");
-      if(!ok){
-        adminTopToast("Очистка отменена", "warn");
-        safeCleanupSetResult("Очистка отменена.");
-        return;
-      }
-    }
-
-    const result = await runSafeCleanupCore(previewOnly);
-    const text = safeCleanupFormat(result, previewOnly);
-    safeCleanupSetResult(text);
-
-    if(result.errors.length){
-      adminTopToast(previewOnly ? "Проверка завершена с ошибками" : "Очистка завершена с ошибками", "warn");
-    }else{
-      adminTopToast(previewOnly ? "Проверка завершена" : "Безопасная очистка завершена", "success");
-    }
-
-    try{ if(typeof updateUsageTrafficStatus === "function") updateUsageTrafficStatus(); }catch(e){}
-    try{ if(typeof loadSessions === "function") loadSessions(); }catch(e){}
-    try{ if(typeof loadUsers === "function") loadUsers(); }catch(e){}
-  }catch(e){
-    const msg = `Ошибка безопасной очистки: ${e.message || e}`;
-    adminTopToast(msg, "error");
-    safeCleanupSetResult(msg);
-  }
-};
-
-// Fallback binding in case inline handlers are stripped by browser/cache
-window.addEventListener("load", () => {
-  const runBtn = document.getElementById("safeCleanupBtn");
-  const previewBtn = document.getElementById("safeCleanupPreviewBtn");
-  if(runBtn) runBtn.onclick = () => window.runSafeCleanupFromButton(false);
-  if(previewBtn) previewBtn.onclick = () => window.runSafeCleanupFromButton(true);
-});
 
 </script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js">
@@ -6110,6 +5894,240 @@ async function exportPdfReport(){
     ${dataHtml}
     ${tableHtml}
   </div>
+<script>
+// === Safe cleanup FIX 59: direct button handlers + top toast ===
+function adminTopToast(message, type="info"){
+  try{
+    if(typeof showToast === "function"){
+      showToast(message, type);
+      return;
+    }
+  }catch(e){}
+
+  let box = document.getElementById("adminTopToastFallback");
+  if(!box){
+    box = document.createElement("div");
+    box.id = "adminTopToastFallback";
+    box.style.cssText = [
+      "position:fixed",
+      "top:18px",
+      "right:18px",
+      "z-index:999999",
+      "max-width:420px",
+      "padding:14px 16px",
+      "border-radius:16px",
+      "color:#fff",
+      "font-weight:800",
+      "box-shadow:0 12px 34px rgba(0,0,0,.35)",
+      "border:1px solid rgba(255,255,255,.16)",
+      "background:#1f2937",
+      "white-space:pre-line",
+      "line-height:1.35"
+    ].join(";");
+    document.body.appendChild(box);
+  }
+
+  const bg = type === "error" ? "#b91c1c" : type === "success" ? "#15803d" : type === "warn" ? "#b45309" : "#1f2937";
+  box.style.background = bg;
+  box.textContent = message;
+  box.style.display = "block";
+
+  clearTimeout(window.__adminTopToastTimer);
+  window.__adminTopToastTimer = setTimeout(() => {
+    box.style.display = "none";
+  }, 4500);
+}
+
+async function safeCleanupRead(path){
+  const snap = await get(ref(db, path));
+  return snap.exists() && snap.val() ? snap.val() : {};
+}
+
+function safeCleanupEmptyProfile(user){
+  if(!user || typeof user !== "object") return false;
+  const name = String(user.name || user.displayName || user.nickname || "").trim();
+  const email = String(user.email || "").trim();
+  const last = Number(user.lastSeen || user.lastSeenAt || user.updatedAt || user.lastUpdate || user.timestamp || 0);
+  const hasProfile = !!name || !!email;
+  const recent = last && (Date.now() - last < 30 * 24 * 60 * 60 * 1000);
+  return !hasProfile && !recent;
+}
+
+function safeCleanupSetResult(text){
+  const box = document.getElementById("safeCleanupResult");
+  if(box){
+    box.classList.remove("hidden");
+    box.textContent = text;
+  }
+}
+
+async function runSafeCleanupCore(previewOnly){
+  const now = Date.now();
+  const monthAgo = now - 30 * 24 * 60 * 60 * 1000;
+  const result = {
+    expiredSessions: 0,
+    endedSessions: 0,
+    oldEvents: 0,
+    emptyProfiles: 0,
+    deleted: 0,
+    errors: []
+  };
+
+  try{
+    const sessions = await safeCleanupRead("liveSessions");
+    for(const [token, session] of Object.entries(sessions || {})){
+      const meta = session?.meta || {};
+      const expiresAt = Number(meta.expiresAt || 0);
+      const active = meta.active === true;
+      const ended = meta.ended === true || meta.status === "ended" || active === false;
+      const expired = expiresAt && expiresAt < now;
+
+      if(expired || ended){
+        if(expired) result.expiredSessions++;
+        else result.endedSessions++;
+
+        if(!previewOnly){
+          try{
+            await remove(ref(db, `liveSessions/${token}`));
+            result.deleted++;
+          }catch(e){
+            result.errors.push(`liveSessions/${token}: ${e.message}`);
+          }
+        }
+      }
+    }
+  }catch(e){
+    result.errors.push(`liveSessions: ${e.message}`);
+  }
+
+  async function scanEvents(rootName){
+    try{
+      const rootObj = await safeCleanupRead(rootName);
+      for(const [uid, events] of Object.entries(rootObj || {})){
+        if(!events || typeof events !== "object") continue;
+        for(const [eventId, ev] of Object.entries(events)){
+          const ts = Number(ev?.timestamp || ev?.ts || 0);
+          if(ts && ts < monthAgo){
+            result.oldEvents++;
+            if(!previewOnly){
+              try{
+                await remove(ref(db, `${rootName}/${uid}/${eventId}`));
+                result.deleted++;
+              }catch(e){
+                result.errors.push(`${rootName}/${uid}/${eventId}: ${e.message}`);
+              }
+            }
+          }
+        }
+      }
+    }catch(e){
+      result.errors.push(`${rootName}: ${e.message}`);
+    }
+  }
+
+  await scanEvents("events");
+  await scanEvents("eventJournal");
+
+  try{
+    const users = await safeCleanupRead("users");
+    for(const [uid, user] of Object.entries(users || {})){
+      if(safeCleanupEmptyProfile(user)){
+        result.emptyProfiles++;
+        if(!previewOnly){
+          try{
+            await remove(ref(db, `users/${uid}`));
+            result.deleted++;
+          }catch(e){
+            result.errors.push(`users/${uid}: ${e.message}`);
+          }
+        }
+      }
+    }
+  }catch(e){
+    result.errors.push(`users: ${e.message}`);
+  }
+
+  return result;
+}
+
+function safeCleanupFormat(result, previewOnly){
+  const lines = [
+    previewOnly ? "Проверка завершена. Найдено:" : "Безопасная очистка завершена:",
+    `• Истёкшие live-сессии: ${result.expiredSessions}`,
+    `• Завершённые live-сессии: ${result.endedSessions}`,
+    `• Старые события журнала: ${result.oldEvents}`,
+    `• Пустые профили: ${result.emptyProfiles}`,
+    `• Удалено: ${previewOnly ? 0 : result.deleted}`,
+    `• Ошибки: ${result.errors.length}`
+  ];
+
+  if(result.errors.length){
+    lines.push("");
+    lines.push("Ошибки:");
+    lines.push(...result.errors.slice(0, 10).map(x => `- ${x}`));
+    if(result.errors.length > 10) lines.push(`…ещё ${result.errors.length - 10}`);
+  }
+
+  return lines.join("\n");
+}
+
+window.runSafeCleanupFromButton = async function(previewOnly){
+  try{
+    adminTopToast(previewOnly ? "Проверяю мусор…" : "Запускаю безопасную очистку…", "info");
+    safeCleanupSetResult(previewOnly ? "Проверяю мусор…" : "Запускаю безопасную очистку…");
+
+    if(!previewOnly){
+      const ok = confirm("Запустить безопасную очистку? History не будет удалён.");
+      if(!ok){
+        adminTopToast("Очистка отменена", "warn");
+        safeCleanupSetResult("Очистка отменена.");
+        return;
+      }
+    }
+
+    const result = await runSafeCleanupCore(previewOnly);
+    const text = safeCleanupFormat(result, previewOnly);
+    safeCleanupSetResult(text);
+
+    if(result.errors.length){
+      adminTopToast(previewOnly ? "Проверка завершена с ошибками" : "Очистка завершена с ошибками", "warn");
+    }else{
+      adminTopToast(previewOnly ? "Проверка завершена" : "Безопасная очистка завершена", "success");
+    }
+
+    try{ if(typeof updateUsageTrafficStatus === "function") updateUsageTrafficStatus(); }catch(e){}
+    try{ if(typeof loadSessions === "function") loadSessions(); }catch(e){}
+    try{ if(typeof loadUsers === "function") loadUsers(); }catch(e){}
+  }catch(e){
+    const msg = `Ошибка безопасной очистки: ${e.message || e}`;
+    adminTopToast(msg, "error");
+    safeCleanupSetResult(msg);
+  }
+};
+
+// Fallback binding in case inline handlers are stripped by browser/cache
+window.addEventListener("load", () => {
+  const runBtn = document.getElementById("safeCleanupBtn");
+  const previewBtn = document.getElementById("safeCleanupPreviewBtn");
+  if(runBtn) runBtn.onclick = () => window.runSafeCleanupFromButton(false);
+  if(previewBtn) previewBtn.onclick = () => window.runSafeCleanupFromButton(true);
+});
+</script>
+<script>
+
+window.addEventListener("load", () => {
+  const runBtn = document.getElementById("safeCleanupBtn");
+  const previewBtn = document.getElementById("safeCleanupPreviewBtn");
+
+  if(runBtn){
+    runBtn.addEventListener("click", () => window.runSafeCleanupFromButton(false));
+  }
+  if(previewBtn){
+    previewBtn.addEventListener("click", () => window.runSafeCleanupFromButton(true));
+  }
+});
+
+</script>
 </body>
 </html>`);
   reportWin.document.close();
@@ -6969,6 +6987,240 @@ function setupJournalQuickFilters(){
 }
 
 window.addEventListener("load", setupJournalQuickFilters);
+
+</script>
+<script>
+// === Safe cleanup FIX 59: direct button handlers + top toast ===
+function adminTopToast(message, type="info"){
+  try{
+    if(typeof showToast === "function"){
+      showToast(message, type);
+      return;
+    }
+  }catch(e){}
+
+  let box = document.getElementById("adminTopToastFallback");
+  if(!box){
+    box = document.createElement("div");
+    box.id = "adminTopToastFallback";
+    box.style.cssText = [
+      "position:fixed",
+      "top:18px",
+      "right:18px",
+      "z-index:999999",
+      "max-width:420px",
+      "padding:14px 16px",
+      "border-radius:16px",
+      "color:#fff",
+      "font-weight:800",
+      "box-shadow:0 12px 34px rgba(0,0,0,.35)",
+      "border:1px solid rgba(255,255,255,.16)",
+      "background:#1f2937",
+      "white-space:pre-line",
+      "line-height:1.35"
+    ].join(";");
+    document.body.appendChild(box);
+  }
+
+  const bg = type === "error" ? "#b91c1c" : type === "success" ? "#15803d" : type === "warn" ? "#b45309" : "#1f2937";
+  box.style.background = bg;
+  box.textContent = message;
+  box.style.display = "block";
+
+  clearTimeout(window.__adminTopToastTimer);
+  window.__adminTopToastTimer = setTimeout(() => {
+    box.style.display = "none";
+  }, 4500);
+}
+
+async function safeCleanupRead(path){
+  const snap = await get(ref(db, path));
+  return snap.exists() && snap.val() ? snap.val() : {};
+}
+
+function safeCleanupEmptyProfile(user){
+  if(!user || typeof user !== "object") return false;
+  const name = String(user.name || user.displayName || user.nickname || "").trim();
+  const email = String(user.email || "").trim();
+  const last = Number(user.lastSeen || user.lastSeenAt || user.updatedAt || user.lastUpdate || user.timestamp || 0);
+  const hasProfile = !!name || !!email;
+  const recent = last && (Date.now() - last < 30 * 24 * 60 * 60 * 1000);
+  return !hasProfile && !recent;
+}
+
+function safeCleanupSetResult(text){
+  const box = document.getElementById("safeCleanupResult");
+  if(box){
+    box.classList.remove("hidden");
+    box.textContent = text;
+  }
+}
+
+async function runSafeCleanupCore(previewOnly){
+  const now = Date.now();
+  const monthAgo = now - 30 * 24 * 60 * 60 * 1000;
+  const result = {
+    expiredSessions: 0,
+    endedSessions: 0,
+    oldEvents: 0,
+    emptyProfiles: 0,
+    deleted: 0,
+    errors: []
+  };
+
+  try{
+    const sessions = await safeCleanupRead("liveSessions");
+    for(const [token, session] of Object.entries(sessions || {})){
+      const meta = session?.meta || {};
+      const expiresAt = Number(meta.expiresAt || 0);
+      const active = meta.active === true;
+      const ended = meta.ended === true || meta.status === "ended" || active === false;
+      const expired = expiresAt && expiresAt < now;
+
+      if(expired || ended){
+        if(expired) result.expiredSessions++;
+        else result.endedSessions++;
+
+        if(!previewOnly){
+          try{
+            await remove(ref(db, `liveSessions/${token}`));
+            result.deleted++;
+          }catch(e){
+            result.errors.push(`liveSessions/${token}: ${e.message}`);
+          }
+        }
+      }
+    }
+  }catch(e){
+    result.errors.push(`liveSessions: ${e.message}`);
+  }
+
+  async function scanEvents(rootName){
+    try{
+      const rootObj = await safeCleanupRead(rootName);
+      for(const [uid, events] of Object.entries(rootObj || {})){
+        if(!events || typeof events !== "object") continue;
+        for(const [eventId, ev] of Object.entries(events)){
+          const ts = Number(ev?.timestamp || ev?.ts || 0);
+          if(ts && ts < monthAgo){
+            result.oldEvents++;
+            if(!previewOnly){
+              try{
+                await remove(ref(db, `${rootName}/${uid}/${eventId}`));
+                result.deleted++;
+              }catch(e){
+                result.errors.push(`${rootName}/${uid}/${eventId}: ${e.message}`);
+              }
+            }
+          }
+        }
+      }
+    }catch(e){
+      result.errors.push(`${rootName}: ${e.message}`);
+    }
+  }
+
+  await scanEvents("events");
+  await scanEvents("eventJournal");
+
+  try{
+    const users = await safeCleanupRead("users");
+    for(const [uid, user] of Object.entries(users || {})){
+      if(safeCleanupEmptyProfile(user)){
+        result.emptyProfiles++;
+        if(!previewOnly){
+          try{
+            await remove(ref(db, `users/${uid}`));
+            result.deleted++;
+          }catch(e){
+            result.errors.push(`users/${uid}: ${e.message}`);
+          }
+        }
+      }
+    }
+  }catch(e){
+    result.errors.push(`users: ${e.message}`);
+  }
+
+  return result;
+}
+
+function safeCleanupFormat(result, previewOnly){
+  const lines = [
+    previewOnly ? "Проверка завершена. Найдено:" : "Безопасная очистка завершена:",
+    `• Истёкшие live-сессии: ${result.expiredSessions}`,
+    `• Завершённые live-сессии: ${result.endedSessions}`,
+    `• Старые события журнала: ${result.oldEvents}`,
+    `• Пустые профили: ${result.emptyProfiles}`,
+    `• Удалено: ${previewOnly ? 0 : result.deleted}`,
+    `• Ошибки: ${result.errors.length}`
+  ];
+
+  if(result.errors.length){
+    lines.push("");
+    lines.push("Ошибки:");
+    lines.push(...result.errors.slice(0, 10).map(x => `- ${x}`));
+    if(result.errors.length > 10) lines.push(`…ещё ${result.errors.length - 10}`);
+  }
+
+  return lines.join("\n");
+}
+
+window.runSafeCleanupFromButton = async function(previewOnly){
+  try{
+    adminTopToast(previewOnly ? "Проверяю мусор…" : "Запускаю безопасную очистку…", "info");
+    safeCleanupSetResult(previewOnly ? "Проверяю мусор…" : "Запускаю безопасную очистку…");
+
+    if(!previewOnly){
+      const ok = confirm("Запустить безопасную очистку? History не будет удалён.");
+      if(!ok){
+        adminTopToast("Очистка отменена", "warn");
+        safeCleanupSetResult("Очистка отменена.");
+        return;
+      }
+    }
+
+    const result = await runSafeCleanupCore(previewOnly);
+    const text = safeCleanupFormat(result, previewOnly);
+    safeCleanupSetResult(text);
+
+    if(result.errors.length){
+      adminTopToast(previewOnly ? "Проверка завершена с ошибками" : "Очистка завершена с ошибками", "warn");
+    }else{
+      adminTopToast(previewOnly ? "Проверка завершена" : "Безопасная очистка завершена", "success");
+    }
+
+    try{ if(typeof updateUsageTrafficStatus === "function") updateUsageTrafficStatus(); }catch(e){}
+    try{ if(typeof loadSessions === "function") loadSessions(); }catch(e){}
+    try{ if(typeof loadUsers === "function") loadUsers(); }catch(e){}
+  }catch(e){
+    const msg = `Ошибка безопасной очистки: ${e.message || e}`;
+    adminTopToast(msg, "error");
+    safeCleanupSetResult(msg);
+  }
+};
+
+// Fallback binding in case inline handlers are stripped by browser/cache
+window.addEventListener("load", () => {
+  const runBtn = document.getElementById("safeCleanupBtn");
+  const previewBtn = document.getElementById("safeCleanupPreviewBtn");
+  if(runBtn) runBtn.onclick = () => window.runSafeCleanupFromButton(false);
+  if(previewBtn) previewBtn.onclick = () => window.runSafeCleanupFromButton(true);
+});
+</script>
+<script>
+
+window.addEventListener("load", () => {
+  const runBtn = document.getElementById("safeCleanupBtn");
+  const previewBtn = document.getElementById("safeCleanupPreviewBtn");
+
+  if(runBtn){
+    runBtn.addEventListener("click", () => window.runSafeCleanupFromButton(false));
+  }
+  if(previewBtn){
+    previewBtn.addEventListener("click", () => window.runSafeCleanupFromButton(true));
+  }
+});
 
 </script>
 </body></html>
