@@ -2734,29 +2734,34 @@ async function loadUsers(){
 }
 
 async function loadAllData(){
-  const uid = selectedUid || allUsers[0] || "";
-  if(!uid){
-    historyByUid = {};
-    historyLoaded = true;
-    renderHistory();
-    updateUsage();
-    await updateNowFromAvailableSources();
-    return;
-  }
-
   const [historySnap, liveSnap, usersSnap] = await Promise.all([
-    get(query(ref(db, `history/${uid}`), limitToLast(ADMIN_HISTORY_LIMIT_PER_USER))),
+    get(ref(db,"history")),
     get(ref(db,"live")),
     get(ref(db,"users"))
   ]);
 
-  usersMeta = usersSnap.val() || usersMeta || {};
-  liveByUid = liveSnap.val() || liveByUid || {};
-  historyByUid = historyByUid || {};
+  usersMeta = usersSnap.val() || {};
+  historyByUid = {};
+  liveByUid = liveSnap.val() || {};
   const histRaw = historySnap.val() || {};
-  historyByUid[uid] = Object.values(histRaw)
-    .filter(Boolean)
-    .sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+
+  Object.entries(histRaw).forEach(([uid, pointsObj])=>{
+    historyByUid[uid] = Object.values(pointsObj||{})
+      .filter(Boolean)
+      .sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+  });
+
+  const ids = new Set([
+    ...(allUsers || []),
+    ...Object.keys(usersMeta || {}),
+    ...Object.keys(historyByUid || {}),
+    ...Object.keys(liveByUid || {}),
+    ...Object.keys(adminsMap || {})
+  ].filter(uid => uid && uid !== "_init"));
+
+  allUsers = [...ids].sort((a,b)=>getDisplayName(a).localeCompare(getDisplayName(b), "ru"));
+  if(!selectedUid && allUsers.length) selectedUid = allUsers[0];
+  renderUserSelect?.();
 
   historyLoaded = true;
   updateUsage();
@@ -2766,9 +2771,11 @@ async function loadAllData(){
 }
 
 async function ensureHistoryLoaded(){
-  if(historyLoaded && selectedUid && historyByUid?.[selectedUid]) return;
+  if(historyLoaded) return;
   await loadAllData();
 }
+
+
 
 const historySortState = { field: "timestamp", dir: "desc" };
 
@@ -5840,8 +5847,30 @@ onAuthStateChanged(auth, async user => {
     renderJournal();
     updateNowFromAvailableSources();
   });
-  // Low traffic: history is NOT listened globally.
-  // It is loaded only for selected user when the History tab is opened or refresh is pressed.
+  onValue(ref(db, "history"), snap => {
+    const raw=snap.val()||{};
+    historyByUid={};
+    Object.entries(raw).forEach(([uid,pointsObj])=>{
+      historyByUid[uid]=Object.values(pointsObj||{}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+    });
+
+    const ids = new Set([
+      ...(allUsers || []),
+      ...Object.keys(usersMeta || {}),
+      ...Object.keys(historyByUid || {}),
+      ...Object.keys(liveByUid || {}),
+      ...Object.keys(adminsMap || {})
+    ].filter(uid => uid && uid !== "_init"));
+
+    allUsers = [...ids].sort((a,b)=>getDisplayName(a).localeCompare(getDisplayName(b), "ru"));
+    if(!selectedUid && allUsers.length) selectedUid = allUsers[0];
+    renderUserSelect?.();
+
+    historyLoaded = true;
+    updateUsage();
+    renderHistory();
+    updateNowFromAvailableSources();
+  });
   onValue(query(ref(db, "liveSessions"), limitToLast(ADMIN_SESSIONS_LIMIT)), snap => { allSessions=snap.val()||{}; updateUsage(); renderSessions(); updateActiveSessionToast(); updateNowFromAvailableSources(); });
   onValue(ref(db, "adminLogs/deletions"), snap => { deletionsLog=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0)); renderJournal(); });
   onValue(ref(db, "adminLogs/actions"), snap => { actionLogs=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0)); renderJournal(); });
@@ -5875,7 +5904,7 @@ onAuthStateChanged(auth, async user => {
   startGpsProfilesRealtimeSync();
   await loadUsers();
   restoreUiState();
-  if(document.querySelector(".tab-btn.active")?.dataset?.tab === "historyPanel") await ensureHistoryLoaded();
+  await loadAllData();
   await loadSessions();
   await renderBackups();
   // Low traffic: automatic full backup disabled on open; use Backup button manually.
