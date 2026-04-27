@@ -1195,6 +1195,74 @@ function getAllLastPoints(){
     .sort((a,b)=>Number(b.point?.timestamp || b.point?.ts || 0)-Number(a.point?.timestamp || a.point?.ts || 0));
 }
 
+function getSelectedLiveData(){
+  if(!selectedUid) return null;
+  return liveByUid?.[selectedUid] || null;
+}
+
+function getSelectedHistoryPoints(){
+  if(!selectedUid) return [];
+  return Array.isArray(historyByUid?.[selectedUid]) ? historyByUid[selectedUid] : [];
+}
+
+function getVisibleHistoryPoints(){
+  if(qs("viewModeSelect")?.value === "all"){
+    return Object.values(historyByUid || {}).flat().filter(Boolean);
+  }
+  return getSelectedHistoryPoints();
+}
+
+function renderUserSelect(){
+  const select = qs("userSelect");
+  if(!select) return;
+
+  const ids = new Set([
+    ...(allUsers || []),
+    ...Object.keys(usersMeta || {}),
+    ...Object.keys(liveByUid || {}),
+    ...Object.keys(adminsMap || {}),
+    ...Object.keys(userVisibility || {}),
+    ...Object.keys(historyByUid || {})
+  ]);
+
+  Object.values(userVisibility || {}).forEach(row => {
+    Object.keys(row || {}).forEach(uid => ids.add(uid));
+  });
+
+  Object.values(allSessions || {}).forEach(session => {
+    const uid = getSessionRoot(session)?.meta?.ownerUid;
+    if(uid) ids.add(uid);
+  });
+
+  const list = [...ids].filter(uid => uid && uid !== "_init" && uid !== "undefined" && uid !== "null")
+    .sort((a,b)=>getDisplayName(a).localeCompare(getDisplayName(b), "ru"));
+
+  allUsers = list;
+  const previous = selectedUid || select.value || "";
+  select.innerHTML = "";
+
+  if(!list.length){
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "Пользователи не найдены";
+    select.appendChild(opt);
+    selectedUid = "";
+    return;
+  }
+
+  list.forEach(uid => {
+    const opt = document.createElement("option");
+    opt.value = uid;
+    const meta = usersMeta?.[uid] || {};
+    const email = meta.email ? ` · ${meta.email}` : "";
+    opt.textContent = `${getDisplayName(uid)}${email}`;
+    select.appendChild(opt);
+  });
+
+  selectedUid = list.includes(previous) ? previous : list[0];
+  select.value = selectedUid;
+}
+
 function getCurrentPointForGpsProfiles(){
   if(qs("viewModeSelect")?.value === "all"){
     const points = getAllLastPoints();
@@ -2614,12 +2682,16 @@ async function loadUsers(){
     }
   };
 
-  // Traffic fix: do not read the whole history tree just to build the user list.
-  const [liveSnap, usersSnap, visibilitySnap, adminsSnap] = await Promise.all([
+  const [liveSnap, usersSnap, visibilitySnap, adminsSnap, liveOwnersSnap, sessionsSnap] = await Promise.all([
     safeGet("live"),
     safeGet("users"),
     safeGet("userVisibility"),
-    safeGet("admins")
+    safeGet("admins"),
+    safeGet("liveOwners"),
+    get(query(ref(db, "liveSessions"), limitToLast(ADMIN_SESSIONS_LIMIT))).catch(e => {
+      recordError("loadUsers/liveSessions", e);
+      return { val: () => ({}) };
+    })
   ]);
 
   const liveVal = liveSnap.val() || {};
@@ -2627,19 +2699,36 @@ async function loadUsers(){
   liveByUid = liveVal;
   userVisibility = visibilitySnap.val() || {};
   adminsMap = adminsSnap.val() || {};
+  const liveOwners = liveOwnersSnap.val() || {};
+  const sessionsVal = sessionsSnap.val() || {};
 
   const ids = new Set([
     ...Object.keys(usersMeta || {}),
     ...Object.keys(liveVal || {}),
-    ...Object.keys(adminsMap || {})
+    ...Object.keys(adminsMap || {}),
+    ...Object.keys(userVisibility || {}),
+    ...Object.keys(historyByUid || {}),
+    ...Object.keys(liveOwners || {})
   ].filter(uid => uid && uid !== "_init"));
 
-  allUsers = [...ids].sort((a,b)=>getDisplayName(a).localeCompare(getDisplayName(b), "ru"));
+  Object.values(userVisibility || {}).forEach(row => {
+    Object.keys(row || {}).forEach(uid => ids.add(uid));
+  });
+
+  Object.values(sessionsVal || {}).forEach(session => {
+    const uid = getSessionRoot(session)?.meta?.ownerUid;
+    if(uid) ids.add(uid);
+  });
+
+  allUsers = [...ids].filter(uid => uid && uid !== "_init" && uid !== "undefined" && uid !== "null")
+    .sort((a,b)=>getDisplayName(a).localeCompare(getDisplayName(b), "ru"));
+
   if(!selectedUid && allUsers.length) selectedUid = allUsers[0];
 
   renderUserSelect();
   renderUsersManagement?.();
   renderVisibilityPanel?.();
+  renderEmptyProfilesList?.();
   updateUsage();
   await updateNowFromAvailableSources();
 }
