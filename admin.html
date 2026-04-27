@@ -689,6 +689,7 @@
           </div>
         </div>
         <div class="row"><button id="createShareBtn" class="success">Создать live-ссылку</button><button id="shareCreatedShareBtn" class="secondary">Поделиться</button><button id="openCreatedShareTopBtn">Открыть</button><button id="clearShareResultBtn" class="secondary">Очистить</button></div>
+<div id="activeSessionNotice" class="notice hidden"></div>
 <div id="shareResultBox" class="notice hidden">
           <div><strong>Ссылка создана</strong></div>
           <div style="margin-top:8px">Истекает: <span id="shareExpiresText">—</span></div>
@@ -4211,13 +4212,41 @@ async function logDeviceEvent(kind, description, extra = {}){
 }
 
 function buildShareUrl(token){ return `https://mygpstrack.github.io/mygps/live.html?session=${encodeURIComponent(token)}`; }
+
+function generateSessionToken(){
+  const part = () => Math.random().toString(36).slice(2, 10);
+  if(window.crypto && typeof window.crypto.getRandomValues === "function"){
+    const bytes = new Uint8Array(12);
+    window.crypto.getRandomValues(bytes);
+    return Array.from(bytes, b => b.toString(36).padStart(2, "0")).join("").slice(0, 22);
+  }
+  return `${Date.now().toString(36)}${part()}${part()}`.slice(0, 22);
+}
+
+function normalizeShareSourcePoint(p){
+  if(!p) return null;
+  const lat = p.latitude ?? p.lat;
+  const lng = p.longitude ?? p.lng ?? p.lon;
+  if(lat == null || lng == null) return null;
+  const ts = Number(p.timestamp ?? p.ts ?? p.time ?? Date.now());
+  return {
+    ...p,
+    latitude: Number(lat),
+    longitude: Number(lng),
+    timestamp: Number.isFinite(ts) ? ts : Date.now(),
+    ts: Number.isFinite(ts) ? ts : Date.now()
+  };
+}
+
 function getRecentSourcePoints(){
   const uid = selectedUid || "";
   const fromHistory = uid && Array.isArray(historyByUid?.[uid]) ? historyByUid[uid] : [];
-  const fromLive = uid && liveByUid?.[uid]?.lastPoint ? [liveByUid[uid].lastPoint] : [];
+  const liveRoot = uid ? (liveByUid?.[uid] || {}) : {};
+  const fromLive = liveRoot?.lastPoint ? [liveRoot.lastPoint] : (liveRoot?.point ? [liveRoot.point] : []);
   const points = [...fromHistory.slice(-5), ...fromLive]
+    .map(normalizeShareSourcePoint)
     .filter(Boolean)
-    .sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+    .sort((a,b)=>Number(a.timestamp||a.ts||0)-Number(b.timestamp||b.ts||0));
   return points.slice(-5);
 }
 
