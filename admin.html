@@ -5889,7 +5889,45 @@ async function exportPdfReport(){
     ${dataHtml}
     ${tableHtml}
   </div>
+
+<div id="adminLogsPanel" class="card" style="margin:12px">
+  <h3>Логи админа</h3>
+  <div class="toolbar">
+    <button id="refreshAdminLogsBtn" class="secondary">Обновить</button>
+  </div>
+  <div id="adminLogsList" style="margin-top:12px;font-size:13px;line-height:1.4"></div>
+</div>
+
+<script>
+async function loadAdminLogs(){
+  const box = document.getElementById("adminLogsList");
+  if(!box) return;
+  box.textContent = "Загрузка...";
+  try{
+    const snap = await get(ref(db,"adminLogs"));
+    if(!snap.exists()){
+      box.textContent = "Логов нет";
+      return;
+    }
+    const data = snap.val();
+    const arr = Object.entries(data).map(([k,v])=>v).sort((a,b)=>(b.timestamp||0)-(a.timestamp||0)).slice(0,50);
+    box.innerHTML = arr.map(x=>{
+      return "<div style='margin-bottom:8px;padding:8px;border:1px solid #333;border-radius:8px'>"
+        + "<b>"+(x.email||x.uid||"—")+"</b> · "+(x.mode||"") 
+        + "<br>"+ new Date(x.timestamp||0).toLocaleString()
+        + "<br>Удалено: "+(x.result?.deleted||0)+" | Ошибки: "+(x.result?.errors||0)
+        + "</div>";
+    }).join("");
+  }catch(e){
+    box.textContent = "Ошибка загрузки";
+  }
+}
+
+document.getElementById("refreshAdminLogsBtn")?.addEventListener("click", loadAdminLogs);
+window.addEventListener("load", loadAdminLogs);
+</script>
 </body>
+
 </html>`);
   reportWin.document.close();
   showToast(T.exported, "success");
