@@ -1127,8 +1127,40 @@ if(journalTypeFilterEl){
   journalTypeFilterEl.addEventListener("change", () => {
     journalTypeFilterEl.dataset.quickTypes = "";
     document.querySelectorAll("[data-journal-quick]").forEach(b => b.classList.remove("active"));
+    const refreshBtn = document.getElementById("refreshJournalBtn");
+    if(refreshBtn) refreshBtn.click(); setTimeout(applyJournalQuickFilterToRows, 400); setTimeout(applyJournalQuickFilterToRows, 1000);
   });
 }
+
+
+function applyJournalQuickFilterToRows(){
+  const select = qs("journalTypeFilter");
+  const quick = (select?.dataset?.quickTypes || "").split(",").filter(Boolean);
+  if(!quick.length) return;
+
+  const allowedLabels = quick.map(journalTypeLabel);
+  document.querySelectorAll("#journalTbody tr").forEach(tr => {
+    const text = tr.innerText || "";
+    const ok = allowedLabels.some(label => text.includes(label)) || quick.some(t => text.includes(t));
+    tr.style.display = ok ? "" : "none";
+  });
+
+  const visible = Array.from(document.querySelectorAll("#journalTbody tr")).filter(tr => tr.style.display !== "none").length;
+  const countEl = qs("journalCount");
+  if(countEl) countEl.textContent = String(visible);
+}
+
+// Patch refresh button so quick filters apply after journal redraw
+window.addEventListener("load", () => {
+  const refreshBtn = qs("refreshJournalBtn");
+  if(refreshBtn && !refreshBtn.dataset.quickPatch){
+    refreshBtn.dataset.quickPatch = "1";
+    refreshBtn.addEventListener("click", () => {
+      setTimeout(applyJournalQuickFilterToRows, 350);
+      setTimeout(applyJournalQuickFilterToRows, 900);
+    });
+  }
+});
 
 </script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
@@ -5162,16 +5194,26 @@ function journalTypeBadge(type){
   return `<span class="journalTypeBadge ${group}">${journalTypeLabel(type)}</span>`;
 }
 function setupJournalQuickFilters(){
+  const typeSelect = qs("journalTypeFilter");
+  const refreshBtn = qs("refreshJournalBtn");
+
   document.querySelectorAll("[data-journal-quick]").forEach(btn => {
     btn.onclick = () => {
       document.querySelectorAll("[data-journal-quick]").forEach(b => b.classList.remove("active"));
       btn.classList.add("active");
-      const select = qs("journalTypeFilter");
-      if(!select) return;
+
       const value = btn.getAttribute("data-journal-quick") || "";
-      select.dataset.quickTypes = value;
-      select.value = "";
-      try{ renderJournal(); }catch(e){ try{ loadJournal(); }catch(_){} }
+
+      // Для одиночных типов используем штатный select.
+      // Для групповых фильтров используем dataset.quickTypes, а ниже фильтр применяется в renderJournal.
+      if(typeSelect){
+        typeSelect.dataset.quickTypes = value;
+        typeSelect.value = value && !value.includes(",") ? value : "";
+      }
+
+      if(refreshBtn) refreshBtn.click(); setTimeout(applyJournalQuickFilterToRows, 400); setTimeout(applyJournalQuickFilterToRows, 1000);
+      else if(typeof loadJournal === "function") loadJournal();
+      else if(typeof renderJournal === "function") renderJournal();
     };
   });
 }
