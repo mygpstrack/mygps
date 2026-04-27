@@ -3620,7 +3620,7 @@ async function updateNowFromAvailableSources(){
     }
 
     setPrimaryLiveMarkerVisible(false);
-    await updateNowUI(sessionPoint, `liveSessions/${token}`);
+    await updateNowUI(sessionPoint, 'liveSessions/' + token);
     setPrimaryLiveMarkerVisible(false);
 
     updateGpsProfilesUiFromData(sessionPoint);
@@ -4993,7 +4993,7 @@ async function createLiveSession(){
   sourcePoints.forEach(p=>recentPointsObj[String(p.timestamp||Date.now()+Math.random())]=p);
   const payload={meta:{active:true,paused:false,createdAt:now,expiresAt,remainingMs:durationMinutes*60*1000,ownerUid:selectedUid,createdBy:auth.currentUser?.uid||null,createdByEmail:auth.currentUser?.email||null,durationMinutes},public:{lastPoint,recentPoints:recentPointsObj},viewStats:{openCount:0,firstOpenAt:null,lastOpenAt:null}};
   try{
-    await set(ref(db,`liveSessions/${token}`), payload);
+    await set(ref(db,'liveSessions/' + token), payload);
     await update(ref(db), { [`liveOwners/${selectedUid}/activeSessionId`]:token, [`liveOwners/${selectedUid}/lastCreatedAt`]:now });
     await logAction("session_create",`Создана live-сессия ${token} для ${selectedUid}`);
     createdShareUrl = buildShareUrl(token);
@@ -5122,7 +5122,7 @@ async function loadSessions(){
 async function deleteSession(token){
   if(!confirm(`Удалить live-сессию ${token}?`)) return;
   try{
-    await remove(ref(db, `liveSessions/${token}`));
+    await remove(ref(db, 'liveSessions/' + token));
     await logAction("session_delete", `Удалена live-сессия ${token}`);
     await loadSessions();
     showToast("Live-сессия удалена","success");
@@ -5168,7 +5168,7 @@ async function cleanupExpiredSessions(){
   if(!expiredTokens.length) return showToast("Истёкших сессий не найдено.","warn");
   if(!confirm(`Удалить ${expiredTokens.length} истёкших сессий?`)) return;
   try{
-    for(const token of expiredTokens) await remove(ref(db,`liveSessions/${token}`));
+    for(const token of expiredTokens) await remove(ref(db,'liveSessions/' + token));
     await logAction("expired_sessions_cleanup", `Удалено истёкших сессий: ${expiredTokens.length}`);
     await loadSessions();
     showToast("Истёкшие сессии удалены","success");
@@ -5988,7 +5988,7 @@ async function runSafeCleanupCore(previewOnly){
 
         if(!previewOnly){
           try{
-            await remove(ref(db, `liveSessions/${token}`));
+            await remove(ref(db, 'liveSessions/' + token));
             result.deleted++;
           }catch(e){
             result.errors.push(`liveSessions/${token}: ${e.message}`);
@@ -6035,7 +6035,7 @@ async function runSafeCleanupCore(previewOnly){
         result.emptyProfiles++;
         if(!previewOnly){
           try{
-            await remove(ref(db, `users/${uid}`));
+            await remove(ref(db, 'users/' + uid));
             result.deleted++;
           }catch(e){
             result.errors.push(`users/${uid}: ${e.message}`);
@@ -6185,7 +6185,7 @@ if (qs("cleanupEndedSessionsBtn")) qs("cleanupEndedSessionsBtn").onclick = async
       const root = getSessionRoot(session);
       const active = !!root?.meta?.active;
       if(!active){
-        updates[`liveSessions/${token}`] = null;
+        updates['liveSessions/' + token] = null;
         count++;
       }
     });
@@ -6391,7 +6391,7 @@ function renderUsersManagement(){
     const next = prompt("Новое имя пользователя", current);
     if(!next) return;
     try{
-      await update(ref(db, `users/${uid}`), {name: next.trim(), displayName: next.trim(), updatedAt: Date.now()});
+      await update(ref(db, 'users/' + uid), {name: next.trim(), displayName: next.trim(), updatedAt: Date.now()});
       usersMeta[uid] = {...(usersMeta[uid]||{}), name: next.trim(), displayName: next.trim(), updatedAt: Date.now()};
       renderUsersManagement();
       renderVisibilityPanel();
@@ -6410,7 +6410,7 @@ function renderUsersManagement(){
     if(!confirm(`Удалить данные пользователя ${label}? Auth-аккаунт в Firebase Authentication этим действием не удаляется.`)) return;
     try{
       await Promise.all([
-        remove(ref(db, `users/${uid}`)),
+        remove(ref(db, 'users/' + uid)),
         remove(ref(db, `history/${uid}`)),
         remove(ref(db, `live/${uid}`)),
         remove(ref(db, `liveOwners/${uid}`)),
@@ -6520,7 +6520,7 @@ async function deleteEmptyProfiles(){
   try{
     const updates = {};
     targets.forEach(uid => {
-      updates[`users/${uid}`] = null;
+      updates['users/' + uid] = null;
       updates[`live/${uid}`] = null;
       updates[`history/${uid}`] = null;
       updates[`liveOwners/${uid}`] = null;
@@ -6712,7 +6712,7 @@ if (qs("clearOldEventsBtn")) qs("clearOldEventsBtn").onclick = async()=>{
     Object.entries(snap.val() || {}).forEach(([uid, events])=>{
       Object.entries(events || {}).forEach(([eventId, item])=>{
         const ts = Number(item?.timestamp || item?.ts || 0);
-        if(ts && ts < cutoff) updatesObj[`events/${uid}/${eventId}`] = null;
+        if(ts && ts < cutoff) updatesObj['events/' + uid + '/' + eventId] = null;
       });
     });
     if(!Object.keys(updatesObj).length) return showToast("Старых событий нет","info");
@@ -7083,7 +7083,7 @@ async function runSafeCleanupCore(previewOnly){
 
         if(!previewOnly){
           try{
-            await remove(ref(db, `liveSessions/${token}`));
+            await remove(ref(db, 'liveSessions/' + token));
             result.deleted++;
           }catch(e){
             result.errors.push(`liveSessions/${token}: ${e.message}`);
@@ -7130,7 +7130,7 @@ async function runSafeCleanupCore(previewOnly){
         result.emptyProfiles++;
         if(!previewOnly){
           try{
-            await remove(ref(db, `users/${uid}`));
+            await remove(ref(db, 'users/' + uid));
             result.deleted++;
           }catch(e){
             result.errors.push(`users/${uid}: ${e.message}`);
@@ -7194,7 +7194,7 @@ window.runSafeCleanupFromButton = async function(previewOnly){
     try{ if(typeof loadSessions === "function") loadSessions(); }catch(e){}
     try{ if(typeof loadUsers === "function") loadUsers(); }catch(e){}
   }catch(e){
-    const msg = `Ошибка безопасной очистки: ${e.message || e}`;
+    const msg = `Ошибка безопасной очистки: ${e.message || e}";
     adminTopToast(msg, "error");
     safeCleanupSetResult(msg);
   }
@@ -7224,3 +7224,4 @@ window.addEventListener("load", () => {
 
 </script>
 </body></html>
+"
