@@ -7208,5 +7208,20 @@ document.addEventListener("click", (ev) => {
     setTimeout(loadAdminLogs, 100);
   }
 });
+
+
+// === Lazy loading v69 ===
+document.addEventListener("click", (e)=>{
+  const tab = e.target?.dataset?.tab;
+  if(!tab) return;
+
+  setTimeout(()=>{
+    try{
+      if(tab === "historyPanel" && typeof loadHistory === "function") loadHistory();
+      if(tab === "journalPanel" && typeof loadJournal === "function") loadJournal();
+      if(tab === "adminLogsPanel" && typeof loadAdminLogs === "function") loadAdminLogs();
+    }catch(e){}
+  },100);
+});
 </script>
 </body></html>
