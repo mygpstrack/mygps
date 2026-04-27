@@ -411,6 +411,9 @@
     .cleanupResult{margin-top:12px;padding:12px 14px;border-radius:14px;border:1px solid var(--border);background:rgba(255,255,255,.03);white-space:pre-wrap}
     @media(max-width:900px){.cleanupGrid{grid-template-columns:1fr}}
 
+
+    .lastUpdateChip{display:inline-flex;align-items:center;gap:8px;margin-top:8px;padding:6px 10px;border-radius:999px;border:1px solid var(--border);background:rgba(255,255,255,.04);color:var(--muted);font-size:13px;font-weight:700}
+
 </style>
 </head>
 <body>
@@ -674,6 +677,7 @@
 
       <div class="card">
         <h2>История точек</h2>
+        <div class="lastUpdateChip">Обновлено: <span id="historyLastUpdateText">—</span></div>
         <div style="overflow:auto">
           <table>
             <thead><tr><th style="width:36px"><input id="selectAllHistoryPoints" type="checkbox" style="width:auto;min-width:auto"></th><th id="historyHeadTime" class="sortableHead" onclick="window.toggleHistorySort('timestamp')">Время</th><th>Координаты</th><th id="historyHeadAccuracy" class="sortableHead" onclick="window.toggleHistorySort('accuracy')">Точность</th><th id="historyHeadSpeed" class="sortableHead" onclick="window.toggleHistorySort('speed')">Скорость</th><th>Метки</th><th>Действие</th></tr></thead>
@@ -789,6 +793,7 @@
 
       <div class="card">
         <h2>Управление live-сессиями</h2>
+        <div class="lastUpdateChip">Обновлено: <span id="sessionsLastUpdateText">—</span></div>
         <div class="grid4">
           <div><div class="label">Поиск token</div><input id="sessionSearchInput" placeholder="Поиск"/></div>
           <div><div class="label">Статус</div><select id="sessionStatusFilter"><option value="all">Все</option><option value="active">Активные</option><option value="expired">Истёкшие</option><option value="ended">Завершённые</option></select></div>
@@ -938,6 +943,7 @@
     <div id="journalPanel" class="hidden">
       <div class="card">
         <h2>Журнал действий</h2>
+        <div class="lastUpdateChip">Обновлено: <span id="journalLastUpdateText">—</span></div>
         <div class="grid4">
           <div>
             <div class="label">Пользователь</div>
@@ -1035,6 +1041,7 @@
     <div id="adminLogsPanel" class="hidden">
       <div class="card">
         <h2>Логи админа</h2>
+        <div class="lastUpdateChip">Обновлено: <span id="adminLogsLastUpdateText">—</span></div>
         <div class="toolbar">
           <button id="refreshAdminLogsBtn" class="secondary">Обновить</button>
         </div>
@@ -7256,6 +7263,54 @@ document.addEventListener("click", (e)=>{
       if(tab === "adminLogsPanel" && typeof loadAdminLogs === "function") loadAdminLogs();
     }catch(e){}
   },100);
+});
+
+
+// === Last update labels v71 ===
+function setLastUpdateLabel(id){
+  const el = document.getElementById(id);
+  if(!el) return;
+  el.textContent = new Date().toLocaleString("ru-RU");
+}
+
+function patchLastUpdateButtons(){
+  const pairs = [
+    ["refreshHistoryBtn", "historyLastUpdateText"],
+    ["applyFiltersBtn", "historyLastUpdateText"],
+    ["todayBtn", "historyLastUpdateText"],
+    ["yesterdayBtn", "historyLastUpdateText"],
+    ["weekBtn", "historyLastUpdateText"],
+    ["range1hBtn", "historyLastUpdateText"],
+    ["range24hBtn", "historyLastUpdateText"],
+    ["refreshJournalBtn", "journalLastUpdateText"],
+    ["refreshSessionsBtn", "sessionsLastUpdateText"],
+    ["syncActiveSessionsBtn", "sessionsLastUpdateText"],
+    ["refreshAdminLogsBtn", "adminLogsLastUpdateText"]
+  ];
+
+  pairs.forEach(([buttonId, labelId]) => {
+    const btn = document.getElementById(buttonId);
+    if(!btn || btn.dataset.lastUpdateBound === "1") return;
+    btn.dataset.lastUpdateBound = "1";
+    btn.addEventListener("click", () => {
+      setTimeout(() => setLastUpdateLabel(labelId), 500);
+      setTimeout(() => setLastUpdateLabel(labelId), 1500);
+    });
+  });
+}
+
+window.addEventListener("load", patchLastUpdateButtons);
+document.addEventListener("click", (ev) => {
+  const tab = ev.target && ev.target.dataset ? ev.target.dataset.tab : "";
+  if(!tab) return;
+
+  setTimeout(() => {
+    patchLastUpdateButtons();
+    if(tab === "historyPanel") setLastUpdateLabel("historyLastUpdateText");
+    if(tab === "journalPanel") setLastUpdateLabel("journalLastUpdateText");
+    if(tab === "sessionsPanel") setLastUpdateLabel("sessionsLastUpdateText");
+    if(tab === "adminLogsPanel") setLastUpdateLabel("adminLogsLastUpdateText");
+  }, 300);
 });
 </script>
 </body></html>
