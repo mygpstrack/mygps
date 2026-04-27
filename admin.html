@@ -997,8 +997,8 @@
             </div>
             <div class="gpsPresetInfoGrid">
               <div class="gpsPresetInfo"><div class="label">Точно</div><div class="value">Обычный 1s / 1м<br>Live 1s / 1м</div></div>
-              <div class="gpsPresetInfo"><div class="label">Баланс</div><div class="value">Обычный 2s / 5м<br>Live 2s / 3м</div></div>
-              <div class="gpsPresetInfo"><div class="label">Экономно</div><div class="value">Обычный 20s / 30м<br>Live 10s / 15м</div></div>
+              <div class="gpsPresetInfo"><div class="label">Баланс</div><div class="value">Обычный 20s / 30м<br>Live 10s / 15м</div></div>
+              <div class="gpsPresetInfo"><div class="label">Экономно</div><div class="value">Обычный 60s / 80м<br>Live 30s / 50м</div></div>
             </div>
             <div class="gpsHiddenControls">
               <select id="gpsNormalIntervalSelect"></select>
@@ -1006,7 +1006,7 @@
               <select id="gpsLiveIntervalSelect"></select>
               <select id="gpsLiveDistanceSelect"></select>
             </div>
-            <div class="notice gpsCurrentLine" id="gpsProfileCurrentText">Сейчас: обычный 2s / 5м • live 2s / 3м</div>
+            <div class="notice gpsCurrentLine" id="gpsProfileCurrentText">Сейчас: обычный 20s / 30м • live 10s / 15м</div>
             <div class="gpsStatusGrid">
               <div class="stat"><div class="label">Текущий профиль</div><div class="value" id="gpsProfileModeText">—</div></div>
               <div class="stat"><div class="label">Обычный применён</div><div class="value" id="gpsAppliedNormalText">—</div></div>
@@ -1105,8 +1105,8 @@ let adminSettings = {
   impossibleSpeedKmh: 250,
   junkAccuracyMeters: 100,
   gpsProfiles: {
-    normal: { intervalMs: 2000, minDistanceM: 5 },
-    live: { intervalMs: 2000, minDistanceM: 3 }
+    normal: { intervalMs: 20000, minDistanceM: 30 },
+    live: { intervalMs: 10000, minDistanceM: 15 }
   },
   geofences: []
 };
@@ -3595,8 +3595,26 @@ function fillGeofenceFromNowPoint(){
 const GPS_PRESETS = {
   fast: { label: "Точно", normal: { intervalMs: 1000, minDistanceM: 1 }, live: { intervalMs: 1000, minDistanceM: 1 } },
   balanced: { label: "Баланс", normal: { intervalMs: 20000, minDistanceM: 30 }, live: { intervalMs: 10000, minDistanceM: 15 } },
-  eco: { label: "Экономно", normal: { intervalMs: 20000, minDistanceM: 30 }, live: { intervalMs: 10000, minDistanceM: 15 } }
+  eco: { label: "Экономно", normal: { intervalMs: 60000, minDistanceM: 80 }, live: { intervalMs: 30000, minDistanceM: 50 } }
 };
+function formatGpsPresetProfile(kind){
+  const p = GPS_PRESETS[kind] || GPS_PRESETS[GPS_DEFAULT_PRESET];
+  const fmtInterval = ms => {
+    const sec = Math.round(Number(ms || 0) / 1000);
+    return sec >= 60 ? `${Math.round(sec / 60)}м` : `${sec}s`;
+  };
+  return `Обычный ${fmtInterval(p.normal.intervalMs)} / ${p.normal.minDistanceM}м • live ${fmtInterval(p.live.intervalMs)} / ${p.live.minDistanceM}м`;
+}
+
+function formatGpsPresetProfileMultiline(kind){
+  const p = GPS_PRESETS[kind] || GPS_PRESETS[GPS_DEFAULT_PRESET];
+  const fmtInterval = ms => {
+    const sec = Math.round(Number(ms || 0) / 1000);
+    return sec >= 60 ? `${Math.round(sec / 60)}м` : `${sec}s`;
+  };
+  return `Обычный ${fmtInterval(p.normal.intervalMs)} / ${p.normal.minDistanceM}м<br>Live ${fmtInterval(p.live.intervalMs)} / ${p.live.minDistanceM}м`;
+}
+
 const GPS_DEFAULT_PRESET = "balanced";
 function cloneGpsProfile(profile){ return { normal: { intervalMs: Number(profile.normal.intervalMs), minDistanceM: Number(profile.normal.minDistanceM) }, live: { intervalMs: Number(profile.live.intervalMs), minDistanceM: Number(profile.live.minDistanceM) } }; }
 function gpsPresetProfile(kind = GPS_DEFAULT_PRESET){ return cloneGpsProfile(GPS_PRESETS[kind] || GPS_PRESETS[GPS_DEFAULT_PRESET]); }
