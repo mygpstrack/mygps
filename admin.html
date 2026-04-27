@@ -1111,6 +1111,18 @@ const app = initializeApp(firebaseConfig);
 const secondaryApp = initializeApp(firebaseConfig, "adminSecondary");
 const auth = getAuth(app);
 const secondaryAuth = getAuth(secondaryApp);
+
+// === NOW status improvements ===
+function getNowStatusFromPoint(p){
+  if(!p) return {text:"Нет данных", cls:"offline"};
+  const ts = Number(p.timestamp||p.ts||0);
+  if(!ts) return {text:"Нет времени", cls:"idle"};
+  const age = Date.now()-ts;
+  if(age > 5*60*1000) return {text:"Offline", cls:"offline"};
+  if((p.speed||0) > 3) return {text:"Online (движение)", cls:"online"};
+  return {text:"Стоит", cls:"idle"};
+}
+
 const db = getDatabase(app);
 const provider = new GoogleAuthProvider();
 const qs = (id) => document.getElementById(id);
