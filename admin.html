@@ -1133,19 +1133,7 @@ if(journalTypeFilterEl){
 }
 
 
-function applyJournalQuickFilterToRows(){
-  const select = qs("journalTypeFilter");
-  const quick = (select?.dataset?.quickTypes || "").split(",").filter(Boolean);
-  if(!quick.length) return;
-
-  const allowedLabels = quick.map(journalTypeLabel);
-  document.querySelectorAll("#journalTbody tr").forEach(tr => {
-    const text = tr.innerText || "";
-    const ok = allowedLabels.some(label => text.includes(label)) || quick.some(t => text.includes(t));
-    tr.style.display = ok ? "" : "none";
-  });
-
-  const visible = Array.from(document.querySelectorAll("#journalTbody tr")).filter(tr => tr.style.display !== "none").length;
+const visible = Array.from(document.querySelectorAll("#journalTbody tr")).filter(tr => tr.style.display !== "none").length;
   const countEl = qs("journalCount");
   if(countEl) countEl.textContent = String(visible);
 }
@@ -1162,12 +1150,174 @@ window.addEventListener("load", () => {
   }
 });
 
+
+function setupJournalQuickFilters(){
+  const typeSelect = document.getElementById("journalTypeFilter");
+  const refreshBtn = document.getElementById("refreshJournalBtn");
+
+  document.querySelectorAll("[data-journal-quick]").forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll("[data-journal-quick]").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+
+      const val = btn.getAttribute("data-journal-quick") || "";
+
+      if(typeSelect){
+        if(val && !val.includes(",")){
+          typeSelect.value = val;
+        } else {
+          typeSelect.value = "";
+        }
+      }
+
+      if(refreshBtn) refreshBtn.click();
+    };
+  });
+}
+
+window.addEventListener("load", setupJournalQuickFilters);
+
 </script>
-<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js">
+function setupJournalQuickFilters(){
+  const typeSelect = document.getElementById("journalTypeFilter");
+  const refreshBtn = document.getElementById("refreshJournalBtn");
+
+  document.querySelectorAll("[data-journal-quick]").forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll("[data-journal-quick]").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+
+      const val = btn.getAttribute("data-journal-quick") || "";
+
+      if(typeSelect){
+        if(val && !val.includes(",")){
+          typeSelect.value = val;
+        } else {
+          typeSelect.value = "";
+        }
+      }
+
+      if(refreshBtn) refreshBtn.click();
+    };
+  });
+}
+
+window.addEventListener("load", setupJournalQuickFilters);
+
+</script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js">
+function setupJournalQuickFilters(){
+  const typeSelect = document.getElementById("journalTypeFilter");
+  const refreshBtn = document.getElementById("refreshJournalBtn");
+
+  document.querySelectorAll("[data-journal-quick]").forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll("[data-journal-quick]").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+
+      const val = btn.getAttribute("data-journal-quick") || "";
+
+      if(typeSelect){
+        if(val && !val.includes(",")){
+          typeSelect.value = val;
+        } else {
+          typeSelect.value = "";
+        }
+      }
+
+      if(refreshBtn) refreshBtn.click();
+    };
+  });
+}
+
+window.addEventListener("load", setupJournalQuickFilters);
+
+</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js">
+function setupJournalQuickFilters(){
+  const typeSelect = document.getElementById("journalTypeFilter");
+  const refreshBtn = document.getElementById("refreshJournalBtn");
+
+  document.querySelectorAll("[data-journal-quick]").forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll("[data-journal-quick]").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+
+      const val = btn.getAttribute("data-journal-quick") || "";
+
+      if(typeSelect){
+        if(val && !val.includes(",")){
+          typeSelect.value = val;
+        } else {
+          typeSelect.value = "";
+        }
+      }
+
+      if(refreshBtn) refreshBtn.click();
+    };
+  });
+}
+
+window.addEventListener("load", setupJournalQuickFilters);
+
+</script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js">
+function setupJournalQuickFilters(){
+  const typeSelect = document.getElementById("journalTypeFilter");
+  const refreshBtn = document.getElementById("refreshJournalBtn");
+
+  document.querySelectorAll("[data-journal-quick]").forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll("[data-journal-quick]").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+
+      const val = btn.getAttribute("data-journal-quick") || "";
+
+      if(typeSelect){
+        if(val && !val.includes(",")){
+          typeSelect.value = val;
+        } else {
+          typeSelect.value = "";
+        }
+      }
+
+      if(refreshBtn) refreshBtn.click();
+    };
+  });
+}
+
+window.addEventListener("load", setupJournalQuickFilters);
+
+</script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js">
+function setupJournalQuickFilters(){
+  const typeSelect = document.getElementById("journalTypeFilter");
+  const refreshBtn = document.getElementById("refreshJournalBtn");
+
+  document.querySelectorAll("[data-journal-quick]").forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll("[data-journal-quick]").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+
+      const val = btn.getAttribute("data-journal-quick") || "";
+
+      if(typeSelect){
+        if(val && !val.includes(",")){
+          typeSelect.value = val;
+        } else {
+          typeSelect.value = "";
+        }
+      }
+
+      if(refreshBtn) refreshBtn.click();
+    };
+  });
+}
+
+window.addEventListener("load", setupJournalQuickFilters);
+
+</script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
@@ -5193,32 +5343,6 @@ function journalTypeBadge(type){
   const group = journalGroupForType(type);
   return `<span class="journalTypeBadge ${group}">${journalTypeLabel(type)}</span>`;
 }
-function setupJournalQuickFilters(){
-  const typeSelect = qs("journalTypeFilter");
-  const refreshBtn = qs("refreshJournalBtn");
-
-  document.querySelectorAll("[data-journal-quick]").forEach(btn => {
-    btn.onclick = () => {
-      document.querySelectorAll("[data-journal-quick]").forEach(b => b.classList.remove("active"));
-      btn.classList.add("active");
-
-      const value = btn.getAttribute("data-journal-quick") || "";
-
-      // Для одиночных типов используем штатный select.
-      // Для групповых фильтров используем dataset.quickTypes, а ниже фильтр применяется в renderJournal.
-      if(typeSelect){
-        typeSelect.dataset.quickTypes = value;
-        typeSelect.value = value && !value.includes(",") ? value : "";
-      }
-
-      if(refreshBtn) refreshBtn.click(); setTimeout(applyJournalQuickFilterToRows, 400); setTimeout(applyJournalQuickFilterToRows, 1000);
-      else if(typeof loadJournal === "function") loadJournal();
-      else if(typeof renderJournal === "function") renderJournal();
-    };
-  });
-}
-window.addEventListener("load", setupJournalQuickFilters);
-
 function renderJournal(){
   const tbody=qs("journalTbody");
   if(!tbody) return;
@@ -6434,5 +6558,32 @@ onAuthStateChanged(auth, async user => {
     setWeatherChip("headerWeatherDynamic", "По точке", weatherIcon(3), "Ожидание координат…");
   }
 });
+
+function setupJournalQuickFilters(){
+  const typeSelect = document.getElementById("journalTypeFilter");
+  const refreshBtn = document.getElementById("refreshJournalBtn");
+
+  document.querySelectorAll("[data-journal-quick]").forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll("[data-journal-quick]").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+
+      const val = btn.getAttribute("data-journal-quick") || "";
+
+      if(typeSelect){
+        if(val && !val.includes(",")){
+          typeSelect.value = val;
+        } else {
+          typeSelect.value = "";
+        }
+      }
+
+      if(refreshBtn) refreshBtn.click();
+    };
+  });
+}
+
+window.addEventListener("load", setupJournalQuickFilters);
+
 </script>
 </body></html>
