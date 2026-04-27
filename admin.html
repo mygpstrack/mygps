@@ -3594,7 +3594,7 @@ function fillGeofenceFromNowPoint(){
 
 const GPS_PRESETS = {
   fast: { label: "Точно", normal: { intervalMs: 1000, minDistanceM: 1 }, live: { intervalMs: 1000, minDistanceM: 1 } },
-  balanced: { label: "Баланс", normal: { intervalMs: 2000, minDistanceM: 5 }, live: { intervalMs: 2000, minDistanceM: 3 } },
+  balanced: { label: "Баланс", normal: { intervalMs: 20000, minDistanceM: 30 }, live: { intervalMs: 10000, minDistanceM: 15 } },
   eco: { label: "Экономно", normal: { intervalMs: 20000, minDistanceM: 30 }, live: { intervalMs: 10000, minDistanceM: 15 } }
 };
 const GPS_DEFAULT_PRESET = "balanced";
@@ -4299,6 +4299,73 @@ function getSessionStatus(session){
   return "expired";
 }
 function getSessionStatusLabel(status){ if(status==="active") return "активна"; if(status==="ended") return "завершена"; return "истекла"; }
+
+
+function findActiveSessionEntryForSelectedUser(){
+  const now = Date.now();
+  const sessions = Object.entries(allSessions || {}).filter(([token]) => token !== "_init");
+
+  if(selectedUid){
+    const ownerEntry = sessions.find(([token, session]) => {
+      const root = getSessionRoot(session);
+      const meta = root.meta || {};
+      return meta.ownerUid === selectedUid && !!meta.active && Number(meta.expiresAt || 0) > now;
+    });
+    if(ownerEntry) return ownerEntry;
+  }
+
+  return sessions
+    .filter(([token, session]) => {
+      const root = getSessionRoot(session);
+      const meta = root.meta || {};
+      return !!meta.active && Number(meta.expiresAt || 0) > now;
+    })
+    .sort((a,b)=>Number(getSessionRoot(b[1]).meta?.createdAt || 0) - Number(getSessionRoot(a[1]).meta?.createdAt || 0))[0] || null;
+}
+
+function resolveActiveShareUrl(){
+  if(createdShareUrl) return createdShareUrl;
+
+  const entry = findActiveSessionEntryForSelectedUser();
+  if(!entry) return "";
+
+  const [token, session] = entry;
+  const meta = getSessionRoot(session).meta || {};
+  const url = meta.link || meta.url || buildShareUrl(token);
+
+  createdShareUrl = url;
+  if(qs("shareLinkText")) qs("shareLinkText").textContent = url;
+  if(qs("shareExpiresText")) qs("shareExpiresText").textContent = fmtTime(meta.expiresAt);
+  if(qs("shareResultBox")) qs("shareResultBox").classList.remove("hidden");
+
+  return url;
+}
+
+async function openResolvedShareUrl(){
+  const url = resolveActiveShareUrl();
+  if(url) window.open(url, "_blank", "noopener,noreferrer");
+  else showToast("Нет активной ссылки", "warn");
+}
+
+async function copyResolvedShareUrl(){
+  const url = resolveActiveShareUrl();
+  if(!url) return showToast("Нет активной ссылки", "warn");
+  await navigator.clipboard.writeText(url);
+  showToast("Ссылка скопирована", "success");
+}
+
+async function shareResolvedShareUrl(){
+  const url = resolveActiveShareUrl();
+  if(!url) return showToast("Нет активной ссылки", "warn");
+  try{
+    if(navigator.share){
+      await navigator.share({title:"MyGps Live", text:"Live-ссылка", url});
+    }else{
+      await navigator.clipboard.writeText(url);
+      showToast("Ссылка скопирована для отправки", "success");
+    }
+  }catch(e){}
+}
 
 function updateActiveSessionNotice(){
   const box = qs("activeSessionNotice");
@@ -5636,11 +5703,11 @@ if (qs("findEmptyProfilesBtn")) qs("findEmptyProfilesBtn").onclick = async()=>{ 
 if (qs("deleteEmptyProfilesBtn")) qs("deleteEmptyProfilesBtn").onclick = async()=>deleteEmptyProfiles();
 bindVisibilityControls();
 if (qs("clearShareResultBtn")) qs("clearShareResultBtn").onclick = ()=>{ createdShareUrl=""; qs("shareResultBox").classList.add("hidden"); };
-if (qs("copyCreatedShareBtn")) qs("copyCreatedShareBtn").onclick = async()=>{ if(createdShareUrl){ await navigator.clipboard.writeText(createdShareUrl); showToast("Ссылка скопирована","success"); } };
-if (qs("openCreatedShareTopBtn")) qs("openCreatedShareTopBtn").onclick = ()=>{ if(createdShareUrl) window.open(createdShareUrl,"_blank","noopener,noreferrer"); else showToast("Нет активной ссылки","warn"); };
-if (qs("openCreatedShareResultBtn")) qs("openCreatedShareResultBtn").onclick = ()=>{ if(createdShareUrl) window.open(createdShareUrl,"_blank","noopener,noreferrer"); else showToast("Нет активной ссылки","warn"); };
-if (qs("shareCreatedShareBtn")) qs("shareCreatedShareBtn").onclick = async()=>{ if(!createdShareUrl) return; try{ if(navigator.share){ await navigator.share({title:"MyGps Live", text:"Live-ссылка", url:createdShareUrl}); } else { await navigator.clipboard.writeText(createdShareUrl); showToast("Ссылка скопирована для отправки","success"); } }catch(e){} };
-if (qs("shareCreatedShareBtn2")) qs("shareCreatedShareBtn2").onclick = async()=>{ if(!createdShareUrl) return; try{ if(navigator.share){ await navigator.share({title:"MyGps Live", text:"Live-ссылка", url:createdShareUrl}); } else { await navigator.clipboard.writeText(createdShareUrl); showToast("Ссылка скопирована для отправки","success"); } }catch(e){} };
+if (qs("copyCreatedShareBtn")) qs("copyCreatedShareBtn").onclick = copyResolvedShareUrl;
+if (qs("openCreatedShareTopBtn")) qs("openCreatedShareTopBtn").onclick = openResolvedShareUrl;
+if (qs("openCreatedShareResultBtn")) qs("openCreatedShareResultBtn").onclick = openResolvedShareUrl;
+if (qs("shareCreatedShareBtn")) qs("shareCreatedShareBtn").onclick = shareResolvedShareUrl;
+if (qs("shareCreatedShareBtn2")) qs("shareCreatedShareBtn2").onclick = shareResolvedShareUrl;
 
 if (qs("refreshSessionsBtn")) qs("refreshSessionsBtn").onclick = async()=>{ await loadSessions(); showToast("Live-сессии обновлены","success"); };
 if (qs("syncActiveSessionsBtn")) qs("syncActiveSessionsBtn").onclick = ()=>syncActiveSessionsFromSelectedUser();
