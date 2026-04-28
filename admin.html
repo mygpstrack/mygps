@@ -8202,5 +8202,36 @@ document.addEventListener("click", (ev) => {
     }, 500);
   }
 });
+
+
+// === Remove confirms for session actions v83 ===
+function patchSessionButtonsNoConfirm(){
+  const stopAll = document.querySelector('[onclick*="stopAll"]');
+  const clearExpired = document.querySelector('[onclick*="expired"]');
+  const clearFinished = document.querySelector('[onclick*="finished"]');
+
+  [stopAll, clearExpired, clearFinished].forEach(btn=>{
+    if(!btn || btn.dataset.noConfirm=="1") return;
+    btn.dataset.noConfirm="1";
+
+    const original = btn.onclick;
+    btn.onclick = null;
+
+    btn.addEventListener("click",(e)=>{
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      try{
+        if(original) original();
+      }catch(err){
+        console.warn("button error", err);
+      }
+    },true);
+  });
+}
+
+window.addEventListener("load", patchSessionButtonsNoConfirm);
+document.addEventListener("click", ()=>{
+  setTimeout(patchSessionButtonsNoConfirm,100);
+});
 </script>
 </body></html>
