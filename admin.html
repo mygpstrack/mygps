@@ -2854,6 +2854,7 @@ function updateActiveSessionToast(){
         createBtn.textContent = "Создать live-ссылку";
       }
       renderSessions();
+    try{ scheduleHeaderWeatherFromLastPoint(); }catch(e){}
     }
   }, 1000);
 }
@@ -3415,6 +3416,7 @@ async function loadUsers(){
   renderEmptyProfilesList?.();
   updateUsage();
   await updateNowFromAvailableSources();
+    try{ scheduleHeaderWeatherFromLastPoint(); }catch(e){}
 }
 
 
@@ -5969,15 +5971,6 @@ async function exportPdfReport(){
     ${dataHtml}
     ${tableHtml}
   </div>
-
-<div id="snapshotModal" class="hidden" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:9999;align-items:center;justify-content:center">
-  <div style="background:#111;padding:20px;border-radius:12px;max-width:400px;width:90%;border:1px solid #333">
-    <h3>📊 Traffic Snapshot</h3>
-    <div id="snapshotContent" style="margin-top:10px;font-size:14px;line-height:1.5"></div>
-    <button id="closeSnapshotModal" style="margin-top:15px">Закрыть</button>
-  </div>
-</div>
-
 </body>
 </html>`);
   reportWin.document.close();
@@ -6803,7 +6796,7 @@ onAuthStateChanged(auth, async user => {
   // Low traffic: automatic full backup disabled on open; use Backup button manually.
   // await createMonthlyBackup(false);
   updateRigaWeather();
-  const headerPoint = getSelectedLiveData()?.lastPoint || getSelectedHistoryPoints().slice(-1)[0];
+  const headerPoint = getLatestLiveWeatherPoint();
   if(headerPoint && headerPoint.latitude != null && headerPoint.longitude != null){
     window.currentPointForHeader = { lat: Number(headerPoint.latitude), lon: Number(headerPoint.longitude) };
     updateHeaderWeather();
@@ -7861,64 +7854,77 @@ document.addEventListener("click", (ev)=>{
 });
 
 
-// === Snapshot viewer v79 ===
-function openSnapshotModal(data){
-  const modal = document.getElementById("snapshotModal");
-  const box = document.getElementById("snapshotContent");
-  if(!modal || !box) return;
+// === Weather source fix v80: last live point only ===
+function getLatestLiveWeatherPoint(){
+  const selectedLive = getSelectedLiveData ? getSelectedLiveData() : null;
+  if(selectedLive && selectedLive.lastPoint) return selectedLive.lastPoint;
 
-  const d = data.data || {};
-  box.innerHTML =
-    "Время: " + new Date(data.timestamp).toLocaleString() + "<br>" +
-    "Active live: " + (d.activeLive ?? "—") + "<br>" +
-    "Открытия: " + (d.openCount ?? "—") + "<br>" +
-    "Старые точки: " + (d.stalePoints ?? "—") + "<br>" +
-    "Риск: " + (d.risk ?? "—") + "<br>" +
-    (data.note ? ("<br>Заметка: " + data.note) : "");
+  const now = Date.now();
+  const sessions = Object.entries(allSessions || {})
+    .filter(([token, session]) => {
+      if(token === "_init") return false;
+      const root = getSessionRoot(session);
+      const meta = root.meta || {};
+      return meta.active === true && Number(meta.expiresAt || 0) > now;
+    })
+    .filter(([, session]) => {
+      const root = getSessionRoot(session);
+      const ownerUid = root.meta && root.meta.ownerUid;
+      return !selectedUid || !ownerUid || ownerUid === selectedUid;
+    })
+    .sort((a, b) => {
+      const ar = getSessionRoot(a[1]);
+      const br = getSessionRoot(b[1]);
+      return Number((br.meta || {}).createdAt || 0) - Number((ar.meta || {}).createdAt || 0);
+    });
 
-  modal.style.display = "flex";
-  modal.classList.remove("hidden");
+  if(sessions.length){
+    const root = getSessionRoot(sessions[0][1]);
+    if(root.public && root.public.lastPoint) return root.public.lastPoint;
+  }
+
+  if(selectedUid && liveByUid && liveByUid[selectedUid]){
+    const liveRoot = liveByUid[selectedUid] || {};
+    if(liveRoot.lastPoint) return liveRoot.lastPoint;
+    if(liveRoot.point) return liveRoot.point;
+  }
+
+  return null;
 }
 
-function closeSnapshotModal(){
-  const modal = document.getElementById("snapshotModal");
-  if(modal){
-    modal.style.display = "none";
-    modal.classList.add("hidden");
+async function updateHeaderWeatherFromLastLivePoint(){
+  const p = getLatestLiveWeatherPoint();
+  if(!p){
+    window.currentPointForHeader = null;
+    setWeatherChip("headerWeatherDynamic", "По последней точке", weatherIcon(3), "Ожидание live-точки…");
+    return;
+  }
+
+  const lat = Number(p.latitude ?? p.lat);
+  const lon = Number(p.longitude ?? p.lng ?? p.lon);
+  const ts = Number(p.timestamp ?? p.ts ?? p.time ?? 0);
+
+  if(!Number.isFinite(lat) || !Number.isFinite(lon)){
+    window.currentPointForHeader = null;
+    setWeatherChip("headerWeatherDynamic", "По последней точке", weatherIcon(3), "Нет координат");
+    return;
+  }
+
+  window.currentPointForHeader = { lat, lon, ts };
+  await updateHeaderWeather();
+
+  const metaEl = document.querySelector("#headerWeatherDynamic .weatherCity");
+  if(metaEl){
+    metaEl.textContent = "По последней точке";
   }
 }
 
-document.addEventListener("click", async (e)=>{
-  const row = e.target.closest && e.target.closest("tr");
-  if(!row) return;
-
-  const text = row.innerText || "";
-  if(!text.includes("traffic_snapshot")) return;
-
-  try{
-    const snap = await get(ref(db,"adminLogs"));
-    if(!snap.exists()) return;
-    const items = Object.values(snap.val());
-    const found = items.find(x => x.type === "traffic_snapshot" && text.includes(new Date(x.timestamp).toLocaleTimeString().slice(0,5)));
-    if(found) openSnapshotModal(found);
-  }catch(err){
-    console.warn("snapshot open error", err);
-  }
-});
-
-document.addEventListener("click", (e)=>{
-  if(e.target && e.target.id === "closeSnapshotModal"){
-    closeSnapshotModal();
-  }
-});
+// Recalculate point weather when live/session data is refreshed, but not from history.
+function scheduleHeaderWeatherFromLastPoint(){
+  clearTimeout(window.__headerWeatherLastPointTimer);
+  window.__headerWeatherLastPointTimer = setTimeout(() => {
+    updateHeaderWeatherFromLastLivePoint().catch(e => console.warn("last point weather error", e));
+  }, 400);
+}
 </script>
-
-<div id="snapshotModal" class="hidden" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:9999;align-items:center;justify-content:center">
-  <div style="background:#111;padding:20px;border-radius:12px;max-width:400px;width:90%;border:1px solid #333">
-    <h3>📊 Traffic Snapshot</h3>
-    <div id="snapshotContent" style="margin-top:10px;font-size:14px;line-height:1.5"></div>
-    <button id="closeSnapshotModal" style="margin-top:15px">Закрыть</button>
-  </div>
-</div>
-
 </body></html>
