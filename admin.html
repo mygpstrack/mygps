@@ -5068,10 +5068,28 @@ async function createLiveSession(){
 
   const token=generateSessionToken(), expiresAt=now+durationMinutes*60*1000, lastPoint=sourcePoints[sourcePoints.length-1], recentPointsObj={};
   sourcePoints.forEach(p=>recentPointsObj[String(p.timestamp||Date.now()+Math.random())]=p);
-  const payload={meta:{active:true,paused:false,createdAt:now,expiresAt,remainingMs:durationMinutes*60*1000,ownerUid:selectedUid,createdBy:auth.currentUser?.uid||null,createdByEmail:auth.currentUser?.email||null,durationMinutes},public:{lastPoint,recentPoints:recentPointsObj},viewStats:{openCount:0,firstOpenAt:null,lastOpenAt:null}};
+  const liveUrl = buildShareUrl(token);
+  const payload={meta:{active:true,paused:false,status:"active",createdAt:now,startedAt:now,expiresAt,remainingMs:durationMinutes*60*1000,ownerUid:selectedUid,createdBy:auth.currentUser?.uid||null,createdByEmail:auth.currentUser?.email||null,durationMinutes,sessionId:token,link:liveUrl,liveUrl,updatedAt:now,lastSyncedAt:now},public:{lastPoint,recentPoints:recentPointsObj},viewStats:{openCount:0,firstOpenAt:null,lastOpenAt:null}};
   try{
     await set(ref(db,`liveSessions/${token}`), payload);
-    await update(ref(db), { [`liveOwners/${selectedUid}/activeSessionId`]:token, [`liveOwners/${selectedUid}/lastCreatedAt`]:now });
+    await update(ref(db), {
+      [`liveOwners/${selectedUid}/activeSessionId`]: token,
+      [`liveOwners/${selectedUid}/lastCreatedAt`]: now,
+      [`live/${selectedUid}/sessionId`]: token,
+      [`live/${selectedUid}/activeSessionId`]: token,
+      [`live/${selectedUid}/link`]: liveUrl,
+      [`live/${selectedUid}/liveUrl`]: liveUrl,
+      [`live/${selectedUid}/active`]: true,
+      [`live/${selectedUid}/paused`]: false,
+      [`live/${selectedUid}/status`]: "active",
+      [`live/${selectedUid}/createdAt`]: now,
+      [`live/${selectedUid}/startedAt`]: now,
+      [`live/${selectedUid}/expiresAt`]: expiresAt,
+      [`live/${selectedUid}/remainingMs`]: durationMinutes * 60 * 1000,
+      [`live/${selectedUid}/updatedAt`]: now,
+      [`live/${selectedUid}/lastSyncedAt`]: now,
+      [`live/${selectedUid}/lastPoint`]: lastPoint
+    });
     await logAction("session_create",`Создана live-сессия ${token} для ${selectedUid}`);
     createdShareUrl = buildShareUrl(token);
     qs("shareLinkText").textContent = createdShareUrl;
@@ -5197,18 +5215,47 @@ async function loadSessions(){
 }
 
 async function deleteSession(token){
-  if(!confirm(`Удалить live-сессию ${token}?`)) return;
+  if(!confirm(`Удалить live-сессию ?`)) return;
   try{
-    await remove(ref(db, `liveSessions/${token}`));
+    const sessionRoot = getSessionRoot(allSessions?.[token]);
+    const ownerUid = sessionRoot?.meta?.ownerUid || "";
+    if(ownerUid){
+      await update(ref(db), {
+        [`live//active`]: false,
+        [`live//paused`]: false,
+        [`live//status`]: "stopped",
+        [`live//endedAt`]: Date.now(),
+        [`live//updatedAt`]: Date.now(),
+        [`live//activeSessionId`]: null,
+        [`liveOwners//activeSessionId`]: null,
+        [`liveOwners//updatedAt`]: Date.now()
+      });
+    }
+    await remove(ref(db, `liveSessions/`));
     await logAction("session_delete", `Удалена live-сессия ${token}`);
     await loadSessions();
     showToast("Live-сессия удалена","success");
   }catch(e){ recordError("deleteSession", e); showToast("Удаление live-сессии: "+errText(e),"error",3600); }
 }
 async function endSession(token){
-  if(!confirm(`Завершить live-сессию ${token}?`)) return;
+  if(!confirm(`Завершить live-сессию ?`)) return;
   try{
-    await update(ref(db, `liveSessions/${token}/meta`), { active:false, endedAt:Date.now() });
+    const now = Date.now();
+    const sessionRoot = getSessionRoot(allSessions?.[token]);
+    const ownerUid = sessionRoot?.meta?.ownerUid || "";
+    const updates = { [`liveSessions//meta/active`]: false, [`liveSessions//meta/paused`]: false, [`liveSessions//meta/status`]: "stopped", [`liveSessions//meta/endedAt`]: now, [`liveSessions//meta/updatedAt`]: now };
+    if(ownerUid){
+      updates[`live//active`] = false;
+      updates[`live//paused`] = false;
+      updates[`live//status`] = "stopped";
+      updates[`live//endedAt`] = now;
+      updates[`live//updatedAt`] = now;
+      updates[`live//remainingMs`] = 0;
+      updates[`live//activeSessionId`] = null;
+      updates[`liveOwners//activeSessionId`] = null;
+      updates[`liveOwners//updatedAt`] = now;
+    }
+    await update(ref(db), updates);
     await logAction("session_end", `Завершена live-сессия ${token}`);
     await loadSessions();
     showToast("Сессия завершена","success");
