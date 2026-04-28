@@ -8722,5 +8722,135 @@ document.addEventListener("click", (ev) => {
   const tab = ev.target && ev.target.dataset ? ev.target.dataset.tab : "";
   if(tab === "geofencesPanel") setTimeout(bindGeofenceWheelRadius, 500);
 }, true);
+
+
+// === Geofence wheel no-map-zoom v87 ===
+let __geoWheelEditMode = false;
+
+function geoSetWheelEditMode(enabled){
+  __geoWheelEditMode = !!enabled;
+  try{
+    if(geofenceMap && geofenceMap.scrollWheelZoom){
+      if(enabled) geofenceMap.scrollWheelZoom.disable();
+      else geofenceMap.scrollWheelZoom.enable();
+    }
+  }catch(e){}
+}
+
+function geoEnableRadiusWheelOnly(){
+  const mapEl = document.getElementById("geofenceMap");
+  if(!mapEl || mapEl.dataset.radiusWheelOnlyV87 === "1") return;
+  mapEl.dataset.radiusWheelOnlyV87 = "1";
+
+  mapEl.addEventListener("wheel", (ev) => {
+    if(!__geoWheelEditMode && !geoWheelGetCurrentCenter()) return;
+
+    ev.preventDefault();
+    ev.stopImmediatePropagation();
+    ev.stopPropagation();
+
+    const ok = geoWheelApplyRadius(ev.deltaY);
+    if(ok){
+      try{
+        if(geofenceMap && geofenceMap.scrollWheelZoom) geofenceMap.scrollWheelZoom.disable();
+      }catch(e){}
+    }
+  }, { passive: false, capture: true });
+}
+
+function patchGeofenceDrawEditWheelMode(){
+  geoEnableRadiusWheelOnly();
+
+  const drawBtn = qs("startGeofenceDrawBtn");
+  const cancelBtn = qs("cancelGeofenceDrawBtn");
+  const clearBtn = qs("clearGeofenceFormBtn");
+
+  if(drawBtn && drawBtn.dataset.wheelModeV87 !== "1"){
+    drawBtn.dataset.wheelModeV87 = "1";
+    drawBtn.addEventListener("click", () => {
+      setTimeout(() => {
+        geoSetWheelEditMode(true);
+        const status = qs("geofenceFormStatus");
+        if(status) status.textContent = "Рисование включено: тяни мышью для радиуса или крути колесо. Zoom карты временно выключен.";
+      }, 50);
+    }, true);
+  }
+
+  // Existing edit buttons in table can have different labels; detect by text.
+  document.querySelectorAll("#geofencesTbody button").forEach(btn => {
+    const text = (btn.innerText || btn.textContent || "").toLowerCase();
+    if(!text.includes("измен") && !text.includes("редакт")) return;
+    if(btn.dataset.wheelModeV87 === "1") return;
+
+    btn.dataset.wheelModeV87 = "1";
+    btn.addEventListener("click", () => {
+      setTimeout(() => {
+        geoSetWheelEditMode(true);
+        geoEnableRadiusWheelOnly();
+
+        const lat = Number(qs("geofenceLatInput")?.value);
+        const lng = Number(qs("geofenceLonInput")?.value);
+        const radius = Number(qs("geofenceRadiusInput")?.value || 100);
+        if(Number.isFinite(lat) && Number.isFinite(lng)){
+          try{
+            if(typeof geoStrictUpdateCircle === "function") geoStrictUpdateCircle(lat, lng, radius);
+            else if(typeof __geoUpdateDraftCircle === "function") __geoUpdateDraftCircle(lat, lng, radius);
+          }catch(e){}
+        }
+
+        const status = qs("geofenceFormStatus");
+        if(status) status.textContent = "Редактирование: крути колесо для изменения радиуса. Zoom карты временно выключен.";
+      }, 150);
+    }, true);
+  });
+
+  if(cancelBtn && cancelBtn.dataset.wheelModeV87 !== "1"){
+    cancelBtn.dataset.wheelModeV87 = "1";
+    cancelBtn.addEventListener("click", () => {
+      setTimeout(() => geoSetWheelEditMode(false), 50);
+    }, true);
+  }
+
+  if(clearBtn && clearBtn.dataset.wheelModeV87 !== "1"){
+    clearBtn.dataset.wheelModeV87 = "1";
+    clearBtn.addEventListener("click", () => {
+      setTimeout(() => geoSetWheelEditMode(false), 50);
+    }, true);
+  }
+
+  const saveBtn = qs("saveGeofenceBtn");
+  if(saveBtn && saveBtn.dataset.wheelModeV87 !== "1"){
+    saveBtn.dataset.wheelModeV87 = "1";
+    saveBtn.addEventListener("click", () => {
+      setTimeout(() => geoSetWheelEditMode(false), 500);
+    }, true);
+  }
+}
+
+// When drawing finishes, keep wheel edit active so user can fine-tune radius,
+// but map zoom stays off until Save/Clear/Cancel or leaving tab.
+const __oldGeoStrictMapUpV87 = typeof geoStrictMapUp === "function" ? geoStrictMapUp : null;
+if(__oldGeoStrictMapUpV87 && !window.__geoStrictMapUpPatchedV87){
+  window.__geoStrictMapUpPatchedV87 = true;
+  geoStrictMapUp = function(){
+    __oldGeoStrictMapUpV87();
+    geoSetWheelEditMode(true);
+  };
+}
+
+window.addEventListener("load", () => {
+  setTimeout(patchGeofenceDrawEditWheelMode, 1200);
+});
+
+document.addEventListener("click", (ev) => {
+  const tab = ev.target && ev.target.dataset ? ev.target.dataset.tab : "";
+  if(tab === "geofencesPanel"){
+    setTimeout(patchGeofenceDrawEditWheelMode, 500);
+  }else if(tab){
+    setTimeout(() => geoSetWheelEditMode(false), 100);
+  }else{
+    setTimeout(patchGeofenceDrawEditWheelMode, 100);
+  }
+}, true);
 </script>
 </body></html>
