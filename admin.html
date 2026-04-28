@@ -7926,5 +7926,90 @@ function scheduleHeaderWeatherFromLastPoint(){
     updateHeaderWeatherFromLastLivePoint().catch(e => console.warn("last point weather error", e));
   }, 400);
 }
+
+
+// === Unified weather Open-Meteo v81 ===
+function weatherCodeIcon(code){
+  code = Number(code);
+  if([0].includes(code)) return "☀️";
+  if([1,2,3].includes(code)) return "🌤️";
+  if([45,48].includes(code)) return "🌫️";
+  if([51,53,55,56,57,61,63,65,66,67,80,81,82].includes(code)) return "🌧️";
+  if([71,73,75,77,85,86].includes(code)) return "❄️";
+  if([95,96,99].includes(code)) return "⛈️";
+  return "☁️";
+}
+
+async function getUnifiedWeather(lat, lon){
+  lat = Number(lat);
+  lon = Number(lon);
+  if(!Number.isFinite(lat) || !Number.isFinite(lon)) throw new Error("bad coords");
+
+  const url =
+    "https://api.open-meteo.com/v1/forecast" +
+    "?latitude=" + encodeURIComponent(lat) +
+    "&longitude=" + encodeURIComponent(lon) +
+    "&current=temperature_2m,weather_code,wind_speed_10m" +
+    "&timezone=auto" +
+    "&wind_speed_unit=ms";
+
+  const res = await fetch(url, { cache: "no-store" });
+  if(!res.ok) throw new Error("weather http " + res.status);
+
+  const json = await res.json();
+  const cur = json.current || {};
+  const temp = Math.round(Number(cur.temperature_2m));
+  const wind = Math.round(Number(cur.wind_speed_10m));
+  const code = Number(cur.weather_code);
+
+  return {
+    temp,
+    wind,
+    code,
+    icon: weatherCodeIcon(code),
+    text: (Number.isFinite(temp) ? (temp > 0 ? "+" + temp : String(temp)) : "—") + "°C · СЗ " + (Number.isFinite(wind) ? wind : "—") + " м/с"
+  };
+}
+
+async function updateAdminUnifiedPointWeather(lat, lon){
+  try{
+    const w = await getUnifiedWeather(lat, lon);
+    const chip = document.getElementById("headerWeatherDynamic");
+    if(chip){
+      chip.innerHTML =
+        '<span class="weatherIcon">' + w.icon + '</span>' +
+        '<span class="weatherText"><span class="weatherCity">По последней точке</span>' +
+        '<span class="weatherMeta">' + w.text + '</span></span>';
+    }
+  }catch(e){
+    const chip = document.getElementById("headerWeatherDynamic");
+    if(chip){
+      chip.innerHTML =
+        '<span class="weatherIcon">☁️</span>' +
+        '<span class="weatherText"><span class="weatherCity">По последней точке</span>' +
+        '<span class="weatherMeta">Погода недоступна</span></span>';
+    }
+  }
+}
+
+(function patchAdminWeatherLastPoint(){
+  const old = window.updateHeaderWeatherFromLastLivePoint;
+  window.updateHeaderWeatherFromLastLivePoint = async function(){
+    const p = typeof getLatestLiveWeatherPoint === "function" ? getLatestLiveWeatherPoint() : null;
+    if(!p){
+      const chip = document.getElementById("headerWeatherDynamic");
+      if(chip){
+        chip.innerHTML =
+          '<span class="weatherIcon">📍</span>' +
+          '<span class="weatherText"><span class="weatherCity">По последней точке</span>' +
+          '<span class="weatherMeta">Ожидание live-точки…</span></span>';
+      }
+      return;
+    }
+    const lat = Number(p.latitude ?? p.lat);
+    const lon = Number(p.longitude ?? p.lng ?? p.lon);
+    await updateAdminUnifiedPointWeather(lat, lon);
+  };
+})();
 </script>
 </body></html>
