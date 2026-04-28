@@ -5969,6 +5969,15 @@ async function exportPdfReport(){
     ${dataHtml}
     ${tableHtml}
   </div>
+
+<div id="snapshotModal" class="hidden" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:9999;align-items:center;justify-content:center">
+  <div style="background:#111;padding:20px;border-radius:12px;max-width:400px;width:90%;border:1px solid #333">
+    <h3>📊 Traffic Snapshot</h3>
+    <div id="snapshotContent" style="margin-top:10px;font-size:14px;line-height:1.5"></div>
+    <button id="closeSnapshotModal" style="margin-top:15px">Закрыть</button>
+  </div>
+</div>
+
 </body>
 </html>`);
   reportWin.document.close();
@@ -7850,5 +7859,66 @@ document.addEventListener("click", (ev)=>{
     setTimeout(bindTrafficSnapshot, 50);
   }
 });
+
+
+// === Snapshot viewer v79 ===
+function openSnapshotModal(data){
+  const modal = document.getElementById("snapshotModal");
+  const box = document.getElementById("snapshotContent");
+  if(!modal || !box) return;
+
+  const d = data.data || {};
+  box.innerHTML =
+    "Время: " + new Date(data.timestamp).toLocaleString() + "<br>" +
+    "Active live: " + (d.activeLive ?? "—") + "<br>" +
+    "Открытия: " + (d.openCount ?? "—") + "<br>" +
+    "Старые точки: " + (d.stalePoints ?? "—") + "<br>" +
+    "Риск: " + (d.risk ?? "—") + "<br>" +
+    (data.note ? ("<br>Заметка: " + data.note) : "");
+
+  modal.style.display = "flex";
+  modal.classList.remove("hidden");
+}
+
+function closeSnapshotModal(){
+  const modal = document.getElementById("snapshotModal");
+  if(modal){
+    modal.style.display = "none";
+    modal.classList.add("hidden");
+  }
+}
+
+document.addEventListener("click", async (e)=>{
+  const row = e.target.closest && e.target.closest("tr");
+  if(!row) return;
+
+  const text = row.innerText || "";
+  if(!text.includes("traffic_snapshot")) return;
+
+  try{
+    const snap = await get(ref(db,"adminLogs"));
+    if(!snap.exists()) return;
+    const items = Object.values(snap.val());
+    const found = items.find(x => x.type === "traffic_snapshot" && text.includes(new Date(x.timestamp).toLocaleTimeString().slice(0,5)));
+    if(found) openSnapshotModal(found);
+  }catch(err){
+    console.warn("snapshot open error", err);
+  }
+});
+
+document.addEventListener("click", (e)=>{
+  if(e.target && e.target.id === "closeSnapshotModal"){
+    closeSnapshotModal();
+  }
+});
 </script>
+
+<div id="snapshotModal" class="hidden" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:9999;align-items:center;justify-content:center">
+  <div style="background:#111;padding:20px;border-radius:12px;max-width:400px;width:90%;border:1px solid #333">
+    <h3>📊 Traffic Snapshot</h3>
+    <div id="snapshotContent" style="margin-top:10px;font-size:14px;line-height:1.5"></div>
+    <button id="closeSnapshotModal" style="margin-top:15px">Закрыть</button>
+  </div>
+</div>
+
 </body></html>
