@@ -8852,5 +8852,92 @@ document.addEventListener("click", (ev) => {
     setTimeout(patchGeofenceDrawEditWheelMode, 100);
   }
 }, true);
+
+
+// === Geofence zoom restore v88 ===
+function geoRestoreMapZoom(){
+  try{
+    __geoWheelEditMode = false;
+  }catch(e){}
+  try{
+    if(geofenceMap && geofenceMap.scrollWheelZoom){
+      geofenceMap.scrollWheelZoom.enable();
+    }
+  }catch(e){}
+}
+
+function geoDisableMapZoomForEdit(){
+  try{
+    __geoWheelEditMode = true;
+  }catch(e){}
+  try{
+    if(geofenceMap && geofenceMap.scrollWheelZoom){
+      geofenceMap.scrollWheelZoom.disable();
+    }
+  }catch(e){}
+}
+
+// Override finish behavior: after drawing completes, zoom returns.
+// Fine-tuning radius by wheel remains available only after pressing edit/draw again.
+if(typeof geoStrictMapUp === "function" && !window.__geoStrictMapUpRestoreZoomV88){
+  window.__geoStrictMapUpRestoreZoomV88 = true;
+  const oldGeoStrictMapUpV88 = geoStrictMapUp;
+  geoStrictMapUp = function(){
+    oldGeoStrictMapUpV88();
+    setTimeout(geoRestoreMapZoom, 150);
+  };
+}
+
+function patchGeofenceZoomRestoreButtonsV88(){
+  const drawBtn = qs("startGeofenceDrawBtn");
+  const cancelBtn = qs("cancelGeofenceDrawBtn");
+  const clearBtn = qs("clearGeofenceFormBtn");
+  const saveBtn = qs("saveGeofenceBtn");
+
+  if(drawBtn && drawBtn.dataset.zoomRestoreV88 !== "1"){
+    drawBtn.dataset.zoomRestoreV88 = "1";
+    drawBtn.addEventListener("click", () => {
+      setTimeout(geoDisableMapZoomForEdit, 50);
+    }, true);
+  }
+
+  document.querySelectorAll("#geofencesTbody button").forEach(btn => {
+    const text = (btn.innerText || btn.textContent || "").toLowerCase();
+    if(!text.includes("измен") && !text.includes("редакт")) return;
+    if(btn.dataset.zoomRestoreV88 === "1") return;
+
+    btn.dataset.zoomRestoreV88 = "1";
+    btn.addEventListener("click", () => {
+      setTimeout(geoDisableMapZoomForEdit, 100);
+    }, true);
+  });
+
+  [cancelBtn, clearBtn, saveBtn].forEach(btn => {
+    if(!btn || btn.dataset.zoomRestoreV88 === "1") return;
+    btn.dataset.zoomRestoreV88 = "1";
+    btn.addEventListener("click", () => {
+      setTimeout(geoRestoreMapZoom, 150);
+      setTimeout(geoRestoreMapZoom, 700);
+    }, true);
+  });
+}
+
+window.addEventListener("load", () => {
+  setTimeout(() => {
+    patchGeofenceZoomRestoreButtonsV88();
+    geoRestoreMapZoom();
+  }, 1200);
+});
+
+document.addEventListener("click", (ev) => {
+  const tab = ev.target && ev.target.dataset ? ev.target.dataset.tab : "";
+  if(tab === "geofencesPanel"){
+    setTimeout(patchGeofenceZoomRestoreButtonsV88, 400);
+  }else if(tab){
+    setTimeout(geoRestoreMapZoom, 100);
+  }else{
+    setTimeout(patchGeofenceZoomRestoreButtonsV88, 100);
+  }
+}, true);
 </script>
 </body></html>
