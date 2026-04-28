@@ -8485,5 +8485,66 @@ document.addEventListener("click", (ev) => {
     setTimeout(geoStrictPatchButtons, 100);
   }
 }, true);
+
+
+// === Live session toolbar no-confirm v85 ===
+function runWithoutConfirm(fn){
+  const oldConfirm = window.confirm;
+  window.confirm = function(){ return true; };
+  try{
+    return fn();
+  }finally{
+    setTimeout(() => { window.confirm = oldConfirm; }, 0);
+  }
+}
+
+function patchLiveSessionToolbarNoConfirm(){
+  const ids = [
+    "endAllActiveSessionsBtn",
+    "cleanupSessionsBtn",
+    "cleanupEndedSessionsBtn"
+  ];
+
+  ids.forEach(id => {
+    const btn = document.getElementById(id);
+    if(!btn || btn.dataset.noConfirmLiveToolbar === "1") return;
+
+    btn.dataset.noConfirmLiveToolbar = "1";
+
+    // Preserve existing inline/onproperty handler if any.
+    const oldOnClick = btn.onclick;
+    btn.onclick = null;
+
+    btn.addEventListener("click", (ev) => {
+      if(btn.dataset.noConfirmLiveRunning === "1") return;
+      ev.preventDefault();
+      ev.stopImmediatePropagation();
+
+      runWithoutConfirm(() => {
+        btn.dataset.noConfirmLiveRunning = "1";
+        try{
+          if(typeof oldOnClick === "function"){
+            oldOnClick.call(btn, ev);
+          }else{
+            const cloneEvent = new MouseEvent("click", { bubbles: true, cancelable: true });
+            btn.dispatchEvent(cloneEvent);
+          }
+        }finally{
+          setTimeout(() => { btn.dataset.noConfirmLiveRunning = "0"; }, 0);
+        }
+      });
+    }, true);
+  });
+}
+
+window.addEventListener("load", patchLiveSessionToolbarNoConfirm);
+document.addEventListener("click", (ev) => {
+  const tab = ev.target && ev.target.dataset ? ev.target.dataset.tab : "";
+  if(tab === "sessionsPanel"){
+    setTimeout(patchLiveSessionToolbarNoConfirm, 100);
+  }else{
+    setTimeout(patchLiveSessionToolbarNoConfirm, 300);
+  }
+}, true);
 </script>
 </body></html>
