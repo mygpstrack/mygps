@@ -7137,9 +7137,7 @@ function setupRealDangerConfirmations(){
     deleteSelectedPointsBtn: "Удалить выбранные точки истории",
     deleteRangeBtn: "Удалить период истории",
     deleteEmptyProfilesBtn: "Удалить пустые профили",
-    endAllActiveSessionsBtn: "Остановить все активные live-сессии",
-    cleanupSessionsBtn: "Очистить истёкшие live-сессии",
-    cleanupEndedSessionsBtn: "Очистить завершённые live-сессии",
+    
     cleanupOldEventsBtn: "Очистить старые события",
     clearOldEventsBtn: "Очистить события старше 30 дней"
   };
@@ -7184,6 +7182,8 @@ function setupRealDangerConfirmations(){
 
       // Already handled above, or safe cleanup has its own confirmation.
       if(target.id === "safeCleanupBtn" || target.id === "safeCleanupPreviewBtn") return;
+      if(typeof isNoDeletePromptButton === "function" && isNoDeletePromptButton(target)) return;
+      if(target.dataset && target.dataset.skipDeletePrompt === "1") return;
 
       // Avoid double prompt for buttons already bound by id handler.
       if(target.dataset.deleteConfirmBound === "1") return;
@@ -8545,6 +8545,182 @@ document.addEventListener("click", (ev) => {
   }else{
     setTimeout(patchLiveSessionToolbarNoConfirm, 300);
   }
+}, true);
+
+
+// === No DELETE prompt exceptions v86 ===
+function isNoDeletePromptButton(target){
+  if(!target) return false;
+  const id = target.id || "";
+  const text = (target.innerText || target.textContent || "").toLowerCase();
+
+  // Live sessions toolbar buttons - no DELETE prompt
+  if(id === "endAllActiveSessionsBtn") return true;
+  if(id === "cleanupSessionsBtn") return true;
+  if(id === "cleanupEndedSessionsBtn") return true;
+
+  // Geofence form/table buttons - no DELETE prompt
+  if(id === "clearGeofenceFormBtn") return true;
+  if(target.closest && target.closest("#geofencesPanel")){
+    if(text.includes("удалить")) return true;
+    if(text.includes("очистить")) return true;
+  }
+
+  return false;
+}
+
+// Capture phase: bypass global DELETE guard for approved buttons.
+document.addEventListener("click", (ev) => {
+  const btn = ev.target && ev.target.closest ? ev.target.closest("button") : null;
+  if(!btn || !isNoDeletePromptButton(btn)) return;
+  btn.dataset.skipDeletePrompt = "1";
+}, true);
+
+
+// === Live/geofence no prompt action v86 ===
+function runNoPrompt(fn){
+  const oldConfirm = window.confirm;
+  const oldPrompt = window.prompt;
+  window.confirm = () => true;
+  window.prompt = () => "DELETE";
+  try{
+    return fn();
+  }finally{
+    setTimeout(() => {
+      window.confirm = oldConfirm;
+      window.prompt = oldPrompt;
+    }, 0);
+  }
+}
+
+function patchNoPromptButtonsV86(){
+  const ids = ["endAllActiveSessionsBtn", "cleanupSessionsBtn", "cleanupEndedSessionsBtn", "clearGeofenceFormBtn"];
+  ids.forEach(id => {
+    const btn = qs(id);
+    if(!btn || btn.dataset.noPromptV86 === "1") return;
+    btn.dataset.noPromptV86 = "1";
+    const oldOnclick = btn.onclick;
+    btn.onclick = null;
+
+    btn.addEventListener("click", (ev) => {
+      if(btn.dataset.noPromptRunning === "1") return;
+      ev.preventDefault();
+      ev.stopImmediatePropagation();
+      ev.stopPropagation();
+
+      btn.dataset.noPromptRunning = "1";
+      runNoPrompt(() => {
+        try{
+          if(id === "clearGeofenceFormBtn" && typeof geoStrictClearForm === "function"){
+            geoStrictClearForm();
+            return;
+          }
+          if(typeof oldOnclick === "function"){
+            oldOnclick.call(btn, ev);
+          }else{
+            const evt = new MouseEvent("click", { bubbles: true, cancelable: true });
+            btn.dispatchEvent(evt);
+          }
+        }finally{
+          setTimeout(() => { btn.dataset.noPromptRunning = "0"; }, 0);
+        }
+      });
+    }, true);
+  });
+
+  // Geofence table delete buttons: remove DELETE prompt, let existing delete logic run.
+  document.querySelectorAll("#geofencesTbody button").forEach(btn => {
+    const text = (btn.innerText || btn.textContent || "").toLowerCase();
+    if(!text.includes("удал")) return;
+    if(btn.dataset.noPromptV86 === "1") return;
+    btn.dataset.noPromptV86 = "1";
+    const oldOnclick = btn.onclick;
+    btn.onclick = null;
+
+    btn.addEventListener("click", (ev) => {
+      if(btn.dataset.noPromptRunning === "1") return;
+      ev.preventDefault();
+      ev.stopImmediatePropagation();
+      ev.stopPropagation();
+
+      btn.dataset.noPromptRunning = "1";
+      runNoPrompt(() => {
+        try{
+          if(typeof oldOnclick === "function"){
+            oldOnclick.call(btn, ev);
+          }else{
+            const evt = new MouseEvent("click", { bubbles: true, cancelable: true });
+            btn.dispatchEvent(evt);
+          }
+        }finally{
+          setTimeout(() => { btn.dataset.noPromptRunning = "0"; }, 0);
+        }
+      });
+    }, true);
+  });
+}
+
+window.addEventListener("load", patchNoPromptButtonsV86);
+document.addEventListener("click", () => setTimeout(patchNoPromptButtonsV86, 100), true);
+
+
+// === Geofence wheel radius edit v86 ===
+function geoWheelGetCurrentCenter(){
+  const lat = Number(qs("geofenceLatInput")?.value);
+  const lng = Number(qs("geofenceLonInput")?.value);
+  if(Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng };
+  try{
+    if(typeof __geoDrawMarker !== "undefined" && __geoDrawMarker){
+      const p = __geoDrawMarker.getLatLng();
+      return { lat: p.lat, lng: p.lng };
+    }
+  }catch(e){}
+  return null;
+}
+
+function geoWheelApplyRadius(delta){
+  const center = geoWheelGetCurrentCenter();
+  if(!center) return false;
+
+  const radiusEl = qs("geofenceRadiusInput");
+  let radius = Number(radiusEl?.value || 100);
+  if(!Number.isFinite(radius) || radius < 10) radius = 100;
+
+  const step = radius < 100 ? 10 : radius < 500 ? 25 : 50;
+  radius += delta < 0 ? step : -step;
+  radius = Math.max(10, Math.round(radius));
+
+  if(radiusEl) radiusEl.value = String(radius);
+
+  if(typeof geoStrictUpdateCircle === "function"){
+    geoStrictUpdateCircle(center.lat, center.lng, radius);
+  }else if(typeof __geoUpdateDraftCircle === "function"){
+    __geoUpdateDraftCircle(center.lat, center.lng, radius);
+  }
+
+  const status = qs("geofenceFormStatus");
+  if(status) status.textContent = "Радиус изменён колесом: " + radius + " м";
+  return true;
+}
+
+function bindGeofenceWheelRadius(){
+  const mapEl = document.getElementById("geofenceMap");
+  if(!mapEl || mapEl.dataset.wheelRadiusBound === "1") return;
+  mapEl.dataset.wheelRadiusBound = "1";
+
+  mapEl.addEventListener("wheel", (ev) => {
+    // Use wheel only when geofence form already has a center.
+    if(!geoWheelGetCurrentCenter()) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    geoWheelApplyRadius(ev.deltaY);
+  }, { passive: false });
+}
+
+window.addEventListener("load", () => setTimeout(bindGeofenceWheelRadius, 1000));
+document.addEventListener("click", (ev) => {
+  const tab = ev.target && ev.target.dataset ? ev.target.dataset.tab : "";
+  if(tab === "geofencesPanel") setTimeout(bindGeofenceWheelRadius, 500);
 }, true);
 </script>
 </body></html>
