@@ -9543,4 +9543,83 @@ setInterval(() => {
 })();
 
 </script>
+
+
+<!-- === Fix 68: Leaflet maps stable resize / no blank map after admin open === -->
+<script type="module">
+// This script runs after the main module. Most map variables are module-scoped there,
+// so we use DOM + Leaflet container resize events through global events and safe retries.
+(function(){
+  const mapIds = ['liveMap','historyMap','sessionMap','geofenceMap'];
+  let resizeTimer = null;
+
+  function visible(el){
+    if(!el) return false;
+    const r = el.getBoundingClientRect();
+    return r.width > 40 && r.height > 40 && getComputedStyle(el).display !== 'none' && !el.closest('.hidden');
+  }
+
+  function fireMapResize(reason){
+    try{
+      // Leaflet listens to window resize and recalculates tile layout.
+      window.dispatchEvent(new Event('resize'));
+    }catch(e){}
+
+    // Retry several times because tabs/panels become visible after CSS/layout settles.
+    [60, 180, 420, 900].forEach(delay => {
+      setTimeout(() => {
+        try{ window.dispatchEvent(new Event('resize')); }catch(e){}
+        mapIds.forEach(id => {
+          const el = document.getElementById(id);
+          if(!visible(el)) return;
+          // Force browser layout recalculation for Leaflet tile containers.
+          el.style.minHeight = el.style.minHeight || '';
+          el.getBoundingClientRect();
+        });
+      }, delay);
+    });
+  }
+
+  function scheduleMapResize(reason=''){
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => fireMapResize(reason), 40);
+  }
+
+  // Tab switching: fixes white/half-loaded maps when a Leaflet map was initialized hidden.
+  document.addEventListener('click', (ev) => {
+    const btn = ev.target && ev.target.closest ? ev.target.closest('.tab-btn[data-tab]') : null;
+    if(btn) scheduleMapResize('tab');
+  }, true);
+
+  // Initial admin open/login and browser resize/orientation changes.
+  window.addEventListener('load', () => scheduleMapResize('load'));
+  window.addEventListener('resize', () => scheduleMapResize('resize'));
+  window.addEventListener('orientationchange', () => scheduleMapResize('orientation'));
+
+  // When hidden panels become visible after login/tab restore, resize maps automatically.
+  const observer = new MutationObserver((mutations) => {
+    for(const m of mutations){
+      if(m.type === 'attributes' && (m.attributeName === 'class' || m.attributeName === 'style')){
+        const t = m.target;
+        if(t && (t.id === 'adminPanel' || /Panel$/.test(t.id || '') || mapIds.includes(t.id || ''))){
+          scheduleMapResize('mutation');
+          return;
+        }
+      }
+    }
+  });
+
+  window.addEventListener('DOMContentLoaded', () => {
+    try{
+      document.querySelectorAll('#adminPanel,#nowPanel,#historyPanel,#sessionsPanel,#geofencesPanel,#liveMap,#historyMap,#sessionMap,#geofenceMap')
+        .forEach(el => observer.observe(el, {attributes:true, attributeFilter:['class','style']}));
+    }catch(e){}
+    scheduleMapResize('dom');
+  });
+
+  // Expose manual helper for existing code if needed.
+  window.fixAdminMapsLayout = scheduleMapResize;
+})();
+</script>
+
 </body></html>
