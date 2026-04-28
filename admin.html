@@ -8233,5 +8233,257 @@ window.addEventListener("load", patchSessionButtonsNoConfirm);
 document.addEventListener("click", ()=>{
   setTimeout(patchSessionButtonsNoConfirm,100);
 });
+
+
+// === Geofence draw strict mode v84 ===
+let __geoStrictDrawEnabled = false;
+let __geoStrictCenter = null;
+let __geoStrictDragging = false;
+
+function geoStrictMeters(lat1, lon1, lat2, lon2){
+  const R = 6371000;
+  const toRad = d => Number(d) * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function geoStrictSetInputs(lat, lng, radius){
+  const latEl = qs("geofenceLatInput");
+  const lngEl = qs("geofenceLonInput");
+  const radiusEl = qs("geofenceRadiusInput");
+
+  if(latEl) latEl.value = Number(lat).toFixed(6);
+  if(lngEl) lngEl.value = Number(lng).toFixed(6);
+  if(radiusEl) radiusEl.value = Math.max(10, Math.round(Number(radius || 10)));
+}
+
+function geoStrictUpdateCircle(lat, lng, radius){
+  radius = Math.max(10, Math.round(Number(radius || 10)));
+
+  if(typeof __geoDrawCircle !== "undefined" && __geoDrawCircle && geofenceMap){
+    try{
+      __geoDrawCircle.setLatLng([lat, lng]);
+      __geoDrawCircle.setRadius(radius);
+    }catch(e){}
+  }else if(geofenceMap){
+    try{
+      __geoDrawCircle = L.circle([lat, lng], {
+        radius,
+        color: "#22c55e",
+        weight: 2,
+        fillColor: "#22c55e",
+        fillOpacity: 0.15
+      }).addTo(geofenceMap);
+    }catch(e){}
+  }
+
+  if(typeof __geoDrawMarker !== "undefined" && __geoDrawMarker && geofenceMap){
+    try{ __geoDrawMarker.setLatLng([lat, lng]); }catch(e){}
+  }else if(geofenceMap){
+    try{
+      __geoDrawMarker = L.marker([lat, lng], { draggable: true }).addTo(geofenceMap);
+      __geoDrawMarker.on("drag", (ev) => {
+        const p = ev.target.getLatLng();
+        const currentRadius = Number(qs("geofenceRadiusInput")?.value || radius || 100);
+        __geoStrictCenter = p;
+        geoStrictSetInputs(p.lat, p.lng, currentRadius);
+        geoStrictUpdateCircle(p.lat, p.lng, currentRadius);
+      });
+    }catch(e){}
+  }
+
+  const status = qs("geofenceFormStatus");
+  if(status) status.textContent = "Центр: " + Number(lat).toFixed(5) + ", " + Number(lng).toFixed(5) + " • радиус: " + radius + " м";
+}
+
+function geoStrictMapDown(e){
+  if(!__geoStrictDrawEnabled) return;
+
+  __geoStrictDragging = true;
+  __geoStrictCenter = e.latlng;
+
+  geoStrictSetInputs(e.latlng.lat, e.latlng.lng, 10);
+  geoStrictUpdateCircle(e.latlng.lat, e.latlng.lng, 10);
+
+  try{ geofenceMap.dragging.disable(); }catch(_){}
+}
+
+function geoStrictMapMove(e){
+  if(!__geoStrictDrawEnabled || !__geoStrictDragging || !__geoStrictCenter) return;
+
+  const r = geoStrictMeters(
+    __geoStrictCenter.lat,
+    __geoStrictCenter.lng,
+    e.latlng.lat,
+    e.latlng.lng
+  );
+
+  geoStrictSetInputs(__geoStrictCenter.lat, __geoStrictCenter.lng, r);
+  geoStrictUpdateCircle(__geoStrictCenter.lat, __geoStrictCenter.lng, r);
+}
+
+function geoStrictMapUp(){
+  if(!__geoStrictDragging) return;
+  __geoStrictDragging = false;
+  __geoStrictDrawEnabled = false;
+  try{ geofenceMap.dragging.enable(); }catch(_){}
+
+  const status = qs("geofenceFormStatus");
+  if(status) status.textContent = "Геозона нарисована. Можно сохранить или очистить форму.";
+}
+
+function geoStrictDisableDraw(){
+  __geoStrictDrawEnabled = false;
+  __geoStrictDragging = false;
+  __geoStrictCenter = null;
+  try{ if(geofenceMap) geofenceMap.dragging.enable(); }catch(_){}
+}
+
+function geoStrictClearForm(){
+  geoStrictDisableDraw();
+
+  const nameEl = qs("geofenceNameInput");
+  const latEl = qs("geofenceLatInput");
+  const lngEl = qs("geofenceLonInput");
+  const radiusEl = qs("geofenceRadiusInput");
+
+  if(nameEl) nameEl.value = "";
+  if(latEl) latEl.value = "";
+  if(lngEl) lngEl.value = "";
+  if(radiusEl) radiusEl.value = "100";
+
+  try{
+    if(typeof __geoDrawCircle !== "undefined" && __geoDrawCircle && geofenceMap) geofenceMap.removeLayer(__geoDrawCircle);
+    if(typeof __geoDrawMarker !== "undefined" && __geoDrawMarker && geofenceMap) geofenceMap.removeLayer(__geoDrawMarker);
+  }catch(_){}
+
+  try{ __geoDrawCircle = null; }catch(_){}
+  try{ __geoDrawMarker = null; }catch(_){}
+
+  const status = qs("geofenceFormStatus");
+  if(status) status.textContent = "Карту можно двигать свободно. Для рисования нажми «Нарисовать на карте».";
+}
+
+function geoStrictBindMap(){
+  if(!geofenceMap || geofenceMap.__geoStrictBound) return;
+  geofenceMap.__geoStrictBound = true;
+
+  // Remove previous auto-draw handlers if they exist.
+  try{
+    geofenceMap.off("mousedown", __geoStartDragDraw);
+    geofenceMap.off("mousemove", __geoMoveDragDraw);
+    geofenceMap.off("mouseup", __geoEndDragDraw);
+    geofenceMap.off("mouseout", __geoEndDragDraw);
+    geofenceMap.off("touchstart", __geoStartDragDraw);
+    geofenceMap.off("touchmove", __geoMoveDragDraw);
+    geofenceMap.off("touchend", __geoEndDragDraw);
+  }catch(_){}
+
+  geofenceMap.on("mousedown", geoStrictMapDown);
+  geofenceMap.on("mousemove", geoStrictMapMove);
+  geofenceMap.on("mouseup", geoStrictMapUp);
+  geofenceMap.on("mouseout", geoStrictMapUp);
+
+  geofenceMap.on("touchstart", geoStrictMapDown);
+  geofenceMap.on("touchmove", geoStrictMapMove);
+  geofenceMap.on("touchend", geoStrictMapUp);
+}
+
+function geoStrictPatchButtons(){
+  const drawBtn = qs("startGeofenceDrawBtn");
+  const clearBtn = qs("clearGeofenceFormBtn");
+  const cancelBtn = qs("cancelGeofenceDrawBtn");
+
+  if(drawBtn && drawBtn.dataset.geoStrict !== "1"){
+    drawBtn.dataset.geoStrict = "1";
+    drawBtn.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      ev.stopImmediatePropagation();
+
+      geoStrictBindMap();
+      __geoStrictDrawEnabled = true;
+      __geoStrictDragging = false;
+
+      const status = qs("geofenceFormStatus");
+      if(status) status.textContent = "Рисование включено: нажми на карту и тяни, чтобы задать радиус.";
+
+      try{ showToast("Рисование геозоны включено", "success"); }catch(_){}
+    }, true);
+  }
+
+  if(clearBtn && clearBtn.dataset.geoStrict !== "1"){
+    clearBtn.dataset.geoStrict = "1";
+    clearBtn.onclick = null;
+    clearBtn.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      ev.stopImmediatePropagation();
+      geoStrictClearForm();
+    }, true);
+  }
+
+  if(cancelBtn && cancelBtn.dataset.geoStrict !== "1"){
+    cancelBtn.dataset.geoStrict = "1";
+    cancelBtn.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      ev.stopImmediatePropagation();
+      geoStrictDisableDraw();
+      const status = qs("geofenceFormStatus");
+      if(status) status.textContent = "Рисование отменено. Карту можно двигать свободно.";
+    }, true);
+  }
+
+  // Remove confirmation from geofence delete buttons created in the table.
+  document.querySelectorAll("#geofencesTbody button").forEach(btn => {
+    const text = (btn.innerText || btn.textContent || "").toLowerCase();
+    if(!text.includes("удал")) return;
+    if(btn.dataset.noConfirmGeo === "1") return;
+
+    btn.dataset.noConfirmGeo = "1";
+    const oldClick = btn.onclick;
+    btn.onclick = null;
+    btn.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      ev.stopImmediatePropagation();
+      if(typeof oldClick === "function"){
+        try{ oldClick.call(btn, ev); }catch(e){ console.warn("geofence delete error", e); }
+      }else{
+        // Let delegated handlers behind this run on next tick if they exist.
+        setTimeout(() => btn.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })), 0);
+      }
+    }, true);
+  });
+}
+
+window.addEventListener("load", () => {
+  geoStrictPatchButtons();
+  setTimeout(() => {
+    try{
+      geoStrictBindMap();
+      geoStrictDisableDraw();
+      const status = qs("geofenceFormStatus");
+      if(status) status.textContent = "Карту можно двигать свободно. Для рисования нажми «Нарисовать на карте».";
+    }catch(e){}
+  }, 1200);
+});
+
+document.addEventListener("click", (ev) => {
+  const tab = ev.target && ev.target.dataset ? ev.target.dataset.tab : "";
+  if(tab === "geofencesPanel"){
+    setTimeout(() => {
+      try{
+        geoStrictBindMap();
+        geoStrictPatchButtons();
+        geoStrictDisableDraw();
+      }catch(e){}
+    }, 500);
+  }else{
+    setTimeout(geoStrictPatchButtons, 100);
+  }
+}, true);
 </script>
 </body></html>
