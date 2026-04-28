@@ -9028,5 +9028,28 @@ document.addEventListener("click", (ev) => {
     setTimeout(patchGeofenceFinalWheelV89, 100);
   }
 }, true);
+
+
+// === Economy live frequency display fix v92 ===
+function normalizeEconomyLiveTextV92(){
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  const nodes = [];
+  while(walker.nextNode()) nodes.push(walker.currentNode);
+
+  nodes.forEach(node => {
+    if(!node.nodeValue) return;
+    node.nodeValue = node.nodeValue
+      .replaceAll("30s / 50м", "20s / 25м")
+      .replaceAll("30с / 50м", "20с / 25м")
+      .replaceAll("30s/50м", "20s/25м")
+      .replaceAll("30с/50м", "20с/25м");
+  });
+}
+
+window.addEventListener("load", () => {
+  normalizeEconomyLiveTextV92();
+  setInterval(normalizeEconomyLiveTextV92, 2000);
+});
+document.addEventListener("click", () => setTimeout(normalizeEconomyLiveTextV92, 200));
 </script>
 </body></html>
