@@ -3385,6 +3385,7 @@ async function loadUsers(){
   userVisibility = visibilitySnap.val() || {};
   adminsMap = adminsSnap.val() || {};
   const liveOwners = liveOwnersSnap.val() || {};
+  window.liveOwnersByUid = liveOwners;
   const sessionsVal = sessionsSnap.val() || {};
 
   const ids = new Set([
@@ -9365,3 +9366,141 @@ setInterval(() => {
 
 </script>
 </body></html>
+
+<script>
+// === fix_66 admin live duration + DELETE prompt cleanup ===
+(function(){
+  function _q(id){ return document.getElementById(id); }
+  function _root(session){ try{ return typeof getSessionRoot === 'function' ? getSessionRoot(session) : (session || {}); }catch(e){ return session || {}; } }
+  function _status(meta){
+    meta = meta || {};
+    const now = Date.now();
+    const raw = String(meta.status || meta.linkStatus || '').toLowerCase();
+    const expiresAt = Number(meta.expiresAt || 0);
+    const remainingMs = Number(meta.remainingMs || 0);
+    const stopped = meta.active === false || !!meta.endedAt || ['stopped','ended','expired','inactive'].includes(raw);
+    const paused = meta.paused === true || raw === 'paused';
+    const expired = !paused && expiresAt > 0 && expiresAt <= now;
+    const active = !stopped && !expired && meta.active === true && (paused || !expiresAt || expiresAt > now);
+    return {active, paused: paused && active, stopped: stopped || expired, leftMs: paused ? Math.max(0, remainingMs) : Math.max(0, expiresAt - now)};
+  }
+  function _entry(token){ token = String(token || '').trim(); return token && window.allSessions && window.allSessions[token] ? [token, window.allSessions[token]] : null; }
+  function _isActive(entry){ return !!entry && _status((_root(entry[1]).meta || {})).active; }
+  function _fmt(ms){ try{ return typeof formatRemainingMs === 'function' ? formatRemainingMs(ms) : String(Math.ceil((Number(ms)||0)/60000)) + ' мин'; }catch(e){ return String(Math.ceil((Number(ms)||0)/60000)) + ' мин'; } }
+  function _fmtCompact(ms){ try{ return typeof fmtRemainingCompact === 'function' ? fmtRemainingCompact(ms) : _fmt(ms); }catch(e){ return _fmt(ms); } }
+  function _url(token, meta){ try{ return meta?.liveUrl || meta?.link || meta?.url || (typeof buildShareUrl === 'function' ? buildShareUrl(token) : ''); }catch(e){ return meta?.liveUrl || meta?.link || meta?.url || ''; } }
+
+  window.getSelectedActiveSessionEntry = function(){
+    const uid = window.selectedUid || '';
+    const ownerToken = uid ? String((window.liveOwnersByUid && window.liveOwnersByUid[uid] && window.liveOwnersByUid[uid].activeSessionId) || '').trim() : '';
+    const ownerEntry = _entry(ownerToken);
+    if(_isActive(ownerEntry)) return ownerEntry;
+
+    const live = uid && window.liveByUid ? (window.liveByUid[uid] || {}) : {};
+    const liveToken = String(live.sessionId || live.activeSessionId || live.liveSessionId || '').trim();
+    const liveEntry = _entry(liveToken);
+    if(_isActive(liveEntry)) return liveEntry;
+
+    const entries = Object.entries(window.allSessions || {}).filter(function(pair){
+      const token = pair[0], session = pair[1];
+      if(token === '_init') return false;
+      const meta = _root(session).meta || {};
+      if(uid && meta.ownerUid && meta.ownerUid !== uid) return false;
+      return _status(meta).active;
+    });
+    entries.sort(function(a,b){
+      const ma = _root(a[1]).meta || {};
+      const mb = _root(b[1]).meta || {};
+      return Number(mb.createdAt || mb.startedAt || 0) - Number(ma.createdAt || ma.startedAt || 0);
+    });
+    return entries[0] || null;
+  };
+
+  window.updateActiveSessionNotice = function(){
+    const box = _q('activeSessionNotice');
+    if(!box) return;
+    const entry = window.getSelectedActiveSessionEntry && window.getSelectedActiveSessionEntry();
+    if(!entry){ box.classList.add('hidden'); box.innerHTML = ''; window.createdShareUrl = ''; return; }
+    const token = entry[0], meta = _root(entry[1]).meta || {}, st = _status(meta);
+    if(!st.active){ box.classList.add('hidden'); box.innerHTML = ''; window.createdShareUrl = ''; return; }
+    const url = _url(token, meta);
+    window.createdShareUrl = url;
+    box.classList.remove('hidden');
+    box.innerHTML = '<strong>' + (st.paused ? 'Live-сессия на паузе' : 'Live-сессия активна') + '</strong><div style="margin-top:6px">' + (st.paused ? 'Пауза' : 'Осталось') + ': <b>' + _fmtCompact(st.leftMs) + '</b></div><div style="margin-top:6px" class="mono">' + url + '</div>';
+  };
+
+  window.updateActiveSessionToast = function(){
+    const host = typeof getToastHost === 'function' ? getToastHost() : null;
+    try{ if(typeof applyToastPosition === 'function') applyToastPosition(); }catch(e){}
+    let el = document.getElementById('activeSessionToast');
+    const entry = window.getSelectedActiveSessionEntry && window.getSelectedActiveSessionEntry();
+    if(!entry){
+      if(el) el.remove();
+      const createBtn = _q('createShareBtn');
+      if(createBtn){ createBtn.disabled = false; createBtn.textContent = 'Создать live-ссылку'; }
+      window.updateActiveSessionNotice && window.updateActiveSessionNotice();
+      return;
+    }
+    const token = entry[0], meta = _root(entry[1]).meta || {}, st = _status(meta);
+    if(!st.active){
+      if(el) el.remove();
+      const createBtn = _q('createShareBtn');
+      if(createBtn){ createBtn.disabled = false; createBtn.textContent = 'Создать live-ссылку'; }
+      window.updateActiveSessionNotice && window.updateActiveSessionNotice();
+      return;
+    }
+    if(host && !el){
+      el = document.createElement('div');
+      el.id = 'activeSessionToast';
+      el.style.pointerEvents = 'auto';
+      el.style.display = 'flex';
+      el.style.flexDirection = 'column';
+      el.style.gap = '8px';
+      el.style.padding = '12px 14px';
+      el.style.borderRadius = '14px';
+      el.style.color = '#fff';
+      el.style.boxShadow = '0 10px 28px rgba(0,0,0,.28)';
+      el.style.fontWeight = '600';
+      el.style.lineHeight = '1.35';
+      el.style.wordBreak = 'break-word';
+      host.appendChild(el);
+    }
+    if(!el) return;
+    el.style.background = st.paused ? '#b45309' : '#2563eb';
+    el.innerHTML = '<div style="font-weight:800">' + (st.paused ? 'Live-сессия на паузе' : 'Live-сессия активна') + '</div><div id="activeSessionToastTime" style="font-size:13px;opacity:.95">' + (st.paused ? 'Пауза' : 'Осталось') + ': ' + _fmt(st.leftMs) + '</div>';
+    clearInterval(el._timer);
+    if(!st.paused){
+      el._token = token;
+      el._timer = setInterval(function(){
+        const latest = _entry(el._token);
+        const latestMeta = latest ? (_root(latest[1]).meta || {}) : meta;
+        const latestStatus = _status(latestMeta);
+        const timeEl = document.getElementById('activeSessionToastTime');
+        if(!latestStatus.active){
+          clearInterval(el._timer);
+          el.remove();
+          const createBtn = _q('createShareBtn');
+          if(createBtn){ createBtn.disabled = false; createBtn.textContent = 'Создать live-ссылку'; }
+          window.updateActiveSessionNotice && window.updateActiveSessionNotice();
+          return;
+        }
+        if(timeEl) timeEl.textContent = (latestStatus.paused ? 'Пауза' : 'Осталось') + ': ' + _fmt(latestStatus.leftMs);
+      }, 1000);
+    }
+    const createBtn = _q('createShareBtn');
+    if(createBtn){ createBtn.disabled = true; createBtn.textContent = st.paused ? 'Live на паузе' : 'Есть активная ссылка'; }
+    window.updateActiveSessionNotice && window.updateActiveSessionNotice();
+  };
+
+  // No DELETE prompt anywhere except full database cleanup.
+  window.requireDeleteWord = function(){ return true; };
+  document.addEventListener('click', function(ev){
+    const btn = ev.target && ev.target.closest ? ev.target.closest('button') : null;
+    if(!btn || btn.id === 'deleteAllDbBtn') return;
+    btn.dataset.skipDeletePrompt = '1';
+  }, true);
+
+  window.addEventListener('load', function(){ try{ window.updateActiveSessionNotice(); window.updateActiveSessionToast(); }catch(e){} });
+  setInterval(function(){ try{ window.updateActiveSessionNotice(); window.updateActiveSessionToast(); }catch(e){} }, 1000);
+})();
+</script>
