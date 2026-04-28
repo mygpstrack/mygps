@@ -414,6 +414,16 @@
 
     .lastUpdateChip{display:inline-flex;align-items:center;gap:8px;margin-top:8px;padding:6px 10px;border-radius:999px;border:1px solid var(--border);background:rgba(255,255,255,.04);color:var(--muted);font-size:13px;font-weight:700}
 
+
+    .trafficRiskGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:12px}
+    .trafficRiskBox{padding:12px 14px;border-radius:14px;border:1px solid var(--border);background:rgba(255,255,255,.03);line-height:1.45}
+    .trafficRiskBox b{display:block;margin-bottom:4px}
+    .riskBadge{display:inline-flex;align-items:center;padding:4px 8px;border-radius:999px;border:1px solid var(--border);font-size:12px;font-weight:900}
+    .riskBadge.ok{background:rgba(22,163,74,.22);border-color:#166534;color:#bbf7d0}
+    .riskBadge.warn{background:rgba(180,83,9,.22);border-color:#92400e;color:#fde68a}
+    .riskBadge.danger{background:rgba(185,28,28,.25);border-color:#7f1d1d;color:#fecaca}
+    @media(max-width:900px){.trafficRiskGrid{grid-template-columns:1fr}}
+
 </style>
 </head>
 <body>
@@ -518,6 +528,7 @@
         <button class="tab-btn" data-tab="historyPanel">История</button>
         <button class="tab-btn" data-tab="reportsPanel">Отчёты</button>
         <button class="tab-btn" data-tab="usagePanel">Объём</button>
+        <button class="tab-btn" data-tab="trafficPanel">Трафик</button>
         <button class="tab-btn" data-tab="sessionsPanel">Live-сессии</button>
         <button class="tab-btn" data-tab="usersPanel">Пользователи</button>
         <button class="tab-btn" data-tab="visibilityPanel">Видимость</button>
@@ -737,6 +748,38 @@
             <button id="safeCleanupBtn" class="warn" type="button">Запустить безопасную очистку</button>
           </div>
           <div id="safeCleanupResult" class="cleanupResult hidden">—</div>
+        </div>
+      </div>
+    </div>
+
+
+    <div id="trafficPanel" class="hidden">
+      <div class="card">
+        <h2>Трафик Firebase</h2>
+        <p class="sub">Лёгкая диагностика: кто может создавать скачки Downloads. Точные MB по устройствам Firebase не отдаёт, поэтому здесь оценка по активности live-сессий и тяжёлым узлам.</p>
+        <div class="toolbar">
+          <button id="refreshTrafficBtn" class="secondary">Проверить трафик</button>
+        </div>
+        <div class="lastUpdateChip">Обновлено: <span id="trafficLastUpdateText">—</span></div>
+
+        <div class="trafficRiskGrid">
+          <div class="trafficRiskBox"><b>Активные live</b><span id="trafficActiveLive">—</span></div>
+          <div class="trafficRiskBox"><b>Открытия ссылок</b><span id="trafficOpenCount">—</span></div>
+          <div class="trafficRiskBox"><b>Старые точки</b><span id="trafficStalePoints">—</span></div>
+          <div class="trafficRiskBox"><b>Риск</b><span id="trafficRiskBadge" class="riskBadge ok">—</span></div>
+        </div>
+
+        <div class="notice" id="trafficSummary">Нажми “Проверить трафик”. Проверка не запускает постоянные listeners.</div>
+
+        <div style="overflow:auto;margin-top:12px">
+          <table>
+            <thead>
+              <tr><th>Источник</th><th>Статус</th><th>Открытия</th><th>Последняя точка</th><th>Возраст</th><th>Риск</th></tr>
+            </thead>
+            <tbody id="trafficTbody">
+              <tr><td colspan="6">Нет данных.</td></tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -6912,8 +6955,12 @@ async function runSafeCleanup(previewOnly){
     }
   }
 
-  await scanEvents("events");
-  await scanEvents("eventJournal");
+  if(previewOnly){
+    result.errors.push("preview: events/eventJournal не сканировались, чтобы не скачивать весь журнал");
+  }else{
+    await scanEvents("events");
+    await scanEvents("eventJournal");
+  }
 
   try{
     const users = await readCleanupObject("users");
@@ -7257,6 +7304,7 @@ function strictShowOnlySelectedPanel(selectedId){
     "historyPanel",
     "reportsPanel",
     "usagePanel",
+    "trafficPanel",
     "sessionsPanel",
     "usersPanel",
     "visibilityPanel",
@@ -7477,5 +7525,282 @@ document.addEventListener("click", (ev) => {
 try{
   refreshVisibleTabLight = refreshVisibleTabThrottled;
 }catch(e){}
+
+
+// === Hard traffic guard v76 ===
+const __manualHeavyLoad = {
+  history: false,
+  journal: false,
+  adminLogs: false,
+  sessions: false,
+  users: false
+};
+
+function allowNextHeavyLoad(key){
+  __manualHeavyLoad[key] = true;
+  setTimeout(() => { __manualHeavyLoad[key] = false; }, 5000);
+}
+
+function bindManualHeavyButtons(){
+  const pairs = [
+    ["refreshHistoryBtn", "history"],
+    ["applyFiltersBtn", "history"],
+    ["todayBtn", "history"],
+    ["yesterdayBtn", "history"],
+    ["weekBtn", "history"],
+    ["range1hBtn", "history"],
+    ["range24hBtn", "history"],
+    ["refreshJournalBtn", "journal"],
+    ["refreshAdminLogsBtn", "adminLogs"],
+    ["refreshSessionsBtn", "sessions"],
+    ["refreshUsersBtn", "users"],
+    ["refreshUsersManageBtn", "users"]
+  ];
+
+  pairs.forEach(([id, key]) => {
+    const btn = document.getElementById(id);
+    if(btn && btn.dataset.manualHeavyBound !== "1"){
+      btn.dataset.manualHeavyBound = "1";
+      btn.addEventListener("click", () => allowNextHeavyLoad(key), true);
+    }
+  });
+}
+
+window.addEventListener("load", bindManualHeavyButtons);
+document.addEventListener("click", () => setTimeout(bindManualHeavyButtons, 50), true);
+
+setTimeout(() => {
+  try{
+    if(typeof loadHistory === "function" && !loadHistory.__trafficGuarded){
+      const originalLoadHistory = loadHistory;
+      loadHistory = function(...args){
+        if(!__manualHeavyLoad.history){
+          console.log("Traffic guard: history auto-load skipped");
+          return;
+        }
+        return originalLoadHistory.apply(this, args);
+      };
+      loadHistory.__trafficGuarded = true;
+    }
+  }catch(e){}
+
+  try{
+    if(typeof loadJournal === "function" && !loadJournal.__trafficGuarded){
+      const originalLoadJournal = loadJournal;
+      loadJournal = function(...args){
+        if(!__manualHeavyLoad.journal){
+          console.log("Traffic guard: journal auto-load skipped");
+          return;
+        }
+        return originalLoadJournal.apply(this, args);
+      };
+      loadJournal.__trafficGuarded = true;
+    }
+  }catch(e){}
+
+  try{
+    if(typeof adminLogsLoad === "function" && !adminLogsLoad.__trafficGuarded){
+      const originalAdminLogsLoad = adminLogsLoad;
+      adminLogsLoad = function(...args){
+        if(!__manualHeavyLoad.adminLogs){
+          console.log("Traffic guard: admin logs auto-load skipped");
+          return;
+        }
+        return originalAdminLogsLoad.apply(this, args);
+      };
+      adminLogsLoad.__trafficGuarded = true;
+    }
+  }catch(e){}
+
+  try{
+    if(typeof loadAdminLogs === "function" && !loadAdminLogs.__trafficGuarded){
+      const originalLoadAdminLogs = loadAdminLogs;
+      loadAdminLogs = function(...args){
+        if(!__manualHeavyLoad.adminLogs){
+          console.log("Traffic guard: admin logs auto-load skipped");
+          return;
+        }
+        return originalLoadAdminLogs.apply(this, args);
+      };
+      loadAdminLogs.__trafficGuarded = true;
+    }
+  }catch(e){}
+
+  try{
+    if(typeof loadSessions === "function" && !loadSessions.__trafficGuarded){
+      const originalLoadSessions = loadSessions;
+      loadSessions = function(...args){
+        if(!__manualHeavyLoad.sessions){
+          console.log("Traffic guard: sessions auto-load skipped");
+          return;
+        }
+        return originalLoadSessions.apply(this, args);
+      };
+      loadSessions.__trafficGuarded = true;
+    }
+  }catch(e){}
+
+  try{
+    if(typeof loadUsers === "function" && !loadUsers.__trafficGuarded){
+      const originalLoadUsers = loadUsers;
+      loadUsers = function(...args){
+        if(!__manualHeavyLoad.users){
+          console.log("Traffic guard: users auto-load skipped");
+          return;
+        }
+        return originalLoadUsers.apply(this, args);
+      };
+      loadUsers.__trafficGuarded = true;
+    }
+  }catch(e){}
+}, 1000);
+
+// Override existing throttled refresh by assignment only.
+try{
+  refreshVisibleTabThrottled = function(){
+    const tab = getActiveTabId ? getActiveTabId() : "nowPanel";
+    if(tab === "nowPanel"){
+      scheduleAdminRefresh("nowPanel", 3000, () => {
+        if(typeof refreshNow === "function") refreshNow();
+        if(typeof refreshLive === "function") refreshLive();
+      });
+    }
+  };
+  refreshVisibleTabLight = refreshVisibleTabThrottled;
+}catch(e){}
+
+
+// === Traffic monitor estimate v77 ===
+function trafficAgeText(ts){
+  ts = Number(ts || 0);
+  if(!ts) return "—";
+  const diff = Math.max(0, Date.now() - ts);
+  const sec = Math.floor(diff / 1000);
+  if(sec < 60) return sec + " сек";
+  const min = Math.floor(sec / 60);
+  if(min < 60) return min + " мин";
+  const h = Math.floor(min / 60);
+  if(h < 24) return h + " ч";
+  return Math.floor(h / 24) + " дн";
+}
+
+function trafficPointTs(p){
+  return Number((p && (p.timestamp || p.ts || p.time || p.updatedAt)) || 0);
+}
+
+function trafficRiskLabel(level){
+  if(level === "danger") return '<span class="riskBadge danger">Высокий</span>';
+  if(level === "warn") return '<span class="riskBadge warn">Средний</span>';
+  return '<span class="riskBadge ok">Норма</span>';
+}
+
+async function loadTrafficMonitor(){
+  const tbody = qs("trafficTbody");
+  if(tbody) tbody.innerHTML = '<tr><td colspan="6">Проверяю…</td></tr>';
+
+  try{
+    const snap = await get(ref(db, "liveSessions"));
+    const sessions = snap.exists() && snap.val() ? snap.val() : {};
+    const now = Date.now();
+
+    let activeLive = 0;
+    let totalOpens = 0;
+    let stalePoints = 0;
+    let maxRisk = "ok";
+    const rows = [];
+
+    Object.entries(sessions).forEach(([token, session]) => {
+      const meta = session?.meta || {};
+      const stats = session?.viewStats || {};
+      const p = session?.public?.lastPoint || null;
+      const ts = trafficPointTs(p);
+      const active = meta.active === true && Number(meta.expiresAt || 0) > now;
+      const openCount = Number(stats.openCount || 0);
+      const ageMs = ts ? now - ts : 0;
+
+      if(active) activeLive += 1;
+      totalOpens += openCount;
+
+      let risk = "ok";
+      let status = active ? "active" : "inactive";
+
+      if(active && !p){
+        risk = "danger";
+        status = "active, но нет lastPoint";
+      }else if(active && ts && ageMs > 5 * 60 * 1000){
+        risk = "warn";
+        status = "точка старая";
+        stalePoints += 1;
+      }
+
+      if(openCount > 20) risk = "warn";
+      if(openCount > 100) risk = "danger";
+
+      if(risk === "danger") maxRisk = "danger";
+      else if(risk === "warn" && maxRisk !== "danger") maxRisk = "warn";
+
+      rows.push({
+        token,
+        status,
+        openCount,
+        ts,
+        age: ts ? trafficAgeText(ts) : "—",
+        risk
+      });
+    });
+
+    qs("trafficActiveLive").textContent = String(activeLive);
+    qs("trafficOpenCount").textContent = String(totalOpens);
+    qs("trafficStalePoints").textContent = String(stalePoints);
+    qs("trafficRiskBadge").outerHTML = '<span id="trafficRiskBadge" class="riskBadge ' + maxRisk + '">' + (maxRisk === "danger" ? "Высокий" : maxRisk === "warn" ? "Средний" : "Норма") + '</span>';
+    qs("trafficLastUpdateText").textContent = new Date().toLocaleString("ru-RU");
+
+    const summary = qs("trafficSummary");
+    if(summary){
+      summary.textContent = "Проверка выполнена. Если Downloads скачет, смотри строки с высоким риском: много открытий, активная live-сессия без lastPoint или старая точка.";
+    }
+
+    if(!rows.length){
+      if(tbody) tbody.innerHTML = '<tr><td colspan="6">Live-сессий нет.</td></tr>';
+      return;
+    }
+
+    rows.sort((a,b) => {
+      const score = r => r.risk === "danger" ? 2 : r.risk === "warn" ? 1 : 0;
+      return score(b) - score(a) || b.openCount - a.openCount;
+    });
+
+    if(tbody){
+      tbody.innerHTML = rows.slice(0, 50).map(row => {
+        return "<tr>" +
+          "<td class='mono'>" + escapeHtml(row.token) + "</td>" +
+          "<td>" + escapeHtml(row.status) + "</td>" +
+          "<td>" + row.openCount + "</td>" +
+          "<td>" + (row.ts ? fmtTime(row.ts) : "—") + "</td>" +
+          "<td>" + escapeHtml(row.age) + "</td>" +
+          "<td>" + trafficRiskLabel(row.risk) + "</td>" +
+          "</tr>";
+      }).join("");
+    }
+  }catch(e){
+    if(tbody) tbody.innerHTML = '<tr><td colspan="6">Ошибка проверки: ' + escapeHtml(e.message || String(e)) + '</td></tr>';
+  }
+}
+
+function bindTrafficMonitor(){
+  const btn = qs("refreshTrafficBtn");
+  if(btn && btn.dataset.bound !== "1"){
+    btn.dataset.bound = "1";
+    btn.addEventListener("click", loadTrafficMonitor);
+  }
+}
+
+window.addEventListener("load", bindTrafficMonitor);
+document.addEventListener("click", (ev) => {
+  const tab = ev.target && ev.target.dataset ? ev.target.dataset.tab : "";
+  if(tab === "trafficPanel"){
+    bindTrafficMonitor();
+  }
+});
 </script>
 </body></html>
