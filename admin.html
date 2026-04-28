@@ -759,6 +759,7 @@
         <p class="sub">Лёгкая диагностика: кто может создавать скачки Downloads. Точные MB по устройствам Firebase не отдаёт, поэтому здесь оценка по активности live-сессий и тяжёлым узлам.</p>
         <div class="toolbar">
           <button id="refreshTrafficBtn" class="secondary">Проверить трафик</button>
+          <button id="trafficSnapshotBtn" class="secondary">Снимок теста</button>
         </div>
         <div class="lastUpdateChip">Обновлено: <span id="trafficLastUpdateText">—</span></div>
 
@@ -7800,6 +7801,53 @@ document.addEventListener("click", (ev) => {
   const tab = ev.target && ev.target.dataset ? ev.target.dataset.tab : "";
   if(tab === "trafficPanel"){
     bindTrafficMonitor();
+  }
+});
+
+
+// === Traffic snapshot v78 ===
+async function saveTrafficSnapshot(){
+  try{
+    const active = qs("trafficActiveLive")?.textContent || "0";
+    const opens = qs("trafficOpenCount")?.textContent || "0";
+    const stale = qs("trafficStalePoints")?.textContent || "0";
+    const riskEl = qs("trafficRiskBadge");
+    const risk = riskEl ? (riskEl.textContent || "").trim() : "—";
+    const note = prompt("Заметка к снимку (опционально):","") || "";
+
+    const payload = {
+      type: "traffic_snapshot",
+      timestamp: Date.now(),
+      uid: auth && auth.currentUser ? auth.currentUser.uid : "unknown",
+      email: auth && auth.currentUser ? (auth.currentUser.email || "") : "",
+      data: {
+        activeLive: Number(active||0),
+        openCount: Number(opens||0),
+        stalePoints: Number(stale||0),
+        risk: risk
+      },
+      note: note
+    };
+
+    await push(ref(db, "adminLogs"), payload);
+    try{ adminPopup("Снимок сохранён","ok"); }catch(e){}
+  }catch(e){
+    console.warn("snapshot error", e);
+  }
+}
+
+function bindTrafficSnapshot(){
+  const btn = qs("trafficSnapshotBtn");
+  if(btn && btn.dataset.bound !== "1"){
+    btn.dataset.bound = "1";
+    btn.addEventListener("click", saveTrafficSnapshot);
+  }
+}
+
+window.addEventListener("load", bindTrafficSnapshot);
+document.addEventListener("click", (ev)=>{
+  if(ev.target && ev.target.dataset && ev.target.dataset.tab === "trafficPanel"){
+    setTimeout(bindTrafficSnapshot, 50);
   }
 });
 </script>
