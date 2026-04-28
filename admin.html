@@ -4352,7 +4352,7 @@ function fillGeofenceFromNowPoint(){
 const GPS_PRESETS = {
   fast: { label: "Точно", normal: { intervalMs: 1000, minDistanceM: 1 }, live: { intervalMs: 1000, minDistanceM: 1 } },
   balanced: { label: "Баланс", normal: { intervalMs: 20000, minDistanceM: 30 }, live: { intervalMs: 10000, minDistanceM: 15 } },
-  eco: { label: "Экономно", normal: { intervalMs: 60000, minDistanceM: 80 }, live: { intervalMs: 30000, minDistanceM: 50 } }
+  eco: { label: "Экономно", normal: { intervalMs: 60000, minDistanceM: 80 }, live: { intervalMs: 20000, minDistanceM: 25 } }
 };
 function formatGpsPresetProfile(kind){
   const p = GPS_PRESETS[kind] || GPS_PRESETS[GPS_DEFAULT_PRESET];
@@ -4386,9 +4386,9 @@ function ensureGpsProfiles(){ adminSettings.gpsProfiles = normalizeGpsProfilesSh
 function fillSelectOptions(selectId, values, labels){ const el = qs(selectId); if(!el) return; el.innerHTML = ""; labels.forEach((label, idx)=>{ const opt = document.createElement('option'); opt.value = String(values[idx]); opt.textContent = label; el.appendChild(opt); }); }
 function initGpsSettingsControls(){
   fillSelectOptions('gpsNormalIntervalSelect', [1000,20000,60000], ["1 сек","20 сек","60 сек"]);
-  fillSelectOptions('gpsLiveIntervalSelect', [1000,10000,30000], ["1 сек","10 сек","30 сек"]);
+  fillSelectOptions('gpsLiveIntervalSelect', [1000,10000,20000], ["1 сек","10 сек","20 сек"]);
   fillSelectOptions('gpsNormalDistanceSelect', [1,30,80], ["1 м","30 м","80 м"]);
-  fillSelectOptions('gpsLiveDistanceSelect', [1,15,50], ["1 м","15 м","50 м"]);
+  fillSelectOptions('gpsLiveDistanceSelect', [1,15,25], ["1 м","15 м","25 м"]);
 }
 function setGpsPresetButtonsActive(kind){ setGpsPresetActiveButton(kind); }
 function setGpsProfileControlsFromState(){
