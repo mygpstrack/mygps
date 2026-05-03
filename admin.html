@@ -2965,11 +2965,9 @@ async function runSystemCheck(){
   }));
 
   items.push(await safeCheck("history читается", async () => {
-    const checkUid = selectedUid || uid;
-    if(!checkUid) return "UID не выбран — проверка history пропущена";
-    const snap = await get(query(ref(db, `history/${checkUid}`), limitToLast(1)));
+    const snap = await get(ref(db, "history"));
     const count = snap.exists() ? Object.keys(snap.val() || {}).filter(k => k !== "_init").length : 0;
-    return `history/${checkUid}: доступ OK · последних точек: ${count}`;
+    return `UID в history: ${count}`;
   }));
 
   items.push(await safeCheck("journal читается", async () => {
@@ -3519,26 +3517,27 @@ function notifyLiveGpsProfileChanges(liveSnapshot){
 }
 
 async function loadAllData(){
-  // LOW TRAFFIC FIX: load history only for selected user, not the whole /history tree.
-  const uid = selectedUid || (allUsers && allUsers[0]) || "";
   const [historySnap, liveSnap, usersSnap] = await Promise.all([
-    uid ? get(ref(db, `history/${uid}`)) : Promise.resolve({ val: () => ({}) }),
+    get(ref(db,"history")),
     get(ref(db,"live")),
     get(ref(db,"users"))
   ]);
 
   usersMeta = usersSnap.val() || {};
+  historyByUid = {};
   liveByUid = liveSnap.val() || {};
-  if(uid){
-    const histRaw = historySnap.val() || {};
-    historyByUid = { ...historyByUid, [uid]: Object.values(histRaw||{})
+  const histRaw = historySnap.val() || {};
+
+  Object.entries(histRaw).forEach(([uid, pointsObj])=>{
+    historyByUid[uid] = Object.values(pointsObj||{})
       .filter(Boolean)
-      .sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0)) };
-  }
+      .sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+  });
 
   const ids = new Set([
     ...(allUsers || []),
     ...Object.keys(usersMeta || {}),
+    ...Object.keys(historyByUid || {}),
     ...Object.keys(liveByUid || {}),
     ...Object.keys(adminsMap || {})
   ].filter(uid => uid && uid !== "_init"));
@@ -6569,7 +6568,7 @@ if (qs("clearOldEventsBtn")) qs("clearOldEventsBtn").onclick = async()=>{
   }
 };
 
-if (qs("findEmptyProfilesBtn")) qs("findEmptyProfilesBtn").onclick = async()=>{ await loadUsers(); renderEmptyProfilesList(); };
+if (qs("findEmptyProfilesBtn")) qs("findEmptyProfilesBtn").onclick = async()=>{ await loadUsers(); await loadAllData(); renderEmptyProfilesList(); };
 if (qs("deleteEmptyProfilesBtn")) qs("deleteEmptyProfilesBtn").onclick = async()=>deleteEmptyProfiles();
 bindVisibilityControls();
 if (qs("clearShareResultBtn")) qs("clearShareResultBtn").onclick = ()=>{ createdShareUrl=""; qs("shareResultBox").classList.add("hidden"); };
@@ -6588,7 +6587,7 @@ qs("sessionStatusFilter").onchange=renderSessions;
 
 qs("userSelect").onchange=()=>{ selectedUid=qs("userSelect").value; if(qs("visibilityPanel") && !qs("visibilityPanel").classList.contains("hidden")){ selectedVisibilityUid = selectedUid; renderVisibilityPanel(); } updateUsage(); updateTodaySummary(); renderHistory(); updateNowFromAvailableSources(); renderSessions(); };
 qs("viewModeSelect").onchange=()=>{ updateUsage(); updateTodaySummary(); renderHistory(); updateNowFromAvailableSources(); renderSessions(); };
-if (qs("refreshUsersBtn")) qs("refreshUsersBtn").onclick = async()=>{ await loadUsers(); showToast("Пользователи обновлены","success"); };
+if (qs("refreshUsersBtn")) qs("refreshUsersBtn").onclick = async()=>{ await loadUsers(); await loadAllData(); showToast("Пользователи обновлены","success"); };
 
 if (qs("deleteHistoryBtn")) qs("deleteHistoryBtn").onclick = async()=>{ const count = Object.values(historyByUid).flat().length; if(!confirm(`Очистить всю ветку history?\nТочек: ${count}`)) return; try{ await safeAction("Очистка history", async()=>{ await remove(ref(db,"history")); await logAction("delete_history","Очищена ветка history"); await loadAllData(); }, "History очищена"); }catch(e){} };
 if (qs("deleteLiveBtn")) qs("deleteLiveBtn").onclick = async()=>{ const c = Object.keys(allSessions||{}).filter(k=>k!=="_init").length; if(!confirm(`Очистить live, liveSessions и liveOwners?\nСессий: ${c}`)) return; try{ await safeAction("Очистка live", async()=>{ await update(ref(db),{live:null,liveSessions:null,liveOwners:null}); await logAction("delete_live","Очищены live/liveSessions/liveOwners"); await loadAllData(); await loadSessions(); }, "Live очищен"); }catch(e){} };
@@ -6734,8 +6733,30 @@ onAuthStateChanged(auth, async user => {
     renderJournal();
     updateNowFromAvailableSources();
   });
-  // LOW TRAFFIC FIX: do not keep a realtime listener on the whole history tree.
-  // History is loaded only when the History tab / refresh button is used.
+  trackedOnValue(ref(db, "history"), snap => {
+    const raw=snap.val()||{};
+    historyByUid={};
+    Object.entries(raw).forEach(([uid,pointsObj])=>{
+      historyByUid[uid]=Object.values(pointsObj||{}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+    });
+
+    const ids = new Set([
+      ...(allUsers || []),
+      ...Object.keys(usersMeta || {}),
+      ...Object.keys(historyByUid || {}),
+      ...Object.keys(liveByUid || {}),
+      ...Object.keys(adminsMap || {})
+    ].filter(uid => uid && uid !== "_init"));
+
+    allUsers = [...ids].sort((a,b)=>getDisplayName(a).localeCompare(getDisplayName(b), "ru"));
+    if(!selectedUid && allUsers.length) selectedUid = allUsers[0];
+    renderUserSelect?.();
+
+    historyLoaded = true;
+    updateUsage();
+    renderHistory();
+    updateNowFromAvailableSources();
+  });
   trackedOnValue(query(ref(db, "liveSessions"), limitToLast(ADMIN_SESSIONS_LIMIT)), snap => { allSessions=snap.val()||{}; updateUsage(); renderSessions(); updateActiveSessionToast(); updateNowFromAvailableSources(); });
   trackedOnValue(ref(db, "adminLogs/deletions"), snap => { deletionsLog=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0)); renderJournal(); });
   trackedOnValue(ref(db, "adminLogs/actions"), snap => { actionLogs=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0)); renderJournal(); });
@@ -6769,9 +6790,7 @@ onAuthStateChanged(auth, async user => {
   startGpsProfilesRealtimeSync();
   await loadUsers();
   restoreUiState();
-  // LOW TRAFFIC FIX: do not auto-load history on admin open.
-  // Use the History tab / refresh button when needed.
-  historyLoaded = false;
+  await loadAllData();
   await loadSessions();
   await renderBackups();
   // Low traffic: automatic full backup disabled on open; use Backup button manually.
@@ -9601,6 +9620,206 @@ setInterval(() => {
   // Expose manual helper for existing code if needed.
   window.fixAdminMapsLayout = scheduleMapResize;
 })();
+
+
+/* === MyGps live view details + realtime sync final patch === */
+function mygpsLivePatchEscape(value){
+  try{ return escapeHtml(value); }catch(e){ return String(value ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;'); }
+}
+function mygpsLivePatchInstallUi(){
+  if(!document.getElementById('mygpsLiveDetailsStyle')){
+    const st=document.createElement('style');
+    st.id='mygpsLiveDetailsStyle';
+    st.textContent=`
+      .liveDetailsCard{margin-top:12px;border-color:rgba(59,130,246,.28);background:linear-gradient(180deg,rgba(37,99,235,.10),rgba(255,255,255,.025))}
+      .liveDetailsGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:12px}
+      .liveDetailsOpenList{margin-top:12px;display:grid;gap:8px}
+      .liveOpenItem{padding:10px 12px;border-radius:14px;border:1px solid var(--border);background:rgba(255,255,255,.035);line-height:1.45}
+      .liveOpenItem b{display:block;margin-bottom:3px}
+      .liveOpenMeta{color:var(--muted);font-size:12px;word-break:break-word}
+      .liveViewBadge{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;border:1px solid rgba(59,130,246,.45);background:rgba(37,99,235,.18);font-weight:900;color:#bfdbfe}
+      @media(max-width:900px){.liveDetailsGrid{grid-template-columns:1fr}}
+    `;
+    document.head.appendChild(st);
+  }
+  const sessionsPanel=document.getElementById('sessionsPanel');
+  const managementCard=sessionsPanel ? Array.from(sessionsPanel.querySelectorAll('.card')).find(c=>c.textContent.includes('Управление live-сессиями')) : null;
+  if(managementCard && !document.getElementById('liveViewDetailsCard')){
+    const box=document.createElement('div');
+    box.id='liveViewDetailsCard';
+    box.className='notice liveDetailsCard';
+    box.innerHTML=`
+      <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center">
+        <div><strong>Открытия активной live-ссылки</strong><div class="smallMuted">Показывает данные из liveSessions/&lt;token&gt;/viewStats. IP/город появятся только если их записывает live-страница или Cloud Function.</div></div>
+        <button id="liveViewDetailsRefreshBtn" class="secondary small" type="button">Обновить</button>
+      </div>
+      <div class="liveDetailsGrid">
+        <div class="stat"><div class="label">Открытий всего</div><div class="value" id="liveDetailsOpenCount">0</div></div>
+        <div class="stat"><div class="label">Первое открытие</div><div class="value" id="liveDetailsFirstOpen">—</div></div>
+        <div class="stat"><div class="label">Последнее открытие</div><div class="value" id="liveDetailsLastOpen">—</div></div>
+        <div class="stat"><div class="label">Последний IP / город</div><div class="value" id="liveDetailsLastPlace">—</div></div>
+      </div>
+      <div class="liveDetailsOpenList" id="liveDetailsOpenList"><div class="smallMuted">Открытий пока нет.</div></div>
+    `;
+    const tableWrap=managementCard.querySelector('div[style*="overflow:auto"]');
+    managementCard.insertBefore(box, tableWrap || null);
+    const btn=document.getElementById('liveViewDetailsRefreshBtn');
+    if(btn) btn.onclick=()=>{ renderSessions(); showToast && showToast('Детали открытий обновлены','success'); };
+  }
+}
+function mygpsLivePatchGetStats(session){
+  const root=getSessionRoot(session)||{};
+  const stats=root.viewStats||{};
+  const opens=stats.opens || stats.recentOpens || root.opens || {};
+  const list=Array.isArray(opens) ? opens.filter(Boolean) : Object.entries(opens||{}).map(([id,v])=>({id,...(v||{})}));
+  list.sort((a,b)=>Number(b.openedAt||b.ts||b.timestamp||0)-Number(a.openedAt||a.ts||a.timestamp||0));
+  const last=list[0]||{};
+  return {
+    stats,
+    list,
+    openCount:Number(stats.openCount || stats.count || list.length || 0),
+    firstOpenAt:Number(stats.firstOpenAt || stats.firstOpenedAt || 0),
+    lastOpenAt:Number(stats.lastOpenAt || stats.lastOpenedAt || last.openedAt || last.ts || last.timestamp || 0),
+    lastIp:stats.lastIp || stats.ip || last.ip || last.clientIp || '',
+    lastCountry:stats.lastCountry || last.country || last.countryName || '',
+    lastCity:stats.lastCity || last.city || '',
+    lastUserAgent:stats.lastUserAgent || last.userAgent || last.ua || ''
+  };
+}
+function mygpsLivePatchActiveEntry(){
+  try{
+    const now=Date.now();
+    const entries=Object.entries(allSessions||{}).filter(([token])=>token !== '_init');
+    const selected=entries.find(([token, session])=>{
+      const meta=(getSessionRoot(session)||{}).meta||{};
+      return (!selectedUid || meta.ownerUid===selectedUid) && !!meta.active && Number(meta.expiresAt||0)>now;
+    });
+    if(selected) return selected;
+    return entries.sort((a,b)=>Number((getSessionRoot(b[1])||{}).meta?.createdAt||0)-Number((getSessionRoot(a[1])||{}).meta?.createdAt||0))[0] || null;
+  }catch(e){return null;}
+}
+function mygpsLivePatchRenderDetails(entry){
+  mygpsLivePatchInstallUi();
+  const card=document.getElementById('liveViewDetailsCard');
+  if(!card) return;
+  if(!entry){
+    const ids=['liveDetailsOpenCount','liveDetailsFirstOpen','liveDetailsLastOpen','liveDetailsLastPlace'];
+    ids.forEach(id=>{ const el=document.getElementById(id); if(el) el.textContent=id==='liveDetailsOpenCount'?'0':'—'; });
+    const list=document.getElementById('liveDetailsOpenList'); if(list) list.innerHTML='<div class="smallMuted">Активной live-сессии нет.</div>';
+    return;
+  }
+  const [token, session]=entry;
+  const s=mygpsLivePatchGetStats(session);
+  const place=[s.lastIp, s.lastCity, s.lastCountry].filter(Boolean).join(' · ') || '—';
+  const set=(id,val)=>{ const el=document.getElementById(id); if(el) el.textContent=val; };
+  set('liveDetailsOpenCount', String(s.openCount));
+  set('liveDetailsFirstOpen', fmtTime(s.firstOpenAt));
+  set('liveDetailsLastOpen', fmtTime(s.lastOpenAt));
+  set('liveDetailsLastPlace', place);
+  const listEl=document.getElementById('liveDetailsOpenList');
+  if(listEl){
+    if(!s.list.length){
+      const ua=s.lastUserAgent ? `<div class="liveOpenMeta">Браузер: ${mygpsLivePatchEscape(s.lastUserAgent)}</div>` : '';
+      listEl.innerHTML=`<div class="liveOpenItem"><b>Последнее открытие</b><div class="liveOpenMeta">Token: ${mygpsLivePatchEscape(token)}</div><div class="liveOpenMeta">IP/город: ${mygpsLivePatchEscape(place)}</div>${ua}</div>`;
+    }else{
+      listEl.innerHTML=s.list.slice(0,8).map((o,i)=>{
+        const ts=Number(o.openedAt||o.ts||o.timestamp||0);
+        const p=[o.ip||o.clientIp||'', o.city||'', o.country||o.countryName||''].filter(Boolean).join(' · ') || 'нет IP/города';
+        const ua=o.userAgent||o.ua||'';
+        return `<div class="liveOpenItem"><b>#${i+1} · ${fmtTime(ts)}</b><div class="liveOpenMeta">${mygpsLivePatchEscape(p)}</div>${ua?`<div class="liveOpenMeta">${mygpsLivePatchEscape(ua)}</div>`:''}</div>`;
+      }).join('');
+    }
+  }
+}
+function mygpsLivePatchCollectSessionPoints(session){
+  const root=getSessionRoot(session)||{};
+  const arr=[];
+  const add=p=>{ const lat=getPointLat(p), lng=getPointLng(p); if(lat!=null && lng!=null) arr.push({lat:Number(lat), lng:Number(lng), ts:Number(p?.timestamp||p?.ts||p?.time||0), p}); };
+  const rp=root.public?.recentPoints || root.recentPoints || {};
+  if(Array.isArray(rp)) rp.forEach(add); else Object.values(rp).forEach(add);
+  add(root.public?.lastPoint || root.lastPoint);
+  return arr.filter(x=>Number.isFinite(x.lat)&&Number.isFinite(x.lng)).sort((a,b)=>a.ts-b.ts);
+}
+function showSessionRouteOnMap(token){
+  const session=getSessionRoot(allSessions?.[token])||{};
+  const pts=mygpsLivePatchCollectSessionPoints(session);
+  if(!pts.length) return showToast('Нет точек маршрута в этой live-сессии','warn');
+  const latlngs=pts.map(x=>[x.lat,x.lng]);
+  try{
+    sessionTrail.setLatLngs(latlngs);
+    sessionMarker.setLatLng(latlngs[latlngs.length-1]);
+    sessionMap.fitBounds(L.latLngBounds(latlngs), {padding:[30,30]});
+    const tabs=document.querySelectorAll('.tab-btn[data-tab]');
+    tabs.forEach(b=>{ if(b.dataset.tab==='sessionsPanel') b.classList.add('active'); else b.classList.remove('active'); });
+    document.querySelectorAll('#adminPanel > div[id$="Panel"], #adminPanel > #nowPanel, #historyPanel, #reportsPanel, #usagePanel, #trafficPanel, #sessionsPanel, #usersPanel, #visibilityPanel, #geofencesPanel, #journalPanel, #errorsPanel, #systemCheckPanel, #adminLogsPanel, #settingsPanel').forEach(p=>{ if(p.id==='sessionsPanel') p.classList.remove('hidden'); });
+    setTimeout(()=>sessionMap.invalidateSize(),250);
+    showToast('Маршрут live-сессии показан на карте','success');
+  }catch(e){ recordError('showSessionRouteOnMap', e); showToast('Ошибка показа маршрута: '+errText(e),'error'); }
+}
+function mygpsLivePatchStatusLabel(status, meta){
+  const paused=meta?.paused===true || meta?.status==='paused';
+  if(paused) return '<span class="tag idle">пауза</span>';
+  if(status==='active') return '<span class="tag online">активна</span>';
+  if(status==='ended') return '<span class="tag offline">завершена</span>';
+  return '<span class="tag offline">истекла</span>';
+}
+function mygpsLivePatchStatsHtml(session){
+  const s=mygpsLivePatchGetStats(session);
+  const place=[s.lastIp, s.lastCity, s.lastCountry].filter(Boolean).join(' · ');
+  return `<span class="liveViewBadge">👁 ${s.openCount}</span>${place?`<div class="smallMuted" style="margin-top:4px">${mygpsLivePatchEscape(place)}</div>`:''}`;
+}
+renderSessions = function(){
+  mygpsLivePatchInstallUi();
+  const tbody=qs('sessionsTbody'); if(!tbody) return;
+  tbody.innerHTML='';
+  const search=(qs('sessionSearchInput')?.value||'').trim().toLowerCase(), statusFilter=qs('sessionStatusFilter')?.value||'all';
+  const entries=Object.entries(allSessions||{}).filter(([token])=>token!=='_init').map(([token,session])=>[token,getSessionRoot(session),getSessionStatus(session)]).filter(([token,session,status])=>{
+    if(statusFilter!=='all' && status!==statusFilter) return false;
+    if(search && !token.toLowerCase().includes(search)) return false;
+    if(selectedUid && session?.meta?.ownerUid && qs('viewModeSelect')?.value==='selected' && session.meta.ownerUid!==selectedUid) return false;
+    return true;
+  }).sort((a,b)=>Number((b[1]?.meta?.createdAt||0))-Number((a[1]?.meta?.createdAt||0)));
+  if(!entries.length){
+    tbody.innerHTML='<tr><td colspan="8">Сессий нет</td></tr>';
+    mygpsLivePatchRenderDetails(null);
+    const createBtn=qs('createShareBtn'); if(createBtn){ createBtn.disabled=false; createBtn.textContent='Создать live-ссылку'; }
+    try{ updateActiveSessionToast(); }catch(e){}
+    return;
+  }
+  for(const [token,session,status] of entries){
+    const meta=session?.meta||{}, tr=document.createElement('tr');
+    const lpInfo=getSessionLastPointInfo(session, status);
+    const stat=mygpsLivePatchGetStats(session);
+    tr.innerHTML=`<td class="mono">${mygpsLivePatchEscape(token)}<br><span class="tag">${mygpsLivePatchEscape(getDisplayName(meta.ownerUid)||meta.ownerUid||'—')}</span></td><td>${mygpsLivePatchStatusLabel(status, meta)}</td><td>${lpInfo.html}</td><td>${lpInfo.age}</td><td>${fmtTime(meta.expiresAt)}</td><td>${mygpsLivePatchStatsHtml(session)}</td><td>${fmtTime(stat.firstOpenAt)}<br>${fmtTime(stat.lastOpenAt)}</td><td><div class="row"><button class="secondary small" data-copy="${mygpsLivePatchEscape(token)}">Копировать</button><button class="secondary small" data-share="${mygpsLivePatchEscape(token)}">Поделиться</button><button class="secondary small" data-open="${mygpsLivePatchEscape(token)}">Карта</button><button class="secondary small" data-route="${mygpsLivePatchEscape(token)}">Маршрут</button><button class="secondary small" data-gmaps="${mygpsLivePatchEscape(token)}">Google Maps</button><button class="secondary small" data-center="${mygpsLivePatchEscape(token)}">Центр</button><button class="warn small" data-end="${mygpsLivePatchEscape(token)}">Завершить</button><button class="danger small" data-delete="${mygpsLivePatchEscape(token)}">Удалить</button></div></td>`;
+    tbody.appendChild(tr);
+  }
+  mygpsLivePatchRenderDetails(mygpsLivePatchActiveEntry());
+  tbody.querySelectorAll('[data-copy]').forEach(btn=>btn.onclick=async()=>{ try{ await navigator.clipboard.writeText(buildShareUrl(btn.dataset.copy)); showToast('Ссылка скопирована','success'); }catch(e){ alert('Ошибка копирования: '+errText(e)); }});
+  tbody.querySelectorAll('[data-share]').forEach(btn=>btn.onclick=async()=>{ const url=buildShareUrl(btn.dataset.share); try{ if(navigator.share){ await navigator.share({title:'MyGps Live', text:'Активная live-ссылка', url}); } else { await navigator.clipboard.writeText(url); showToast('Ссылка скопирована для отправки','success'); }}catch(e){} });
+  tbody.querySelectorAll('[data-open]').forEach(btn=>btn.onclick=()=>window.open(buildShareUrl(btn.dataset.open), '_blank', 'noopener,noreferrer'));
+  tbody.querySelectorAll('[data-route]').forEach(btn=>btn.onclick=()=>showSessionRouteOnMap(btn.dataset.route));
+  tbody.querySelectorAll('[data-center]').forEach(btn=>btn.onclick=()=>centerSessionOnPoint(btn.dataset.center));
+  tbody.querySelectorAll('[data-gmaps]').forEach(btn=>btn.onclick=()=>{ const session=getSessionRoot(allSessions[btn.dataset.gmaps])||{}; const p=session?.public?.lastPoint; const lat=getPointLat(p), lng=getPointLng(p); if(!p||lat==null||lng==null) return showToast('Нет точки','warn'); window.open(`https://www.google.com/maps?q=${lat},${lng}`,'_blank'); });
+  tbody.querySelectorAll('[data-end]').forEach(btn=>btn.onclick=()=>endSession(btn.dataset.end));
+  tbody.querySelectorAll('[data-delete]').forEach(btn=>btn.onclick=()=>deleteSession(btn.dataset.delete));
+  const createBtn=qs('createShareBtn'); if(createBtn){ const hasActiveForSelected=entries.some(([token,session,status])=>status==='active' && (!selectedUid || session?.meta?.ownerUid===selectedUid) && Number(session?.meta?.expiresAt||0)>Date.now()); createBtn.disabled=hasActiveForSelected; createBtn.textContent=hasActiveForSelected?'Есть активная ссылка':'Создать live-ссылку'; }
+  try{ updateActiveSessionToast(); }catch(e){}
+};
+let __mygpsLiveSessionsUnsub=null;
+function startLiveSessionsRealtimeSync(){
+  try{
+    if(__mygpsLiveSessionsUnsub) return;
+    __mygpsLiveSessionsUnsub=onValue(query(ref(db,'liveSessions'), limitToLast(typeof ADMIN_SESSIONS_LIMIT !== 'undefined' ? ADMIN_SESSIONS_LIMIT : 80)), snap=>{
+      allSessions=snap.val()||{};
+      try{ renderSessions(); }catch(e){ recordError('renderSessionsRealtime', e); }
+      try{ updateActiveSessionNotice(); }catch(e){}
+      try{ updateActiveSessionToast(); }catch(e){}
+      try{ updateNowFromAvailableSources(); }catch(e){}
+    }, e=>recordError('liveSessionsRealtimeSync', e));
+  }catch(e){ recordError('startLiveSessionsRealtimeSync', e); }
+}
+window.addEventListener('load', ()=>{ mygpsLivePatchInstallUi(); setTimeout(()=>{ try{ startLiveSessionsRealtimeSync(); }catch(e){} }, 1800); });
+/* === /MyGps live view details + realtime sync final patch === */
 </script>
 
 </body></html>
