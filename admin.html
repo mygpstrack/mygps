@@ -9539,6 +9539,158 @@ setInterval(() => {
     trackedOnValue(ref(db, 'live'), snap => { liveByUid = snap.val() || {}; updateUsage(); renderJournal(); updateNowFromAvailableSources(); updateActiveSessionNotice(); updateActiveSessionToast(); });
   }catch(e){ recordError('liveFix67Listeners', e); }
 
+
+  // === Admin live improvement: detailed opens, route button, auto-sync active session without manual refresh ===
+  function adminLiveFixOpenStatsHtml(stats){
+    stats = stats || {};
+    const openCount = Number(stats.openCount || stats.opens || stats.count || 0);
+    const first = Number(stats.firstOpenAt || stats.firstAt || stats.createdAt || 0);
+    const last = Number(stats.lastOpenAt || stats.lastAt || stats.updatedAt || 0);
+    const unique = Number(stats.uniqueCount || stats.uniqueOpens || stats.uniqueVisitors || 0);
+    const lastAge = last ? (adminRelTime(last) + ' назад') : '—';
+    const lines = [`<b>${openCount}</b>`];
+    if(unique) lines.push(`<span class="smallMuted">уник.: ${unique}</span>`);
+    lines.push(`<span class="smallMuted">последнее: ${lastAge}</span>`);
+    return lines.join('<br>');
+  }
+
+  function adminLiveFixFirstLastHtml(stats){
+    stats = stats || {};
+    const first = Number(stats.firstOpenAt || stats.firstAt || 0);
+    const last = Number(stats.lastOpenAt || stats.lastAt || 0);
+    return `Первое: ${fmtTime(first)}<br>Последнее: ${fmtTime(last)}`;
+  }
+
+  async function adminLiveFixEnsureActiveSessionLoaded(uid){
+    uid = uid || selectedUid || '';
+    if(!uid) return false;
+    try{
+      let token = String(window.liveOwnersByUid?.[uid]?.activeSessionId || liveByUid?.[uid]?.sessionId || liveByUid?.[uid]?.activeSessionId || liveByUid?.[uid]?.liveSessionId || '').trim();
+      if(!token){
+        const ownerSnap = await get(ref(db, `liveOwners/${uid}/activeSessionId`));
+        token = String(ownerSnap.val() || '').trim();
+      }
+      if(!token) return false;
+      const sessionSnap = await get(ref(db, `liveSessions/${token}`));
+      if(!sessionSnap.exists()) return false;
+      const session = sessionSnap.val() || {};
+      const old = JSON.stringify(allSessions?.[token] || null);
+      allSessions = Object.assign({}, allSessions || {}, { [token]: session });
+      const changed = old !== JSON.stringify(session);
+      if(changed){
+        updateUsage?.();
+        renderSessions?.();
+        updateActiveSessionNotice?.();
+        updateActiveSessionToast?.();
+        updateNowFromAvailableSources?.();
+      }
+      return changed;
+    }catch(e){
+      recordError?.('adminLiveFixEnsureActiveSessionLoaded', e);
+      return false;
+    }
+  }
+
+  let adminLiveFixSyncTimer = null;
+  function adminLiveFixStartAutoSync(){
+    if(adminLiveFixSyncTimer) return;
+    adminLiveFixSyncTimer = setInterval(()=>{
+      try{
+        const sessionsPanelVisible = qs('sessionsPanel') && !qs('sessionsPanel').classList.contains('hidden');
+        const nowPanelVisible = qs('nowPanel') && !qs('nowPanel').classList.contains('hidden');
+        if(sessionsPanelVisible || nowPanelVisible) adminLiveFixEnsureActiveSessionLoaded(selectedUid);
+      }catch(e){}
+    }, 4000);
+  }
+
+  const adminLiveFixOldRenderSessions = renderSessions;
+  renderSessions = function(){
+    const tbody = qs('sessionsTbody');
+    if(!tbody) return adminLiveFixOldRenderSessions();
+    tbody.innerHTML='';
+    const search=(qs('sessionSearchInput').value||'').trim().toLowerCase(), statusFilter=qs('sessionStatusFilter').value;
+    const entries=Object.entries(allSessions||{}).filter(([token])=>token!=='_init').map(([token,session])=>[token,getSessionRoot(session),getSessionStatus(session)]).filter(([token,session,status])=>{
+      if(statusFilter!=='all' && status!==statusFilter) return false;
+      if(search && !token.toLowerCase().includes(search)) return false;
+      if(selectedUid && session?.meta?.ownerUid && qs('viewModeSelect').value==='selected' && session.meta.ownerUid!==selectedUid) return false;
+      return true;
+    }).sort((a,b)=>Number((b[1]?.meta?.createdAt||b[1]?.meta?.startedAt||0))-Number((a[1]?.meta?.createdAt||a[1]?.meta?.startedAt||0)));
+    if(!entries.length){
+      tbody.innerHTML=`<tr><td colspan="8">Сессий нет</td></tr>`;
+      const createBtn = qs('createShareBtn');
+      if(createBtn){ createBtn.disabled = false; createBtn.textContent = 'Создать live-ссылку'; }
+      updateActiveSessionToast?.();
+      adminLiveFixEnsureActiveSessionLoaded(selectedUid);
+      return;
+    }
+    for(const [token,session,status] of entries){
+      const meta=session?.meta||{}, stats=session?.viewStats||{}, tr=document.createElement('tr');
+      const lpInfo = getSessionLastPointInfo(session, status);
+      const statusHtml = getSessionStatusLabel(status) + (meta.paused === true || meta.status === 'paused' ? '<br><span class="tag idle">пауза</span>' : '');
+      tr.innerHTML=`<td class="mono">${token}<br><span class="tag">${getDisplayName(meta.ownerUid)||meta.ownerUid||'—'}</span></td><td>${statusHtml}</td><td>${lpInfo.html}</td><td>${lpInfo.age}</td><td>${fmtTime(meta.expiresAt)}</td><td>${adminLiveFixOpenStatsHtml(stats)}</td><td>${adminLiveFixFirstLastHtml(stats)}</td><td><div class="row"><button class="secondary small" data-copy="${token}">Копировать</button><button class="secondary small" data-share="${token}">Поделиться</button><button class="secondary small" data-open="${token}">Открыть</button><button class="secondary small" data-route="${token}">Маршрут</button><button class="secondary small" data-gmaps="${token}">Google Maps</button><button class="secondary small" data-center="${token}">Центр</button><button class="warn small" data-end="${token}">Завершить</button><button class="danger small" data-delete="${token}">Удалить</button></div></td>`;
+      tbody.appendChild(tr);
+    }
+    tbody.querySelectorAll('[data-copy]').forEach(btn=>btn.onclick=async()=>{ try{ await navigator.clipboard.writeText(buildShareUrl(btn.dataset.copy)); showToast('Ссылка скопирована','success'); }catch(e){ alert('Ошибка копирования: '+errText(e)); }});
+    tbody.querySelectorAll('[data-share]').forEach(btn=>btn.onclick=async()=>{ const url = buildShareUrl(btn.dataset.share); try{ if(navigator.share){ await navigator.share({title:'MyGps Live', text:'Активная live-ссылка', url}); } else { await navigator.clipboard.writeText(url); showToast('Ссылка скопирована для отправки','success'); } }catch(e){} });
+    tbody.querySelectorAll('[data-open]').forEach(btn=>btn.onclick=()=>window.open(buildShareUrl(btn.dataset.open), '_blank', 'noopener,noreferrer'));
+    tbody.querySelectorAll('[data-route]').forEach(btn=>btn.onclick=()=>showSessionOnMap(btn.dataset.route));
+    tbody.querySelectorAll('[data-center]').forEach(btn=>btn.onclick=()=>centerSessionOnPoint(btn.dataset.center));
+    tbody.querySelectorAll('[data-gmaps]').forEach(btn=>btn.onclick=()=>{
+      const session=getSessionRoot(allSessions[btn.dataset.gmaps])||{};
+      const p=session?.public?.lastPoint || Object.values(session?.public?.recentPoints||{}).filter(Boolean).sort((a,b)=>getPointTs(a)-getPointTs(b)).slice(-1)[0];
+      const lat = getPointLat(p), lng = getPointLng(p);
+      if(!p || lat==null || lng==null) return showToast('Нет точки','warn');
+      window.open(`https://www.google.com/maps?q=${lat},${lng}`,'_blank');
+    });
+    tbody.querySelectorAll('[data-end]').forEach(btn=>btn.onclick=()=>endSession(btn.dataset.end));
+    tbody.querySelectorAll('[data-delete]').forEach(btn=>btn.onclick=()=>deleteSession(btn.dataset.delete));
+    const createBtn = qs('createShareBtn');
+    if(createBtn){
+      const hasActiveForSelected = entries.some(([token,session,status]) => status==='active' && (!selectedUid || session?.meta?.ownerUid===selectedUid) && Number(session?.meta?.expiresAt||0) > Date.now());
+      createBtn.disabled = hasActiveForSelected;
+      createBtn.textContent = hasActiveForSelected ? 'Есть активная ссылка' : 'Создать live-ссылку';
+    }
+    updateActiveSessionToast?.();
+  };
+
+  const adminLiveFixOldEndSession = endSession;
+  endSession = async function(token){
+    if(!confirm(`Завершить live-сессию ${token}?`)) return;
+    try{
+      const ownerUid = getSessionRoot(allSessions?.[token])?.meta?.ownerUid || '';
+      const now = Date.now();
+      const updates = {
+        [`liveSessions/${token}/meta/active`]: false,
+        [`liveSessions/${token}/meta/paused`]: false,
+        [`liveSessions/${token}/meta/status`]: 'stopped',
+        [`liveSessions/${token}/meta/endedAt`]: now
+      };
+      if(ownerUid){
+        updates[`live/${ownerUid}/active`] = false;
+        updates[`live/${ownerUid}/paused`] = false;
+        updates[`live/${ownerUid}/status`] = 'stopped';
+        updates[`live/${ownerUid}/endedAt`] = now;
+        updates[`liveOwners/${ownerUid}/activeSessionId`] = null;
+      }
+      await update(ref(db), updates);
+      await logAction('session_end', `Завершена live-сессия ${token}`);
+      await loadSessions();
+      showToast('Сессия завершена','success');
+    }catch(e){ recordError('endSessionLiveFix', e); showToast('Завершение live-сессии: '+errText(e),'error',3600); }
+  };
+
+  try{
+    trackedOnValue(ref(db, 'liveOwners'), snap => {
+      window.liveOwnersByUid = snap.val() || {};
+      adminLiveFixEnsureActiveSessionLoaded(selectedUid);
+      renderUserSelect?.();
+      updateActiveSessionNotice?.();
+      updateActiveSessionToast?.();
+    });
+  }catch(e){ recordError?.('adminLiveFixLiveOwnersListener', e); }
+
+  adminLiveFixStartAutoSync();
+
   requireDeleteWord = function(){ return true; };
 })();
 
