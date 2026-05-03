@@ -2965,9 +2965,11 @@ async function runSystemCheck(){
   }));
 
   items.push(await safeCheck("history читается", async () => {
-    const snap = await get(ref(db, "history"));
+    const checkUid = selectedUid || uid;
+    if(!checkUid) return "UID не выбран — проверка history пропущена";
+    const snap = await get(query(ref(db, `history/${checkUid}`), limitToLast(1)));
     const count = snap.exists() ? Object.keys(snap.val() || {}).filter(k => k !== "_init").length : 0;
-    return `UID в history: ${count}`;
+    return `history/${checkUid}: доступ OK · последних точек: ${count}`;
   }));
 
   items.push(await safeCheck("journal читается", async () => {
@@ -3517,27 +3519,26 @@ function notifyLiveGpsProfileChanges(liveSnapshot){
 }
 
 async function loadAllData(){
+  // LOW TRAFFIC FIX: load history only for selected user, not the whole /history tree.
+  const uid = selectedUid || (allUsers && allUsers[0]) || "";
   const [historySnap, liveSnap, usersSnap] = await Promise.all([
-    get(ref(db,"history")),
+    uid ? get(ref(db, `history/${uid}`)) : Promise.resolve({ val: () => ({}) }),
     get(ref(db,"live")),
     get(ref(db,"users"))
   ]);
 
   usersMeta = usersSnap.val() || {};
-  historyByUid = {};
   liveByUid = liveSnap.val() || {};
-  const histRaw = historySnap.val() || {};
-
-  Object.entries(histRaw).forEach(([uid, pointsObj])=>{
-    historyByUid[uid] = Object.values(pointsObj||{})
+  if(uid){
+    const histRaw = historySnap.val() || {};
+    historyByUid = { ...historyByUid, [uid]: Object.values(histRaw||{})
       .filter(Boolean)
-      .sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
-  });
+      .sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0)) };
+  }
 
   const ids = new Set([
     ...(allUsers || []),
     ...Object.keys(usersMeta || {}),
-    ...Object.keys(historyByUid || {}),
     ...Object.keys(liveByUid || {}),
     ...Object.keys(adminsMap || {})
   ].filter(uid => uid && uid !== "_init"));
@@ -6568,7 +6569,7 @@ if (qs("clearOldEventsBtn")) qs("clearOldEventsBtn").onclick = async()=>{
   }
 };
 
-if (qs("findEmptyProfilesBtn")) qs("findEmptyProfilesBtn").onclick = async()=>{ await loadUsers(); await loadAllData(); renderEmptyProfilesList(); };
+if (qs("findEmptyProfilesBtn")) qs("findEmptyProfilesBtn").onclick = async()=>{ await loadUsers(); renderEmptyProfilesList(); };
 if (qs("deleteEmptyProfilesBtn")) qs("deleteEmptyProfilesBtn").onclick = async()=>deleteEmptyProfiles();
 bindVisibilityControls();
 if (qs("clearShareResultBtn")) qs("clearShareResultBtn").onclick = ()=>{ createdShareUrl=""; qs("shareResultBox").classList.add("hidden"); };
@@ -6587,7 +6588,7 @@ qs("sessionStatusFilter").onchange=renderSessions;
 
 qs("userSelect").onchange=()=>{ selectedUid=qs("userSelect").value; if(qs("visibilityPanel") && !qs("visibilityPanel").classList.contains("hidden")){ selectedVisibilityUid = selectedUid; renderVisibilityPanel(); } updateUsage(); updateTodaySummary(); renderHistory(); updateNowFromAvailableSources(); renderSessions(); };
 qs("viewModeSelect").onchange=()=>{ updateUsage(); updateTodaySummary(); renderHistory(); updateNowFromAvailableSources(); renderSessions(); };
-if (qs("refreshUsersBtn")) qs("refreshUsersBtn").onclick = async()=>{ await loadUsers(); await loadAllData(); showToast("Пользователи обновлены","success"); };
+if (qs("refreshUsersBtn")) qs("refreshUsersBtn").onclick = async()=>{ await loadUsers(); showToast("Пользователи обновлены","success"); };
 
 if (qs("deleteHistoryBtn")) qs("deleteHistoryBtn").onclick = async()=>{ const count = Object.values(historyByUid).flat().length; if(!confirm(`Очистить всю ветку history?\nТочек: ${count}`)) return; try{ await safeAction("Очистка history", async()=>{ await remove(ref(db,"history")); await logAction("delete_history","Очищена ветка history"); await loadAllData(); }, "History очищена"); }catch(e){} };
 if (qs("deleteLiveBtn")) qs("deleteLiveBtn").onclick = async()=>{ const c = Object.keys(allSessions||{}).filter(k=>k!=="_init").length; if(!confirm(`Очистить live, liveSessions и liveOwners?\nСессий: ${c}`)) return; try{ await safeAction("Очистка live", async()=>{ await update(ref(db),{live:null,liveSessions:null,liveOwners:null}); await logAction("delete_live","Очищены live/liveSessions/liveOwners"); await loadAllData(); await loadSessions(); }, "Live очищен"); }catch(e){} };
@@ -6733,30 +6734,8 @@ onAuthStateChanged(auth, async user => {
     renderJournal();
     updateNowFromAvailableSources();
   });
-  trackedOnValue(ref(db, "history"), snap => {
-    const raw=snap.val()||{};
-    historyByUid={};
-    Object.entries(raw).forEach(([uid,pointsObj])=>{
-      historyByUid[uid]=Object.values(pointsObj||{}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
-    });
-
-    const ids = new Set([
-      ...(allUsers || []),
-      ...Object.keys(usersMeta || {}),
-      ...Object.keys(historyByUid || {}),
-      ...Object.keys(liveByUid || {}),
-      ...Object.keys(adminsMap || {})
-    ].filter(uid => uid && uid !== "_init"));
-
-    allUsers = [...ids].sort((a,b)=>getDisplayName(a).localeCompare(getDisplayName(b), "ru"));
-    if(!selectedUid && allUsers.length) selectedUid = allUsers[0];
-    renderUserSelect?.();
-
-    historyLoaded = true;
-    updateUsage();
-    renderHistory();
-    updateNowFromAvailableSources();
-  });
+  // LOW TRAFFIC FIX: do not keep a realtime listener on the whole history tree.
+  // History is loaded only when the History tab / refresh button is used.
   trackedOnValue(query(ref(db, "liveSessions"), limitToLast(ADMIN_SESSIONS_LIMIT)), snap => { allSessions=snap.val()||{}; updateUsage(); renderSessions(); updateActiveSessionToast(); updateNowFromAvailableSources(); });
   trackedOnValue(ref(db, "adminLogs/deletions"), snap => { deletionsLog=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0)); renderJournal(); });
   trackedOnValue(ref(db, "adminLogs/actions"), snap => { actionLogs=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0)); renderJournal(); });
@@ -6790,7 +6769,9 @@ onAuthStateChanged(auth, async user => {
   startGpsProfilesRealtimeSync();
   await loadUsers();
   restoreUiState();
-  await loadAllData();
+  // LOW TRAFFIC FIX: do not auto-load history on admin open.
+  // Use the History tab / refresh button when needed.
+  historyLoaded = false;
   await loadSessions();
   await renderBackups();
   // Low traffic: automatic full backup disabled on open; use Backup button manually.
@@ -9538,158 +9519,6 @@ setInterval(() => {
     trackedOnValue(ref(db, 'liveOwners'), snap => { window.liveOwnersByUid = snap.val() || {}; renderUserSelect?.(); updateActiveSessionNotice(); updateActiveSessionToast(); });
     trackedOnValue(ref(db, 'live'), snap => { liveByUid = snap.val() || {}; updateUsage(); renderJournal(); updateNowFromAvailableSources(); updateActiveSessionNotice(); updateActiveSessionToast(); });
   }catch(e){ recordError('liveFix67Listeners', e); }
-
-
-  // === Admin live improvement: detailed opens, route button, auto-sync active session without manual refresh ===
-  function adminLiveFixOpenStatsHtml(stats){
-    stats = stats || {};
-    const openCount = Number(stats.openCount || stats.opens || stats.count || 0);
-    const first = Number(stats.firstOpenAt || stats.firstAt || stats.createdAt || 0);
-    const last = Number(stats.lastOpenAt || stats.lastAt || stats.updatedAt || 0);
-    const unique = Number(stats.uniqueCount || stats.uniqueOpens || stats.uniqueVisitors || 0);
-    const lastAge = last ? (adminRelTime(last) + ' назад') : '—';
-    const lines = [`<b>${openCount}</b>`];
-    if(unique) lines.push(`<span class="smallMuted">уник.: ${unique}</span>`);
-    lines.push(`<span class="smallMuted">последнее: ${lastAge}</span>`);
-    return lines.join('<br>');
-  }
-
-  function adminLiveFixFirstLastHtml(stats){
-    stats = stats || {};
-    const first = Number(stats.firstOpenAt || stats.firstAt || 0);
-    const last = Number(stats.lastOpenAt || stats.lastAt || 0);
-    return `Первое: ${fmtTime(first)}<br>Последнее: ${fmtTime(last)}`;
-  }
-
-  async function adminLiveFixEnsureActiveSessionLoaded(uid){
-    uid = uid || selectedUid || '';
-    if(!uid) return false;
-    try{
-      let token = String(window.liveOwnersByUid?.[uid]?.activeSessionId || liveByUid?.[uid]?.sessionId || liveByUid?.[uid]?.activeSessionId || liveByUid?.[uid]?.liveSessionId || '').trim();
-      if(!token){
-        const ownerSnap = await get(ref(db, `liveOwners/${uid}/activeSessionId`));
-        token = String(ownerSnap.val() || '').trim();
-      }
-      if(!token) return false;
-      const sessionSnap = await get(ref(db, `liveSessions/${token}`));
-      if(!sessionSnap.exists()) return false;
-      const session = sessionSnap.val() || {};
-      const old = JSON.stringify(allSessions?.[token] || null);
-      allSessions = Object.assign({}, allSessions || {}, { [token]: session });
-      const changed = old !== JSON.stringify(session);
-      if(changed){
-        updateUsage?.();
-        renderSessions?.();
-        updateActiveSessionNotice?.();
-        updateActiveSessionToast?.();
-        updateNowFromAvailableSources?.();
-      }
-      return changed;
-    }catch(e){
-      recordError?.('adminLiveFixEnsureActiveSessionLoaded', e);
-      return false;
-    }
-  }
-
-  let adminLiveFixSyncTimer = null;
-  function adminLiveFixStartAutoSync(){
-    if(adminLiveFixSyncTimer) return;
-    adminLiveFixSyncTimer = setInterval(()=>{
-      try{
-        const sessionsPanelVisible = qs('sessionsPanel') && !qs('sessionsPanel').classList.contains('hidden');
-        const nowPanelVisible = qs('nowPanel') && !qs('nowPanel').classList.contains('hidden');
-        if(sessionsPanelVisible || nowPanelVisible) adminLiveFixEnsureActiveSessionLoaded(selectedUid);
-      }catch(e){}
-    }, 4000);
-  }
-
-  const adminLiveFixOldRenderSessions = renderSessions;
-  renderSessions = function(){
-    const tbody = qs('sessionsTbody');
-    if(!tbody) return adminLiveFixOldRenderSessions();
-    tbody.innerHTML='';
-    const search=(qs('sessionSearchInput').value||'').trim().toLowerCase(), statusFilter=qs('sessionStatusFilter').value;
-    const entries=Object.entries(allSessions||{}).filter(([token])=>token!=='_init').map(([token,session])=>[token,getSessionRoot(session),getSessionStatus(session)]).filter(([token,session,status])=>{
-      if(statusFilter!=='all' && status!==statusFilter) return false;
-      if(search && !token.toLowerCase().includes(search)) return false;
-      if(selectedUid && session?.meta?.ownerUid && qs('viewModeSelect').value==='selected' && session.meta.ownerUid!==selectedUid) return false;
-      return true;
-    }).sort((a,b)=>Number((b[1]?.meta?.createdAt||b[1]?.meta?.startedAt||0))-Number((a[1]?.meta?.createdAt||a[1]?.meta?.startedAt||0)));
-    if(!entries.length){
-      tbody.innerHTML=`<tr><td colspan="8">Сессий нет</td></tr>`;
-      const createBtn = qs('createShareBtn');
-      if(createBtn){ createBtn.disabled = false; createBtn.textContent = 'Создать live-ссылку'; }
-      updateActiveSessionToast?.();
-      adminLiveFixEnsureActiveSessionLoaded(selectedUid);
-      return;
-    }
-    for(const [token,session,status] of entries){
-      const meta=session?.meta||{}, stats=session?.viewStats||{}, tr=document.createElement('tr');
-      const lpInfo = getSessionLastPointInfo(session, status);
-      const statusHtml = getSessionStatusLabel(status) + (meta.paused === true || meta.status === 'paused' ? '<br><span class="tag idle">пауза</span>' : '');
-      tr.innerHTML=`<td class="mono">${token}<br><span class="tag">${getDisplayName(meta.ownerUid)||meta.ownerUid||'—'}</span></td><td>${statusHtml}</td><td>${lpInfo.html}</td><td>${lpInfo.age}</td><td>${fmtTime(meta.expiresAt)}</td><td>${adminLiveFixOpenStatsHtml(stats)}</td><td>${adminLiveFixFirstLastHtml(stats)}</td><td><div class="row"><button class="secondary small" data-copy="${token}">Копировать</button><button class="secondary small" data-share="${token}">Поделиться</button><button class="secondary small" data-open="${token}">Открыть</button><button class="secondary small" data-route="${token}">Маршрут</button><button class="secondary small" data-gmaps="${token}">Google Maps</button><button class="secondary small" data-center="${token}">Центр</button><button class="warn small" data-end="${token}">Завершить</button><button class="danger small" data-delete="${token}">Удалить</button></div></td>`;
-      tbody.appendChild(tr);
-    }
-    tbody.querySelectorAll('[data-copy]').forEach(btn=>btn.onclick=async()=>{ try{ await navigator.clipboard.writeText(buildShareUrl(btn.dataset.copy)); showToast('Ссылка скопирована','success'); }catch(e){ alert('Ошибка копирования: '+errText(e)); }});
-    tbody.querySelectorAll('[data-share]').forEach(btn=>btn.onclick=async()=>{ const url = buildShareUrl(btn.dataset.share); try{ if(navigator.share){ await navigator.share({title:'MyGps Live', text:'Активная live-ссылка', url}); } else { await navigator.clipboard.writeText(url); showToast('Ссылка скопирована для отправки','success'); } }catch(e){} });
-    tbody.querySelectorAll('[data-open]').forEach(btn=>btn.onclick=()=>window.open(buildShareUrl(btn.dataset.open), '_blank', 'noopener,noreferrer'));
-    tbody.querySelectorAll('[data-route]').forEach(btn=>btn.onclick=()=>showSessionOnMap(btn.dataset.route));
-    tbody.querySelectorAll('[data-center]').forEach(btn=>btn.onclick=()=>centerSessionOnPoint(btn.dataset.center));
-    tbody.querySelectorAll('[data-gmaps]').forEach(btn=>btn.onclick=()=>{
-      const session=getSessionRoot(allSessions[btn.dataset.gmaps])||{};
-      const p=session?.public?.lastPoint || Object.values(session?.public?.recentPoints||{}).filter(Boolean).sort((a,b)=>getPointTs(a)-getPointTs(b)).slice(-1)[0];
-      const lat = getPointLat(p), lng = getPointLng(p);
-      if(!p || lat==null || lng==null) return showToast('Нет точки','warn');
-      window.open(`https://www.google.com/maps?q=${lat},${lng}`,'_blank');
-    });
-    tbody.querySelectorAll('[data-end]').forEach(btn=>btn.onclick=()=>endSession(btn.dataset.end));
-    tbody.querySelectorAll('[data-delete]').forEach(btn=>btn.onclick=()=>deleteSession(btn.dataset.delete));
-    const createBtn = qs('createShareBtn');
-    if(createBtn){
-      const hasActiveForSelected = entries.some(([token,session,status]) => status==='active' && (!selectedUid || session?.meta?.ownerUid===selectedUid) && Number(session?.meta?.expiresAt||0) > Date.now());
-      createBtn.disabled = hasActiveForSelected;
-      createBtn.textContent = hasActiveForSelected ? 'Есть активная ссылка' : 'Создать live-ссылку';
-    }
-    updateActiveSessionToast?.();
-  };
-
-  const adminLiveFixOldEndSession = endSession;
-  endSession = async function(token){
-    if(!confirm(`Завершить live-сессию ${token}?`)) return;
-    try{
-      const ownerUid = getSessionRoot(allSessions?.[token])?.meta?.ownerUid || '';
-      const now = Date.now();
-      const updates = {
-        [`liveSessions/${token}/meta/active`]: false,
-        [`liveSessions/${token}/meta/paused`]: false,
-        [`liveSessions/${token}/meta/status`]: 'stopped',
-        [`liveSessions/${token}/meta/endedAt`]: now
-      };
-      if(ownerUid){
-        updates[`live/${ownerUid}/active`] = false;
-        updates[`live/${ownerUid}/paused`] = false;
-        updates[`live/${ownerUid}/status`] = 'stopped';
-        updates[`live/${ownerUid}/endedAt`] = now;
-        updates[`liveOwners/${ownerUid}/activeSessionId`] = null;
-      }
-      await update(ref(db), updates);
-      await logAction('session_end', `Завершена live-сессия ${token}`);
-      await loadSessions();
-      showToast('Сессия завершена','success');
-    }catch(e){ recordError('endSessionLiveFix', e); showToast('Завершение live-сессии: '+errText(e),'error',3600); }
-  };
-
-  try{
-    trackedOnValue(ref(db, 'liveOwners'), snap => {
-      window.liveOwnersByUid = snap.val() || {};
-      adminLiveFixEnsureActiveSessionLoaded(selectedUid);
-      renderUserSelect?.();
-      updateActiveSessionNotice?.();
-      updateActiveSessionToast?.();
-    });
-  }catch(e){ recordError?.('adminLiveFixLiveOwnersListener', e); }
-
-  adminLiveFixStartAutoSync();
 
   requireDeleteWord = function(){ return true; };
 })();
