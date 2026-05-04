@@ -593,7 +593,11 @@
           <button id="range1hBtn" class="secondary">1 час</button>
           <button id="range24hBtn" class="secondary">24 часа</button>
           <button id="refreshHistoryBtn">Обновить историю</button>
+          <button id="historyLightModeBtn" class="success" type="button">Лёгкая история</button>
+          <button id="historyFullModeBtn" class="secondary" type="button">Полная история</button>
         </div>
+        <div id="historyTrafficInfo" class="notice smallMuted">История: лёгкий режим, максимум 3000 точек. Выбери период и нажми “Обновить историю”.</div>
+        <div id="historyLargeRangeWarning" class="notice hidden" style="border-color:rgba(234,179,8,.45);background:rgba(180,83,9,.18);color:#fde68a;font-weight:700">⚠ Большой период. Лучше выбрать 1 час или день, чтобы не расходовать Firebase traffic.</div>
         <div class="row">
           <input id="maxAccuracyFilter" type="number" min="0" step="0.01" placeholder="Макс. accuracy, м"/>
           <input id="minSpeedFilter" type="number" min="0" step="0.1" placeholder="Скорость от, км/ч"/>
@@ -9542,204 +9546,6 @@ setInterval(() => {
   requireDeleteWord = function(){ return true; };
 })();
 
-
-
-// === MyGps final admin upgrade: light/full history + traffic info + live open details/IP ===
-(function(){
-  const HISTORY_LIGHT_LIMIT = 3000;
-  let historyLoadMode = localStorage.getItem('mygps_history_load_mode') || 'light';
-  if(historyLoadMode !== 'full') historyLoadMode = 'light';
-
-  function safeEl(id){ return document.getElementById(id); }
-  function escapeHtml(v){
-    return String(v ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
-  }
-  function num(v){ const n=Number(v); return Number.isFinite(n)?n:0; }
-  function getRangeMs(){
-    const fd=safeEl('fromDate')?.value, td=safeEl('toDate')?.value;
-    const fh=safeEl('fromHour')?.value || '0', fm=safeEl('fromMinute')?.value || '0';
-    const th=safeEl('toHour')?.value || '23', tm=safeEl('toMinute')?.value || '59';
-    let start=0,end=Date.now();
-    if(fd){ const d=new Date(fd); d.setHours(Number(fh)||0,Number(fm)||0,0,0); start=d.getTime(); }
-    if(td){ const d=new Date(td); d.setHours(Number(th)||23,Number(tm)||59,59,999); end=d.getTime(); }
-    return {start,end};
-  }
-  function fmtDateShort(ts){
-    if(!ts) return '—';
-    try{ return new Date(Number(ts)).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); }catch(e){ return '—'; }
-  }
-  function periodLabel(start,end){
-    const day=24*60*60*1000;
-    const span=Math.max(0,end-start);
-    if(span <= 65*60*1000) return '1 час';
-    if(span <= 26*60*60*1000) return 'день';
-    if(span <= 8*day) return 'неделя';
-    return Math.ceil(span/day)+' дн';
-  }
-  function ensureHistoryTrafficUi(){
-    const panel=safeEl('historyPanel');
-    const refreshBtn=safeEl('refreshHistoryBtn');
-    if(!panel || !refreshBtn || safeEl('historyTrafficBox')) return;
-    const box=document.createElement('div');
-    box.id='historyTrafficBox';
-    box.className='notice';
-    box.innerHTML=`
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:space-between">
-        <div>
-          <strong>Режим истории:</strong>
-          <span id="historyLoadModeText">—</span>
-          <div id="historyTrafficText" class="smallMuted" style="margin-top:4px">История ещё не загружена.</div>
-        </div>
-        <div class="toolbar" style="margin-top:0">
-          <button id="historyLightModeBtn" type="button" class="small secondary">Лёгкая история</button>
-          <button id="historyFullModeBtn" type="button" class="small secondary">Полная история</button>
-        </div>
-      </div>
-      <div id="historyBigRangeWarning" class="error hidden" style="margin-top:10px">⚠ Большой период. Лучше выбрать 1 час или день, чтобы не тратить Firebase Downloads.</div>
-    `;
-    refreshBtn.closest('.row')?.after(box);
-    safeEl('historyLightModeBtn').onclick=()=>{ historyLoadMode='light'; localStorage.setItem('mygps_history_load_mode','light'); updateHistoryTrafficUi(); smartLoadHistory(); };
-    safeEl('historyFullModeBtn').onclick=()=>{ if(confirm('Полная история может сильно увеличить Firebase Downloads. Загрузить полностью за выбранный период?')){ historyLoadMode='full'; localStorage.setItem('mygps_history_load_mode','full'); updateHistoryTrafficUi(); smartLoadHistory(); } };
-    updateHistoryTrafficUi();
-  }
-  function updateHistoryTrafficUi(info){
-    const modeText=safeEl('historyLoadModeText');
-    const trafficText=safeEl('historyTrafficText');
-    const warn=safeEl('historyBigRangeWarning');
-    const light=safeEl('historyLightModeBtn');
-    const full=safeEl('historyFullModeBtn');
-    const {start,end}=getRangeMs();
-    const span=end-start;
-    if(modeText) modeText.textContent = historyLoadMode === 'full' ? 'полная' : `лёгкая, лимит ${HISTORY_LIGHT_LIMIT}`;
-    if(light){ light.className = historyLoadMode==='light' ? 'small success' : 'small secondary'; }
-    if(full){ full.className = historyLoadMode==='full' ? 'small warn' : 'small secondary'; }
-    if(warn){ warn.classList.toggle('hidden', !(span > 26*60*60*1000)); }
-    if(trafficText){
-      if(info){
-        const limitNote = info.limited ? `; показаны последние ${info.loaded} из выбранного периода` : '';
-        trafficText.textContent = `Загружено точек: ${info.loaded}; режим: ${info.mode}; период: ${periodLabel(start,end)}${limitNote}`;
-      }else{
-        trafficText.textContent = `Режим: ${historyLoadMode === 'full' ? 'полный' : 'экономный'}; период: ${periodLabel(start,end)}.`;
-      }
-    }
-  }
-  function pointTs(p){ return num(p?.timestamp ?? p?.ts ?? p?.time ?? p?.createdAt); }
-  async function smartLoadHistory(){
-    ensureHistoryTrafficUi();
-    const uid = selectedUid || safeEl('userSelect')?.value;
-    if(!uid){ showToast?.('Выбери пользователя','warn'); return; }
-    const {start,end}=getRangeMs();
-    if(!start || !end || end < start){ showToast?.('Неверный период истории','warn'); return; }
-    try{
-      const histRef=ref(db, `history/${uid}`);
-      const q = historyLoadMode === 'full'
-        ? query(histRef, orderByChild('timestamp'), startAt(start), endAt(end))
-        : query(histRef, orderByChild('timestamp'), startAt(start), endAt(end), limitToLast(HISTORY_LIGHT_LIMIT));
-      const snap=await get(q);
-      const raw=snap.val()||{};
-      const points=Object.values(raw).filter(Boolean).filter(p=>{
-        const t=pointTs(p); return t>=start && t<=end;
-      }).sort((a,b)=>pointTs(a)-pointTs(b));
-      historyByUid = historyByUid || {};
-      historyByUid[uid]=points;
-      selectedUid=uid;
-      historyLoaded=true;
-      const limited = historyLoadMode === 'light' && points.length >= HISTORY_LIGHT_LIMIT;
-      updateHistoryTrafficUi({loaded:points.length, mode: historyLoadMode === 'full' ? 'полный' : 'экономный', limited});
-      updateUsage?.();
-      updateTodaySummary?.();
-      renderHistory?.();
-      showToast?.(`История загружена: ${points.length} точек`, 'success');
-    }catch(e){
-      recordError?.('smartLoadHistory', e);
-      showToast?.('Ошибка загрузки истории: '+(e.message||e),'error');
-    }
-  }
-  function bindHistoryTrafficControls(){
-    ensureHistoryTrafficUi();
-    ['refreshHistoryBtn','applyFiltersBtn'].forEach(id=>{
-      const btn=safeEl(id); if(!btn || btn.dataset.smartHistoryBound==='1') return;
-      btn.dataset.smartHistoryBound='1';
-      btn.onclick=async(ev)=>{ ev?.preventDefault?.(); await smartLoadHistory(); };
-    });
-    ['fromDate','toDate','fromHour','toHour','fromMinute','toMinute'].forEach(id=>{
-      const el=safeEl(id); if(!el || el.dataset.historyWarnBound==='1') return;
-      el.dataset.historyWarnBound='1';
-      el.addEventListener('change',()=>updateHistoryTrafficUi());
-    });
-  }
-
-  function openStatsHtml(stats){
-    const openCount = num(stats.openCount);
-    const opensObj = stats.opens || stats.openEvents || {};
-    const opens = Object.entries(opensObj).map(([id,o])=>({id,...(o||{})})).sort((a,b)=>num(b.openedAt||b.timestamp||b.ts)-num(a.openedAt||a.timestamp||a.ts)).slice(0,5);
-    const lastIp = stats.lastIp || stats.ip || (opens[0]?.ip) || '';
-    const lastGeo = [stats.lastCity || opens[0]?.city, stats.lastCountry || opens[0]?.country].filter(Boolean).join(', ');
-    const lastUa = stats.lastUserAgent || opens[0]?.userAgent || '';
-    let html = `<div><b>${openCount}</b></div><div class="smallMuted">1-е: ${fmtDateShort(stats.firstOpenAt)}<br>посл.: ${fmtDateShort(stats.lastOpenAt || stats.lastOpenedAt)}</div>`;
-    html += `<div class="smallMuted" style="margin-top:4px">IP: ${escapeHtml(lastIp || 'нет данных')}<br>${escapeHtml(lastGeo || 'город/страна: нет данных')}</div>`;
-    if(lastUa) html += `<div class="smallMuted" title="${escapeHtml(lastUa)}">${escapeHtml(String(lastUa).slice(0,44))}${String(lastUa).length>44?'…':''}</div>`;
-    if(opens.length){
-      html += `<details style="margin-top:6px"><summary class="smallMuted" style="cursor:pointer">последние открытия</summary>`;
-      html += opens.map(o=>{
-        const t=fmtDateShort(o.openedAt||o.timestamp||o.ts);
-        const geo=[o.city,o.country].filter(Boolean).join(', ') || '—';
-        const ua=String(o.userAgent||'').slice(0,54);
-        return `<div class="smallMuted" style="margin-top:5px;border-top:1px solid var(--border);padding-top:5px">${t}<br>IP: ${escapeHtml(o.ip||'—')}<br>${escapeHtml(geo)}<br>${escapeHtml(ua)}</div>`;
-      }).join('');
-      html += `</details>`;
-    }
-    return html;
-  }
-
-  function renderSessionsWithOpenDetails(){
-    const tbody=safeEl('sessionsTbody'); if(!tbody || typeof getSessionRoot!=='function') return false;
-    tbody.innerHTML='';
-    const search=(safeEl('sessionSearchInput')?.value||'').trim().toLowerCase();
-    const statusFilter=safeEl('sessionStatusFilter')?.value || 'all';
-    const entries=Object.entries(allSessions||{}).filter(([token])=>token!=='_init').map(([token,session])=>[token,getSessionRoot(session),getSessionStatus(session)]).filter(([token,session,status])=>{
-      if(statusFilter!=='all' && status!==statusFilter) return false;
-      if(search && !token.toLowerCase().includes(search)) return false;
-      if(selectedUid && session?.meta?.ownerUid && safeEl('viewModeSelect')?.value==='selected' && session.meta.ownerUid!==selectedUid) return false;
-      return true;
-    }).sort((a,b)=>num(b[1]?.meta?.createdAt||0)-num(a[1]?.meta?.createdAt||0));
-    if(!entries.length){ tbody.innerHTML='<tr><td colspan="8">Сессий нет</td></tr>'; return true; }
-    for(const [token,session,status] of entries){
-      const meta=session?.meta||{}, stats=session?.viewStats||{}, tr=document.createElement('tr');
-      const lpInfo = getSessionLastPointInfo(session, status);
-      tr.innerHTML=`<td class="mono">${escapeHtml(token)}<br><span class="tag">${escapeHtml(getDisplayName(meta.ownerUid)||meta.ownerUid||'—')}</span></td><td>${getSessionStatusLabel(status)}</td><td>${lpInfo.html}</td><td>${lpInfo.age}</td><td>${fmtTime(meta.expiresAt)}</td><td>${openStatsHtml(stats)}</td><td>${fmtTime(stats.firstOpenAt)}<br>${fmtTime(stats.lastOpenAt||stats.lastOpenedAt)}</td><td><div class="row"><button class="secondary small" data-copy="${escapeHtml(token)}">Копировать</button><button class="secondary small" data-share="${escapeHtml(token)}">Поделиться</button><button class="secondary small" data-open="${escapeHtml(token)}">Карта</button><button class="secondary small" data-gmaps="${escapeHtml(token)}">Google Maps</button><button class="secondary small" data-center="${escapeHtml(token)}">Центр</button><button class="secondary small" data-route="${escapeHtml(token)}">Маршрут</button><button class="warn small" data-end="${escapeHtml(token)}">Завершить</button><button class="danger small" data-delete="${escapeHtml(token)}">Удалить</button></div></td>`;
-      tbody.appendChild(tr);
-    }
-    tbody.querySelectorAll('[data-copy]').forEach(btn=>btn.onclick=async()=>{ try{ await navigator.clipboard.writeText(buildShareUrl(btn.dataset.copy)); showToast('Ссылка скопирована','success'); }catch(e){ alert('Ошибка копирования: '+(e.message||e)); }});
-    tbody.querySelectorAll('[data-share]').forEach(btn=>btn.onclick=async()=>{ const url=buildShareUrl(btn.dataset.share); try{ if(navigator.share){ await navigator.share({title:'MyGps Live', text:'Активная live-ссылка', url}); } else { await navigator.clipboard.writeText(url); showToast('Ссылка скопирована для отправки','success'); }}catch(e){} });
-    tbody.querySelectorAll('[data-open]').forEach(btn=>btn.onclick=()=>window.open(buildShareUrl(btn.dataset.open),'_blank','noopener,noreferrer'));
-    tbody.querySelectorAll('[data-center]').forEach(btn=>btn.onclick=()=>centerSessionOnPoint(btn.dataset.center));
-    tbody.querySelectorAll('[data-gmaps]').forEach(btn=>btn.onclick=()=>{ const session=getSessionRoot(allSessions[btn.dataset.gmaps])||{}; const p=session?.public?.lastPoint; const lat=getPointLat(p), lng=getPointLng(p); if(!p||lat==null||lng==null) return showToast('Нет точки','warn'); window.open(`https://www.google.com/maps?q=${lat},${lng}`,'_blank'); });
-    tbody.querySelectorAll('[data-route]').forEach(btn=>btn.onclick=async()=>{ const token=btn.dataset.route; const session=getSessionRoot(allSessions[token])||{}; const meta=session.meta||{}; if(meta.ownerUid){ selectedUid=meta.ownerUid; if(safeEl('userSelect')) safeEl('userSelect').value=selectedUid; } const created=num(meta.createdAt)||num(meta.startedAt)||Date.now()-60*60*1000; const ended=num(meta.endedAt)||num(meta.expiresAt)||Date.now(); const d1=new Date(created), d2=new Date(ended); if(safeEl('fromDate')) safeEl('fromDate').value=d1.toISOString().slice(0,10); if(safeEl('toDate')) safeEl('toDate').value=d2.toISOString().slice(0,10); if(safeEl('fromHour')) safeEl('fromHour').value=String(d1.getHours()).padStart(2,'0'); if(safeEl('fromMinute')) safeEl('fromMinute').value=String(d1.getMinutes()).padStart(2,'0'); if(safeEl('toHour')) safeEl('toHour').value=String(d2.getHours()).padStart(2,'0'); if(safeEl('toMinute')) safeEl('toMinute').value=String(d2.getMinutes()).padStart(2,'0'); document.querySelector('.tab-btn[data-tab="historyPanel"]')?.click(); await smartLoadHistory(); });
-    tbody.querySelectorAll('[data-end]').forEach(btn=>btn.onclick=()=>endSession(btn.dataset.end));
-    tbody.querySelectorAll('[data-delete]').forEach(btn=>btn.onclick=()=>deleteSession(btn.dataset.delete));
-    updateActiveSessionToast?.();
-    return true;
-  }
-
-  setTimeout(()=>{
-    bindHistoryTrafficControls();
-    try{ window.smartLoadHistory = smartLoadHistory; }catch(e){}
-    try{
-      if(typeof renderSessions === 'function' && !renderSessions.__openDetailsPatched){
-        renderSessions = function(){ if(!renderSessionsWithOpenDetails()) return; };
-        renderSessions.__openDetailsPatched = true;
-        renderSessionsWithOpenDetails();
-      }
-    }catch(e){ console.warn('renderSessions patch skipped', e); }
-  }, 1200);
-
-  document.addEventListener('click',(ev)=>{
-    const tab=ev.target?.closest?.('.tab-btn[data-tab]');
-    if(tab?.dataset?.tab==='historyPanel') setTimeout(()=>{ bindHistoryTrafficControls(); updateHistoryTrafficUi(); },200);
-    if(tab?.dataset?.tab==='sessionsPanel') setTimeout(()=>{ try{ renderSessionsWithOpenDetails(); }catch(e){} },200);
-  },true);
-})();
 </script>
 
 
@@ -9747,6 +9553,137 @@ setInterval(() => {
 <script type="module">
 // This script runs after the main module. Most map variables are module-scoped there,
 // so we use DOM + Leaflet container resize events through global events and safe retries.
+
+// === MyGps history smart traffic mode v1 ===
+let historyLoadMode = localStorage.getItem("mygps_history_load_mode") || "light";
+const HISTORY_LIGHT_LIMIT = 3000;
+
+function getDateTimeFromHistoryInputs(prefix){
+  const dateEl = qs(prefix + "Date");
+  const hourEl = qs(prefix + "Hour");
+  const minuteEl = qs(prefix + "Minute");
+  if(!dateEl || !dateEl.value) return null;
+  const [y,m,d] = dateEl.value.split("-").map(Number);
+  const h = Number(hourEl?.value || 0);
+  const min = Number(minuteEl?.value || 0);
+  return new Date(y, (m || 1) - 1, d || 1, h, min, prefix === "to" ? 59 : 0, prefix === "to" ? 999 : 0).getTime();
+}
+
+function getSelectedHistoryRange(){
+  let from = getDateTimeFromHistoryInputs("from");
+  let to = getDateTimeFromHistoryInputs("to");
+  const now = Date.now();
+  if(!from || !to){
+    const start = new Date();
+    start.setHours(0,0,0,0);
+    from = from || start.getTime();
+    to = to || now;
+  }
+  if(from > to){
+    const t = from; from = to; to = t;
+  }
+  return {from, to};
+}
+
+function formatHistoryRangeLabel(from, to){
+  try{
+    const sameDay = new Date(from).toDateString() === new Date(to).toDateString();
+    if(sameDay) return new Date(from).toLocaleDateString("ru-RU");
+    return `${new Date(from).toLocaleDateString("ru-RU")} — ${new Date(to).toLocaleDateString("ru-RU")}`;
+  }catch(e){ return "выбранный период"; }
+}
+
+function updateHistoryModeButtons(){
+  const light = qs("historyLightModeBtn");
+  const full = qs("historyFullModeBtn");
+  if(light){ light.className = historyLoadMode === "light" ? "success" : "secondary"; }
+  if(full){ full.className = historyLoadMode === "full" ? "warn" : "secondary"; }
+}
+
+function updateHistoryTrafficInfo(loadedCount = null, totalHint = null, limitHit = false){
+  const info = qs("historyTrafficInfo");
+  const warn = qs("historyLargeRangeWarning");
+  const {from, to} = getSelectedHistoryRange();
+  const rangeMs = Math.max(0, to - from);
+  const days = rangeMs / 86400000;
+  const modeText = historyLoadMode === "light" ? `лёгкий, лимит ${HISTORY_LIGHT_LIMIT}` : "полный";
+  const countText = loadedCount == null ? "—" : String(loadedCount);
+  const periodText = formatHistoryRangeLabel(from, to);
+  const limitText = limitHit ? " Показаны последние точки в лимите — для полного маршрута нажми “Полная история”." : "";
+  if(info){
+    info.textContent = `Загружено точек: ${countText} / режим: ${modeText} / период: ${periodText}.${limitText}`;
+  }
+  if(warn){
+    const shouldWarn = days >= 1 || historyLoadMode === "full";
+    warn.classList.toggle("hidden", !shouldWarn);
+    warn.textContent = historyLoadMode === "full"
+      ? "⚠ Полная история может сильно увеличить Firebase Downloads. Лучше использовать 1 час или день."
+      : "⚠ Большой период. Лучше выбрать 1 час или день, чтобы не расходовать Firebase traffic.";
+  }
+  updateHistoryModeButtons();
+}
+
+async function loadHistorySmart(){
+  if(!selectedUid){
+    showToast?.("Пользователь не выбран", "warn");
+    return;
+  }
+  const {from, to} = getSelectedHistoryRange();
+  const uid = selectedUid;
+  const baseRef = ref(db, `history/${uid}`);
+  const constraints = [orderByChild("timestamp"), startAt(from), endAt(to)];
+  if(historyLoadMode === "light") constraints.push(limitToLast(HISTORY_LIGHT_LIMIT));
+  const snap = await get(query(baseRef, ...constraints));
+  const raw = snap.val() || {};
+  const points = Object.values(raw).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+  historyByUid[uid] = points;
+  historyLoaded = true;
+  updateHistoryTrafficInfo(points.length, null, historyLoadMode === "light" && points.length >= HISTORY_LIGHT_LIMIT);
+  updateUsage?.();
+  updateTodaySummary?.();
+  await renderHistory?.();
+  showToast?.(`История загружена: ${points.length} точек`, "success");
+}
+
+function bindHistorySmartControls(){
+  updateHistoryTrafficInfo(null);
+  const light = qs("historyLightModeBtn");
+  const full = qs("historyFullModeBtn");
+  const refresh = qs("refreshHistoryBtn");
+  if(light && light.dataset.smartBound !== "1"){
+    light.dataset.smartBound = "1";
+    light.onclick = async () => { historyLoadMode = "light"; localStorage.setItem("mygps_history_load_mode", historyLoadMode); updateHistoryTrafficInfo(null); await loadHistorySmart(); };
+  }
+  if(full && full.dataset.smartBound !== "1"){
+    full.dataset.smartBound = "1";
+    full.onclick = async () => {
+      if(!confirm("Полная история может сильно увеличить Firebase Downloads. Загрузить полный период?")) return;
+      historyLoadMode = "full";
+      localStorage.setItem("mygps_history_load_mode", historyLoadMode);
+      updateHistoryTrafficInfo(null);
+      await loadHistorySmart();
+    };
+  }
+  if(refresh){
+    refresh.onclick = async () => { await loadHistorySmart(); };
+  }
+  ["fromDate","fromHour","fromMinute","toDate","toHour","toMinute"].forEach(id => {
+    const el = qs(id);
+    if(el && el.dataset.historyInfoBound !== "1"){
+      el.dataset.historyInfoBound = "1";
+      el.addEventListener("change", () => updateHistoryTrafficInfo(null));
+    }
+  });
+}
+
+// Used by existing tab refresh code. It must stay light by default.
+async function loadHistory(){
+  return loadHistorySmart();
+}
+
+window.addEventListener("load", bindHistorySmartControls);
+document.addEventListener("click", () => setTimeout(bindHistorySmartControls, 50), true);
+
 (function(){
   const mapIds = ['liveMap','historyMap','sessionMap','geofenceMap'];
   let resizeTimer = null;
