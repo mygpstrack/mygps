@@ -371,6 +371,8 @@ function showEnd(message){
 }
 function hideEnd(){ qs('endOverlay').style.display='none'; }
 
+const LIVE_OPEN_TRACKING_ENDPOINT = "https://europe-west1-mygpslive-57196.cloudfunctions.net/trackLiveOpen";
+
 async function registerSessionOpen(meta = {}){
   if(!sessionId) return;
 
@@ -378,18 +380,62 @@ async function registerSessionOpen(meta = {}){
   if(sessionStorage.getItem(openKey) === '1') return;
 
   const now = Date.now();
+  const ownerUid = meta?.ownerUid || meta?.uid || meta?.createdBy || "";
+
+  // Preferred path: Cloud Function. It can see real client IP and request headers.
+  // If function is not deployed yet, live.html falls back to the old Firebase-only counter.
+  if(LIVE_OPEN_TRACKING_ENDPOINT){
+    try{
+      const res = await fetch(LIVE_OPEN_TRACKING_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId,
+          ownerUid,
+          url: location.href.split("#")[0],
+          referrer: document.referrer || "",
+          language: navigator.language || "",
+          screen: `${window.screen?.width || 0}x${window.screen?.height || 0}`,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || ""
+        })
+      });
+      if(res.ok){
+        sessionStorage.setItem(openKey, '1');
+        return;
+      }
+      console.warn('trackLiveOpen HTTP', res.status);
+    }catch(e){
+      console.warn('trackLiveOpen endpoint fallback', e);
+    }
+  }
+
   try{
     const statsRef = ref(db, `liveSessions/${sessionId}/viewStats`);
     await runTransaction(statsRef, current => {
       const next = current || {};
       return {
+        ...next,
         openCount: Number(next.openCount || 0) + 1,
         firstOpenAt: next.firstOpenAt || now,
-        lastOpenAt: now
+        lastOpenAt: now,
+        lastOpenedAt: now,
+        lastUserAgent: navigator.userAgent || "",
+        lastLanguage: navigator.language || "",
+        lastReferrer: document.referrer || ""
       };
     });
 
-    const ownerUid = meta?.ownerUid || meta?.uid || meta?.createdBy || "";
+    const openRef = push(ref(db, `liveSessions/${sessionId}/viewStats/opens`));
+    await set(openRef, {
+      openedAt: now,
+      timestamp: now,
+      source: "live.html-fallback",
+      userAgent: navigator.userAgent || "",
+      language: navigator.language || "",
+      referrer: document.referrer || "",
+      url: location.href.split("#")[0]
+    });
+
     if(ownerUid){
       const eventRef = push(ref(db, `events/${ownerUid}`));
       await set(eventRef, {
