@@ -5840,24 +5840,79 @@ function getRecentSourcePoints(){
   return points.slice(-5);
 }
 
+async function findActiveLiveSessionFreshForUid(uid){
+  if(!uid) return null;
+  const now = Date.now();
+  const localEntry = Object.entries(allSessions || {}).find(([token, session]) => {
+    if(token === "_init") return false;
+    const root = getSessionRoot(session);
+    const meta = root.meta || {};
+    const raw = String(meta.status || meta.linkStatus || '').toLowerCase();
+    const stopped = meta.active === false || !!meta.endedAt || ['stopped','stop','ended','inactive','expired'].includes(raw);
+    const expired = !meta.paused && Number(meta.expiresAt || 0) > 0 && Number(meta.expiresAt || 0) <= now;
+    return meta.ownerUid === uid && !stopped && !expired && (meta.active === true || meta.paused === true) && (meta.paused || !meta.expiresAt || Number(meta.expiresAt || 0) > now);
+  });
+  if(localEntry) return localEntry;
+
+  try{
+    const ownerSnap = await get(ref(db, `liveOwners/${uid}/activeSessionId`));
+    const token = String(ownerSnap.val() || '').trim();
+    if(token){
+      const sessionSnap = await get(ref(db, `liveSessions/${token}`));
+      const session = sessionSnap.val();
+      const root = getSessionRoot(session || {});
+      const meta = root.meta || {};
+      const raw = String(meta.status || meta.linkStatus || '').toLowerCase();
+      const stopped = meta.active === false || !!meta.endedAt || ['stopped','stop','ended','inactive','expired'].includes(raw);
+      const expired = !meta.paused && Number(meta.expiresAt || 0) > 0 && Number(meta.expiresAt || 0) <= now;
+      if(session && !stopped && !expired && (meta.active === true || meta.paused === true) && (meta.paused || !meta.expiresAt || Number(meta.expiresAt || 0) > now)){
+        allSessions[token] = session;
+        return [token, session];
+      }
+    }
+  }catch(e){ recordError("findActiveLiveSessionFreshForUid.owner", e); }
+
+  try{
+    const liveSnap = await get(ref(db, `live/${uid}`));
+    const live = liveSnap.val() || {};
+    const token = String(live.sessionId || live.activeSessionId || live.liveSessionId || '').trim();
+    const raw = String(live.status || live.linkStatus || '').toLowerCase();
+    const stopped = live.active === false || !!live.endedAt || ['stopped','stop','ended','inactive','expired'].includes(raw);
+    const expired = !live.paused && Number(live.expiresAt || 0) > 0 && Number(live.expiresAt || 0) <= now;
+    if(token && !stopped && !expired && (live.active === true || live.paused === true) && (live.paused || !live.expiresAt || Number(live.expiresAt || 0) > now)){
+      const sessionSnap = await get(ref(db, `liveSessions/${token}`));
+      const session = sessionSnap.val() || { meta: { ...live, ownerUid: uid } };
+      allSessions[token] = session;
+      return [token, session];
+    }
+  }catch(e){ recordError("findActiveLiveSessionFreshForUid.live", e); }
+
+  return null;
+}
+
+function showExistingActiveLiveSession(token, session){
+  const root = getSessionRoot(session || {});
+  const meta = root.meta || {};
+  const url = meta.liveUrl || meta.link || meta.url || buildShareUrl(token);
+  createdShareUrl = url;
+  if(qs("shareLinkText")) qs("shareLinkText").textContent = url;
+  if(qs("shareExpiresText")) qs("shareExpiresText").textContent = fmtTime(meta.expiresAt);
+  if(qs("shareResultBox")) qs("shareResultBox").classList.remove("hidden");
+  updateActiveSessionNotice();
+  updateActiveSessionToast?.();
+  const createBtn = qs("createShareBtn");
+  if(createBtn){ createBtn.disabled = true; createBtn.textContent = meta.paused ? "Live на паузе" : "Есть активная ссылка"; }
+}
+
 async function createLiveSession(){
   if(!selectedUid && allUsers.length===1){ selectedUid = allUsers[0]; qs("userSelect").value = selectedUid; }
   if(!selectedUid) return showToast("Нет пользователя. Сначала дождись появления данных GPS в Firebase или выбери пользователя.","warn");
 
-  const now=Date.now();
-  const activeExisting = Object.entries(allSessions||{}).find(([token,session])=>{
-    if(token==="_init") return false;
-    const root=getSessionRoot(session), meta=root.meta||{};
-    return meta.ownerUid===selectedUid && !!meta.active && Number(meta.expiresAt||0)>now;
-  });
-  if(activeExisting){
-    const [token, session] = activeExisting;
-    createdShareUrl = buildShareUrl(token);
-    qs("shareLinkText").textContent = createdShareUrl;
-    qs("shareExpiresText").textContent = fmtTime(getSessionRoot(session).meta?.expiresAt);
-    qs("shareResultBox").classList.remove("hidden");
-    updateActiveSessionNotice();
-    return showToast("У пользователя уже есть активная live-ссылка","warn");
+  const freshActive = await findActiveLiveSessionFreshForUid(selectedUid);
+  if(freshActive){
+    const [token, session] = freshActive;
+    showExistingActiveLiveSession(token, session);
+    return showToast("У пользователя уже есть активная live-ссылка", "warn");
   }
 
   const durationVal = qs("shareDurationPreset").value;
@@ -5874,19 +5929,55 @@ async function createLiveSession(){
   const sourcePoints=getRecentSourcePoints();
   if(!sourcePoints.length) return showToast("Нет данных выбранного пользователя для создания live-ссылки.","warn");
 
+  const now = Date.now();
   const token=generateSessionToken(), expiresAt=now+durationMinutes*60*1000, lastPoint=sourcePoints[sourcePoints.length-1], recentPointsObj={};
+  const liveUrl = buildShareUrl(token);
   sourcePoints.forEach(p=>recentPointsObj[String(p.timestamp||Date.now()+Math.random())]=p);
-  const payload={meta:{active:true,paused:false,createdAt:now,expiresAt,remainingMs:durationMinutes*60*1000,ownerUid:selectedUid,createdBy:auth.currentUser?.uid||null,createdByEmail:auth.currentUser?.email||null,durationMinutes},public:{lastPoint,recentPoints:recentPointsObj},viewStats:{openCount:0,firstOpenAt:null,lastOpenAt:null}};
+  const payload={
+    meta:{
+      active:true, paused:false, status:"active", linkStatus:"active",
+      sessionId:token, liveSessionId:token, activeSessionId:token,
+      liveUrl, link:liveUrl, url:liveUrl,
+      createdAt:now, startedAt:now, expiresAt,
+      remainingMs:durationMinutes*60*1000,
+      ownerUid:selectedUid,
+      createdBy:auth.currentUser?.uid||null,
+      createdByEmail:auth.currentUser?.email||null,
+      durationMinutes
+    },
+    public:{lastPoint,recentPoints:recentPointsObj},
+    viewStats:{openCount:0,firstOpenAt:null,lastOpenAt:null}
+  };
   try{
     await set(ref(db,`liveSessions/${token}`), payload);
-    await update(ref(db), { [`liveOwners/${selectedUid}/activeSessionId`]:token, [`liveOwners/${selectedUid}/lastCreatedAt`]:now });
+    await update(ref(db), {
+      [`liveOwners/${selectedUid}/activeSessionId`]:token,
+      [`liveOwners/${selectedUid}/lastCreatedAt`]:now,
+      [`live/${selectedUid}/active`]:true,
+      [`live/${selectedUid}/paused`]:false,
+      [`live/${selectedUid}/status`]:"active",
+      [`live/${selectedUid}/linkStatus`]:"active",
+      [`live/${selectedUid}/sessionId`]:token,
+      [`live/${selectedUid}/liveSessionId`]:token,
+      [`live/${selectedUid}/activeSessionId`]:token,
+      [`live/${selectedUid}/liveUrl`]:liveUrl,
+      [`live/${selectedUid}/link`]:liveUrl,
+      [`live/${selectedUid}/startedAt`]:now,
+      [`live/${selectedUid}/createdAt`]:now,
+      [`live/${selectedUid}/expiresAt`]:expiresAt,
+      [`live/${selectedUid}/remainingMs`]:durationMinutes*60*1000,
+      [`live/${selectedUid}/updatedAt`]:now
+    });
+    allSessions[token] = payload;
     await logAction("session_create",`Создана live-сессия ${token} для ${selectedUid}`);
-    createdShareUrl = buildShareUrl(token);
+    createdShareUrl = liveUrl;
     qs("shareLinkText").textContent = createdShareUrl;
     qs("shareExpiresText").textContent = fmtTime(expiresAt);
     qs("shareResultBox").classList.remove("hidden");
-    await loadSessions();
     updateActiveSessionNotice();
+    updateActiveSessionToast?.();
+    await loadSessions();
+    showExistingActiveLiveSession(token, payload);
     showToast("Live-ссылка создана","success");
   }catch(e){
     recordError("createLiveSession", e); showToast("Создание live-ссылки: "+errText(e),"error",3600);
