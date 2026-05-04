@@ -1419,6 +1419,140 @@ window.addEventListener("load", () => {
 
 
 
+
+
+// === HARD LOW-TRAFFIC HISTORY FIX ===
+// No realtime listener and no full history reads on page open/refresh.
+try{
+  loadAllData = async function loadAllDataLowTraffic(){
+    const [liveSnap, usersSnap] = await Promise.all([
+      get(ref(db,"live")),
+      get(ref(db,"users"))
+    ]);
+
+    usersMeta = usersSnap.val() || {};
+    liveByUid = liveSnap.val() || {};
+
+    const ids = new Set([
+      ...(allUsers || []),
+      ...Object.keys(usersMeta || {}),
+      ...Object.keys(historyByUid || {}),
+      ...Object.keys(liveByUid || {}),
+      ...Object.keys(adminsMap || {})
+    ].filter(uid => uid && uid !== "_init"));
+
+    allUsers = [...ids].sort((a,b)=>getDisplayName(a).localeCompare(getDisplayName(b), "ru"));
+    if(!selectedUid && allUsers.length) selectedUid = allUsers[0];
+    renderUserSelect?.();
+
+    updateUsage?.();
+    updateTodaySummary?.();
+    await updateNowFromAvailableSources?.();
+  };
+}catch(e){ console.warn("low traffic loadAllData override failed", e); }
+
+try{
+  ensureHistoryLoaded = async function ensureHistoryLoadedLowTraffic(){
+    if(historyLoaded) return;
+    await loadHistorySmart();
+  };
+}catch(e){ console.warn("low traffic ensureHistoryLoaded override failed", e); }
+
+try{
+  runSystemCheck = async function runSystemCheckLowTraffic(){
+    const btn = qs("runSystemCheckBtn");
+    if(btn){ btn.disabled = true; btn.textContent = "Проверяю…"; }
+    setSystemCheckSummary("checkFirebaseSummary", "…");
+    setSystemCheckSummary("checkAdminSummary", "…");
+    setSystemCheckSummary("checkReadSummary", "…");
+    setSystemCheckSummary("checkWriteSummary", "…");
+    renderSystemCheckRows([{name:"Проверка запущена", status:"wait", details:"Идёт лёгкая проверка без чтения всей history."}]);
+
+    const uid = auth.currentUser?.uid || "";
+    const now = Date.now();
+    const testKey = `_system_check_${uid || "no_uid"}_${now}`;
+    const items = [];
+
+    items.push(await safeCheck("Firebase connected", async () => {
+      if(!auth.currentUser) throw new Error("Нет авторизованного пользователя");
+      const snap = await get(ref(db, "users"));
+      const count = snap.exists() && snap.val() ? Object.keys(snap.val()).length : 0;
+      return `Firebase OK · users читается · пользователей: ${count}`;
+    }));
+    items.push(await safeCheck("Admin права", async () => {
+      if(!uid) throw new Error("UID не найден");
+      const snap = await get(ref(db, `admins/${uid}`));
+      if(snap.val() !== true) throw new Error(`admins/${uid} не true`);
+      return `admins/${uid} = true`;
+    }));
+    items.push(await safeCheck("live читается", async () => {
+      const snap = await get(ref(db, "live"));
+      const count = snap.exists() ? Object.keys(snap.val() || {}).filter(k => k !== "_init").length : 0;
+      return `live UID: ${count}`;
+    }));
+    items.push(await safeCheck("history индекс timestamp", async () => {
+      if(!selectedUid) return "Пользователь не выбран, проверка пропущена";
+      const snap = await get(query(ref(db, `history/${selectedUid}`), orderByChild("timestamp"), limitToLast(1)));
+      const count = snap.exists() ? Object.keys(snap.val() || {}).length : 0;
+      return `Лёгкий запрос history/${selectedUid}: ${count} точек. Полная history не читалась.`;
+    }));
+    items.push(await safeCheck("live пишется", async () => {
+      if(!uid) throw new Error("UID не найден");
+      const testRef = ref(db, `liveSessions/${testKey}`);
+      await set(testRef, {meta:{active:false, createdAt:now, expiresAt:now, ownerUid:uid, systemCheck:true}});
+      await remove(testRef);
+      return "Тестовая запись/удаление в liveSessions выполнены";
+    }));
+
+    const okCount = items.filter(i => i.status === "ok").length;
+    const errCount = items.filter(i => i.status === "err").length;
+    renderSystemCheckRows(items);
+    setSystemCheckSummary("checkFirebaseSummary", items[0]?.status === "ok" ? "OK" : "Ошибка");
+    setSystemCheckSummary("checkAdminSummary", items[1]?.status === "ok" ? "OK" : "Ошибка");
+    setSystemCheckSummary("checkReadSummary", items.slice(2,4).every(i=>i.status === "ok") ? "OK" : "Ошибка");
+    setSystemCheckSummary("checkWriteSummary", items[4]?.status === "ok" ? "OK" : "Ошибка");
+    showToast(errCount ? `Проверка: ${okCount} OK, ${errCount} ошибок` : "Проверка системы: всё OK", errCount ? "warn" : "ok", 3500);
+    if(btn){ btn.disabled = false; btn.textContent = "Запустить проверку"; }
+  };
+  window.runSystemCheck = runSystemCheck;
+}catch(e){ console.warn("low traffic runSystemCheck override failed", e); }
+
+try{
+  createMonthlyBackup = async function createMonthlyBackupLowTraffic(force=false){
+    showToast?.("Backup всей history отключён, чтобы не расходовать Firebase Downloads. Используй экспорт выбранного периода в Истории.", "warn", 5000);
+    return false;
+  };
+}catch(e){ console.warn("low traffic backup override failed", e); }
+
+try{
+  const oldLoadHistorySmart = loadHistorySmart;
+  loadHistorySmart = async function loadHistorySmartHardLowTraffic(){
+    if(!selectedUid){ showToast?.("Пользователь не выбран", "warn"); return; }
+    const {from, to} = getSelectedHistoryRange();
+    const uid = selectedUid;
+    const rangeMs = Math.max(0, to - from);
+    updateHistoryTrafficInfo(null);
+    if(historyLoadMode === "full" && rangeMs > 24*60*60*1000){
+      const ok = confirm("Ты выбрал полный режим больше чем на 24 часа. Это может сильно увеличить Firebase Downloads. Продолжить?");
+      if(!ok) return;
+    }
+    const baseRef = ref(db, `history/${uid}`);
+    const constraints = [orderByChild("timestamp"), startAt(from), endAt(to)];
+    if(historyLoadMode === "light") constraints.push(limitToLast(HISTORY_LIGHT_LIMIT));
+    const snap = await get(query(baseRef, ...constraints));
+    const raw = snap.val() || {};
+    const points = Object.values(raw).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+    historyByUid[uid] = points;
+    historyLoaded = true;
+    updateHistoryTrafficInfo(points.length, null, historyLoadMode === "light" && points.length >= HISTORY_LIGHT_LIMIT);
+    updateUsage?.();
+    updateTodaySummary?.();
+    await renderHistory?.();
+    showToast?.(`История загружена разовым запросом: ${points.length} точек`, "success");
+  };
+  window.loadHistory = () => loadHistorySmart();
+}catch(e){ console.warn("hard loadHistorySmart override failed", e); }
+
 </script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js">
 function setupJournalQuickFilters(){
@@ -1446,6 +1580,140 @@ function setupJournalQuickFilters(){
 }
 
 window.addEventListener("load", setupJournalQuickFilters);
+
+
+
+// === HARD LOW-TRAFFIC HISTORY FIX ===
+// No realtime listener and no full history reads on page open/refresh.
+try{
+  loadAllData = async function loadAllDataLowTraffic(){
+    const [liveSnap, usersSnap] = await Promise.all([
+      get(ref(db,"live")),
+      get(ref(db,"users"))
+    ]);
+
+    usersMeta = usersSnap.val() || {};
+    liveByUid = liveSnap.val() || {};
+
+    const ids = new Set([
+      ...(allUsers || []),
+      ...Object.keys(usersMeta || {}),
+      ...Object.keys(historyByUid || {}),
+      ...Object.keys(liveByUid || {}),
+      ...Object.keys(adminsMap || {})
+    ].filter(uid => uid && uid !== "_init"));
+
+    allUsers = [...ids].sort((a,b)=>getDisplayName(a).localeCompare(getDisplayName(b), "ru"));
+    if(!selectedUid && allUsers.length) selectedUid = allUsers[0];
+    renderUserSelect?.();
+
+    updateUsage?.();
+    updateTodaySummary?.();
+    await updateNowFromAvailableSources?.();
+  };
+}catch(e){ console.warn("low traffic loadAllData override failed", e); }
+
+try{
+  ensureHistoryLoaded = async function ensureHistoryLoadedLowTraffic(){
+    if(historyLoaded) return;
+    await loadHistorySmart();
+  };
+}catch(e){ console.warn("low traffic ensureHistoryLoaded override failed", e); }
+
+try{
+  runSystemCheck = async function runSystemCheckLowTraffic(){
+    const btn = qs("runSystemCheckBtn");
+    if(btn){ btn.disabled = true; btn.textContent = "Проверяю…"; }
+    setSystemCheckSummary("checkFirebaseSummary", "…");
+    setSystemCheckSummary("checkAdminSummary", "…");
+    setSystemCheckSummary("checkReadSummary", "…");
+    setSystemCheckSummary("checkWriteSummary", "…");
+    renderSystemCheckRows([{name:"Проверка запущена", status:"wait", details:"Идёт лёгкая проверка без чтения всей history."}]);
+
+    const uid = auth.currentUser?.uid || "";
+    const now = Date.now();
+    const testKey = `_system_check_${uid || "no_uid"}_${now}`;
+    const items = [];
+
+    items.push(await safeCheck("Firebase connected", async () => {
+      if(!auth.currentUser) throw new Error("Нет авторизованного пользователя");
+      const snap = await get(ref(db, "users"));
+      const count = snap.exists() && snap.val() ? Object.keys(snap.val()).length : 0;
+      return `Firebase OK · users читается · пользователей: ${count}`;
+    }));
+    items.push(await safeCheck("Admin права", async () => {
+      if(!uid) throw new Error("UID не найден");
+      const snap = await get(ref(db, `admins/${uid}`));
+      if(snap.val() !== true) throw new Error(`admins/${uid} не true`);
+      return `admins/${uid} = true`;
+    }));
+    items.push(await safeCheck("live читается", async () => {
+      const snap = await get(ref(db, "live"));
+      const count = snap.exists() ? Object.keys(snap.val() || {}).filter(k => k !== "_init").length : 0;
+      return `live UID: ${count}`;
+    }));
+    items.push(await safeCheck("history индекс timestamp", async () => {
+      if(!selectedUid) return "Пользователь не выбран, проверка пропущена";
+      const snap = await get(query(ref(db, `history/${selectedUid}`), orderByChild("timestamp"), limitToLast(1)));
+      const count = snap.exists() ? Object.keys(snap.val() || {}).length : 0;
+      return `Лёгкий запрос history/${selectedUid}: ${count} точек. Полная history не читалась.`;
+    }));
+    items.push(await safeCheck("live пишется", async () => {
+      if(!uid) throw new Error("UID не найден");
+      const testRef = ref(db, `liveSessions/${testKey}`);
+      await set(testRef, {meta:{active:false, createdAt:now, expiresAt:now, ownerUid:uid, systemCheck:true}});
+      await remove(testRef);
+      return "Тестовая запись/удаление в liveSessions выполнены";
+    }));
+
+    const okCount = items.filter(i => i.status === "ok").length;
+    const errCount = items.filter(i => i.status === "err").length;
+    renderSystemCheckRows(items);
+    setSystemCheckSummary("checkFirebaseSummary", items[0]?.status === "ok" ? "OK" : "Ошибка");
+    setSystemCheckSummary("checkAdminSummary", items[1]?.status === "ok" ? "OK" : "Ошибка");
+    setSystemCheckSummary("checkReadSummary", items.slice(2,4).every(i=>i.status === "ok") ? "OK" : "Ошибка");
+    setSystemCheckSummary("checkWriteSummary", items[4]?.status === "ok" ? "OK" : "Ошибка");
+    showToast(errCount ? `Проверка: ${okCount} OK, ${errCount} ошибок` : "Проверка системы: всё OK", errCount ? "warn" : "ok", 3500);
+    if(btn){ btn.disabled = false; btn.textContent = "Запустить проверку"; }
+  };
+  window.runSystemCheck = runSystemCheck;
+}catch(e){ console.warn("low traffic runSystemCheck override failed", e); }
+
+try{
+  createMonthlyBackup = async function createMonthlyBackupLowTraffic(force=false){
+    showToast?.("Backup всей history отключён, чтобы не расходовать Firebase Downloads. Используй экспорт выбранного периода в Истории.", "warn", 5000);
+    return false;
+  };
+}catch(e){ console.warn("low traffic backup override failed", e); }
+
+try{
+  const oldLoadHistorySmart = loadHistorySmart;
+  loadHistorySmart = async function loadHistorySmartHardLowTraffic(){
+    if(!selectedUid){ showToast?.("Пользователь не выбран", "warn"); return; }
+    const {from, to} = getSelectedHistoryRange();
+    const uid = selectedUid;
+    const rangeMs = Math.max(0, to - from);
+    updateHistoryTrafficInfo(null);
+    if(historyLoadMode === "full" && rangeMs > 24*60*60*1000){
+      const ok = confirm("Ты выбрал полный режим больше чем на 24 часа. Это может сильно увеличить Firebase Downloads. Продолжить?");
+      if(!ok) return;
+    }
+    const baseRef = ref(db, `history/${uid}`);
+    const constraints = [orderByChild("timestamp"), startAt(from), endAt(to)];
+    if(historyLoadMode === "light") constraints.push(limitToLast(HISTORY_LIGHT_LIMIT));
+    const snap = await get(query(baseRef, ...constraints));
+    const raw = snap.val() || {};
+    const points = Object.values(raw).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+    historyByUid[uid] = points;
+    historyLoaded = true;
+    updateHistoryTrafficInfo(points.length, null, historyLoadMode === "light" && points.length >= HISTORY_LIGHT_LIMIT);
+    updateUsage?.();
+    updateTodaySummary?.();
+    await renderHistory?.();
+    showToast?.(`История загружена разовым запросом: ${points.length} точек`, "success");
+  };
+  window.loadHistory = () => loadHistorySmart();
+}catch(e){ console.warn("hard loadHistorySmart override failed", e); }
 
 </script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js">
@@ -1475,6 +1743,140 @@ function setupJournalQuickFilters(){
 
 window.addEventListener("load", setupJournalQuickFilters);
 
+
+
+// === HARD LOW-TRAFFIC HISTORY FIX ===
+// No realtime listener and no full history reads on page open/refresh.
+try{
+  loadAllData = async function loadAllDataLowTraffic(){
+    const [liveSnap, usersSnap] = await Promise.all([
+      get(ref(db,"live")),
+      get(ref(db,"users"))
+    ]);
+
+    usersMeta = usersSnap.val() || {};
+    liveByUid = liveSnap.val() || {};
+
+    const ids = new Set([
+      ...(allUsers || []),
+      ...Object.keys(usersMeta || {}),
+      ...Object.keys(historyByUid || {}),
+      ...Object.keys(liveByUid || {}),
+      ...Object.keys(adminsMap || {})
+    ].filter(uid => uid && uid !== "_init"));
+
+    allUsers = [...ids].sort((a,b)=>getDisplayName(a).localeCompare(getDisplayName(b), "ru"));
+    if(!selectedUid && allUsers.length) selectedUid = allUsers[0];
+    renderUserSelect?.();
+
+    updateUsage?.();
+    updateTodaySummary?.();
+    await updateNowFromAvailableSources?.();
+  };
+}catch(e){ console.warn("low traffic loadAllData override failed", e); }
+
+try{
+  ensureHistoryLoaded = async function ensureHistoryLoadedLowTraffic(){
+    if(historyLoaded) return;
+    await loadHistorySmart();
+  };
+}catch(e){ console.warn("low traffic ensureHistoryLoaded override failed", e); }
+
+try{
+  runSystemCheck = async function runSystemCheckLowTraffic(){
+    const btn = qs("runSystemCheckBtn");
+    if(btn){ btn.disabled = true; btn.textContent = "Проверяю…"; }
+    setSystemCheckSummary("checkFirebaseSummary", "…");
+    setSystemCheckSummary("checkAdminSummary", "…");
+    setSystemCheckSummary("checkReadSummary", "…");
+    setSystemCheckSummary("checkWriteSummary", "…");
+    renderSystemCheckRows([{name:"Проверка запущена", status:"wait", details:"Идёт лёгкая проверка без чтения всей history."}]);
+
+    const uid = auth.currentUser?.uid || "";
+    const now = Date.now();
+    const testKey = `_system_check_${uid || "no_uid"}_${now}`;
+    const items = [];
+
+    items.push(await safeCheck("Firebase connected", async () => {
+      if(!auth.currentUser) throw new Error("Нет авторизованного пользователя");
+      const snap = await get(ref(db, "users"));
+      const count = snap.exists() && snap.val() ? Object.keys(snap.val()).length : 0;
+      return `Firebase OK · users читается · пользователей: ${count}`;
+    }));
+    items.push(await safeCheck("Admin права", async () => {
+      if(!uid) throw new Error("UID не найден");
+      const snap = await get(ref(db, `admins/${uid}`));
+      if(snap.val() !== true) throw new Error(`admins/${uid} не true`);
+      return `admins/${uid} = true`;
+    }));
+    items.push(await safeCheck("live читается", async () => {
+      const snap = await get(ref(db, "live"));
+      const count = snap.exists() ? Object.keys(snap.val() || {}).filter(k => k !== "_init").length : 0;
+      return `live UID: ${count}`;
+    }));
+    items.push(await safeCheck("history индекс timestamp", async () => {
+      if(!selectedUid) return "Пользователь не выбран, проверка пропущена";
+      const snap = await get(query(ref(db, `history/${selectedUid}`), orderByChild("timestamp"), limitToLast(1)));
+      const count = snap.exists() ? Object.keys(snap.val() || {}).length : 0;
+      return `Лёгкий запрос history/${selectedUid}: ${count} точек. Полная history не читалась.`;
+    }));
+    items.push(await safeCheck("live пишется", async () => {
+      if(!uid) throw new Error("UID не найден");
+      const testRef = ref(db, `liveSessions/${testKey}`);
+      await set(testRef, {meta:{active:false, createdAt:now, expiresAt:now, ownerUid:uid, systemCheck:true}});
+      await remove(testRef);
+      return "Тестовая запись/удаление в liveSessions выполнены";
+    }));
+
+    const okCount = items.filter(i => i.status === "ok").length;
+    const errCount = items.filter(i => i.status === "err").length;
+    renderSystemCheckRows(items);
+    setSystemCheckSummary("checkFirebaseSummary", items[0]?.status === "ok" ? "OK" : "Ошибка");
+    setSystemCheckSummary("checkAdminSummary", items[1]?.status === "ok" ? "OK" : "Ошибка");
+    setSystemCheckSummary("checkReadSummary", items.slice(2,4).every(i=>i.status === "ok") ? "OK" : "Ошибка");
+    setSystemCheckSummary("checkWriteSummary", items[4]?.status === "ok" ? "OK" : "Ошибка");
+    showToast(errCount ? `Проверка: ${okCount} OK, ${errCount} ошибок` : "Проверка системы: всё OK", errCount ? "warn" : "ok", 3500);
+    if(btn){ btn.disabled = false; btn.textContent = "Запустить проверку"; }
+  };
+  window.runSystemCheck = runSystemCheck;
+}catch(e){ console.warn("low traffic runSystemCheck override failed", e); }
+
+try{
+  createMonthlyBackup = async function createMonthlyBackupLowTraffic(force=false){
+    showToast?.("Backup всей history отключён, чтобы не расходовать Firebase Downloads. Используй экспорт выбранного периода в Истории.", "warn", 5000);
+    return false;
+  };
+}catch(e){ console.warn("low traffic backup override failed", e); }
+
+try{
+  const oldLoadHistorySmart = loadHistorySmart;
+  loadHistorySmart = async function loadHistorySmartHardLowTraffic(){
+    if(!selectedUid){ showToast?.("Пользователь не выбран", "warn"); return; }
+    const {from, to} = getSelectedHistoryRange();
+    const uid = selectedUid;
+    const rangeMs = Math.max(0, to - from);
+    updateHistoryTrafficInfo(null);
+    if(historyLoadMode === "full" && rangeMs > 24*60*60*1000){
+      const ok = confirm("Ты выбрал полный режим больше чем на 24 часа. Это может сильно увеличить Firebase Downloads. Продолжить?");
+      if(!ok) return;
+    }
+    const baseRef = ref(db, `history/${uid}`);
+    const constraints = [orderByChild("timestamp"), startAt(from), endAt(to)];
+    if(historyLoadMode === "light") constraints.push(limitToLast(HISTORY_LIGHT_LIMIT));
+    const snap = await get(query(baseRef, ...constraints));
+    const raw = snap.val() || {};
+    const points = Object.values(raw).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+    historyByUid[uid] = points;
+    historyLoaded = true;
+    updateHistoryTrafficInfo(points.length, null, historyLoadMode === "light" && points.length >= HISTORY_LIGHT_LIMIT);
+    updateUsage?.();
+    updateTodaySummary?.();
+    await renderHistory?.();
+    showToast?.(`История загружена разовым запросом: ${points.length} точек`, "success");
+  };
+  window.loadHistory = () => loadHistorySmart();
+}catch(e){ console.warn("hard loadHistorySmart override failed", e); }
+
 </script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js">
 function setupJournalQuickFilters(){
@@ -1502,6 +1904,140 @@ function setupJournalQuickFilters(){
 }
 
 window.addEventListener("load", setupJournalQuickFilters);
+
+
+
+// === HARD LOW-TRAFFIC HISTORY FIX ===
+// No realtime listener and no full history reads on page open/refresh.
+try{
+  loadAllData = async function loadAllDataLowTraffic(){
+    const [liveSnap, usersSnap] = await Promise.all([
+      get(ref(db,"live")),
+      get(ref(db,"users"))
+    ]);
+
+    usersMeta = usersSnap.val() || {};
+    liveByUid = liveSnap.val() || {};
+
+    const ids = new Set([
+      ...(allUsers || []),
+      ...Object.keys(usersMeta || {}),
+      ...Object.keys(historyByUid || {}),
+      ...Object.keys(liveByUid || {}),
+      ...Object.keys(adminsMap || {})
+    ].filter(uid => uid && uid !== "_init"));
+
+    allUsers = [...ids].sort((a,b)=>getDisplayName(a).localeCompare(getDisplayName(b), "ru"));
+    if(!selectedUid && allUsers.length) selectedUid = allUsers[0];
+    renderUserSelect?.();
+
+    updateUsage?.();
+    updateTodaySummary?.();
+    await updateNowFromAvailableSources?.();
+  };
+}catch(e){ console.warn("low traffic loadAllData override failed", e); }
+
+try{
+  ensureHistoryLoaded = async function ensureHistoryLoadedLowTraffic(){
+    if(historyLoaded) return;
+    await loadHistorySmart();
+  };
+}catch(e){ console.warn("low traffic ensureHistoryLoaded override failed", e); }
+
+try{
+  runSystemCheck = async function runSystemCheckLowTraffic(){
+    const btn = qs("runSystemCheckBtn");
+    if(btn){ btn.disabled = true; btn.textContent = "Проверяю…"; }
+    setSystemCheckSummary("checkFirebaseSummary", "…");
+    setSystemCheckSummary("checkAdminSummary", "…");
+    setSystemCheckSummary("checkReadSummary", "…");
+    setSystemCheckSummary("checkWriteSummary", "…");
+    renderSystemCheckRows([{name:"Проверка запущена", status:"wait", details:"Идёт лёгкая проверка без чтения всей history."}]);
+
+    const uid = auth.currentUser?.uid || "";
+    const now = Date.now();
+    const testKey = `_system_check_${uid || "no_uid"}_${now}`;
+    const items = [];
+
+    items.push(await safeCheck("Firebase connected", async () => {
+      if(!auth.currentUser) throw new Error("Нет авторизованного пользователя");
+      const snap = await get(ref(db, "users"));
+      const count = snap.exists() && snap.val() ? Object.keys(snap.val()).length : 0;
+      return `Firebase OK · users читается · пользователей: ${count}`;
+    }));
+    items.push(await safeCheck("Admin права", async () => {
+      if(!uid) throw new Error("UID не найден");
+      const snap = await get(ref(db, `admins/${uid}`));
+      if(snap.val() !== true) throw new Error(`admins/${uid} не true`);
+      return `admins/${uid} = true`;
+    }));
+    items.push(await safeCheck("live читается", async () => {
+      const snap = await get(ref(db, "live"));
+      const count = snap.exists() ? Object.keys(snap.val() || {}).filter(k => k !== "_init").length : 0;
+      return `live UID: ${count}`;
+    }));
+    items.push(await safeCheck("history индекс timestamp", async () => {
+      if(!selectedUid) return "Пользователь не выбран, проверка пропущена";
+      const snap = await get(query(ref(db, `history/${selectedUid}`), orderByChild("timestamp"), limitToLast(1)));
+      const count = snap.exists() ? Object.keys(snap.val() || {}).length : 0;
+      return `Лёгкий запрос history/${selectedUid}: ${count} точек. Полная history не читалась.`;
+    }));
+    items.push(await safeCheck("live пишется", async () => {
+      if(!uid) throw new Error("UID не найден");
+      const testRef = ref(db, `liveSessions/${testKey}`);
+      await set(testRef, {meta:{active:false, createdAt:now, expiresAt:now, ownerUid:uid, systemCheck:true}});
+      await remove(testRef);
+      return "Тестовая запись/удаление в liveSessions выполнены";
+    }));
+
+    const okCount = items.filter(i => i.status === "ok").length;
+    const errCount = items.filter(i => i.status === "err").length;
+    renderSystemCheckRows(items);
+    setSystemCheckSummary("checkFirebaseSummary", items[0]?.status === "ok" ? "OK" : "Ошибка");
+    setSystemCheckSummary("checkAdminSummary", items[1]?.status === "ok" ? "OK" : "Ошибка");
+    setSystemCheckSummary("checkReadSummary", items.slice(2,4).every(i=>i.status === "ok") ? "OK" : "Ошибка");
+    setSystemCheckSummary("checkWriteSummary", items[4]?.status === "ok" ? "OK" : "Ошибка");
+    showToast(errCount ? `Проверка: ${okCount} OK, ${errCount} ошибок` : "Проверка системы: всё OK", errCount ? "warn" : "ok", 3500);
+    if(btn){ btn.disabled = false; btn.textContent = "Запустить проверку"; }
+  };
+  window.runSystemCheck = runSystemCheck;
+}catch(e){ console.warn("low traffic runSystemCheck override failed", e); }
+
+try{
+  createMonthlyBackup = async function createMonthlyBackupLowTraffic(force=false){
+    showToast?.("Backup всей history отключён, чтобы не расходовать Firebase Downloads. Используй экспорт выбранного периода в Истории.", "warn", 5000);
+    return false;
+  };
+}catch(e){ console.warn("low traffic backup override failed", e); }
+
+try{
+  const oldLoadHistorySmart = loadHistorySmart;
+  loadHistorySmart = async function loadHistorySmartHardLowTraffic(){
+    if(!selectedUid){ showToast?.("Пользователь не выбран", "warn"); return; }
+    const {from, to} = getSelectedHistoryRange();
+    const uid = selectedUid;
+    const rangeMs = Math.max(0, to - from);
+    updateHistoryTrafficInfo(null);
+    if(historyLoadMode === "full" && rangeMs > 24*60*60*1000){
+      const ok = confirm("Ты выбрал полный режим больше чем на 24 часа. Это может сильно увеличить Firebase Downloads. Продолжить?");
+      if(!ok) return;
+    }
+    const baseRef = ref(db, `history/${uid}`);
+    const constraints = [orderByChild("timestamp"), startAt(from), endAt(to)];
+    if(historyLoadMode === "light") constraints.push(limitToLast(HISTORY_LIGHT_LIMIT));
+    const snap = await get(query(baseRef, ...constraints));
+    const raw = snap.val() || {};
+    const points = Object.values(raw).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+    historyByUid[uid] = points;
+    historyLoaded = true;
+    updateHistoryTrafficInfo(points.length, null, historyLoadMode === "light" && points.length >= HISTORY_LIGHT_LIMIT);
+    updateUsage?.();
+    updateTodaySummary?.();
+    await renderHistory?.();
+    showToast?.(`История загружена разовым запросом: ${points.length} точек`, "success");
+  };
+  window.loadHistory = () => loadHistorySmart();
+}catch(e){ console.warn("hard loadHistorySmart override failed", e); }
 
 </script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js">
@@ -1531,6 +2067,140 @@ function setupJournalQuickFilters(){
 
 window.addEventListener("load", setupJournalQuickFilters);
 
+
+
+// === HARD LOW-TRAFFIC HISTORY FIX ===
+// No realtime listener and no full history reads on page open/refresh.
+try{
+  loadAllData = async function loadAllDataLowTraffic(){
+    const [liveSnap, usersSnap] = await Promise.all([
+      get(ref(db,"live")),
+      get(ref(db,"users"))
+    ]);
+
+    usersMeta = usersSnap.val() || {};
+    liveByUid = liveSnap.val() || {};
+
+    const ids = new Set([
+      ...(allUsers || []),
+      ...Object.keys(usersMeta || {}),
+      ...Object.keys(historyByUid || {}),
+      ...Object.keys(liveByUid || {}),
+      ...Object.keys(adminsMap || {})
+    ].filter(uid => uid && uid !== "_init"));
+
+    allUsers = [...ids].sort((a,b)=>getDisplayName(a).localeCompare(getDisplayName(b), "ru"));
+    if(!selectedUid && allUsers.length) selectedUid = allUsers[0];
+    renderUserSelect?.();
+
+    updateUsage?.();
+    updateTodaySummary?.();
+    await updateNowFromAvailableSources?.();
+  };
+}catch(e){ console.warn("low traffic loadAllData override failed", e); }
+
+try{
+  ensureHistoryLoaded = async function ensureHistoryLoadedLowTraffic(){
+    if(historyLoaded) return;
+    await loadHistorySmart();
+  };
+}catch(e){ console.warn("low traffic ensureHistoryLoaded override failed", e); }
+
+try{
+  runSystemCheck = async function runSystemCheckLowTraffic(){
+    const btn = qs("runSystemCheckBtn");
+    if(btn){ btn.disabled = true; btn.textContent = "Проверяю…"; }
+    setSystemCheckSummary("checkFirebaseSummary", "…");
+    setSystemCheckSummary("checkAdminSummary", "…");
+    setSystemCheckSummary("checkReadSummary", "…");
+    setSystemCheckSummary("checkWriteSummary", "…");
+    renderSystemCheckRows([{name:"Проверка запущена", status:"wait", details:"Идёт лёгкая проверка без чтения всей history."}]);
+
+    const uid = auth.currentUser?.uid || "";
+    const now = Date.now();
+    const testKey = `_system_check_${uid || "no_uid"}_${now}`;
+    const items = [];
+
+    items.push(await safeCheck("Firebase connected", async () => {
+      if(!auth.currentUser) throw new Error("Нет авторизованного пользователя");
+      const snap = await get(ref(db, "users"));
+      const count = snap.exists() && snap.val() ? Object.keys(snap.val()).length : 0;
+      return `Firebase OK · users читается · пользователей: ${count}`;
+    }));
+    items.push(await safeCheck("Admin права", async () => {
+      if(!uid) throw new Error("UID не найден");
+      const snap = await get(ref(db, `admins/${uid}`));
+      if(snap.val() !== true) throw new Error(`admins/${uid} не true`);
+      return `admins/${uid} = true`;
+    }));
+    items.push(await safeCheck("live читается", async () => {
+      const snap = await get(ref(db, "live"));
+      const count = snap.exists() ? Object.keys(snap.val() || {}).filter(k => k !== "_init").length : 0;
+      return `live UID: ${count}`;
+    }));
+    items.push(await safeCheck("history индекс timestamp", async () => {
+      if(!selectedUid) return "Пользователь не выбран, проверка пропущена";
+      const snap = await get(query(ref(db, `history/${selectedUid}`), orderByChild("timestamp"), limitToLast(1)));
+      const count = snap.exists() ? Object.keys(snap.val() || {}).length : 0;
+      return `Лёгкий запрос history/${selectedUid}: ${count} точек. Полная history не читалась.`;
+    }));
+    items.push(await safeCheck("live пишется", async () => {
+      if(!uid) throw new Error("UID не найден");
+      const testRef = ref(db, `liveSessions/${testKey}`);
+      await set(testRef, {meta:{active:false, createdAt:now, expiresAt:now, ownerUid:uid, systemCheck:true}});
+      await remove(testRef);
+      return "Тестовая запись/удаление в liveSessions выполнены";
+    }));
+
+    const okCount = items.filter(i => i.status === "ok").length;
+    const errCount = items.filter(i => i.status === "err").length;
+    renderSystemCheckRows(items);
+    setSystemCheckSummary("checkFirebaseSummary", items[0]?.status === "ok" ? "OK" : "Ошибка");
+    setSystemCheckSummary("checkAdminSummary", items[1]?.status === "ok" ? "OK" : "Ошибка");
+    setSystemCheckSummary("checkReadSummary", items.slice(2,4).every(i=>i.status === "ok") ? "OK" : "Ошибка");
+    setSystemCheckSummary("checkWriteSummary", items[4]?.status === "ok" ? "OK" : "Ошибка");
+    showToast(errCount ? `Проверка: ${okCount} OK, ${errCount} ошибок` : "Проверка системы: всё OK", errCount ? "warn" : "ok", 3500);
+    if(btn){ btn.disabled = false; btn.textContent = "Запустить проверку"; }
+  };
+  window.runSystemCheck = runSystemCheck;
+}catch(e){ console.warn("low traffic runSystemCheck override failed", e); }
+
+try{
+  createMonthlyBackup = async function createMonthlyBackupLowTraffic(force=false){
+    showToast?.("Backup всей history отключён, чтобы не расходовать Firebase Downloads. Используй экспорт выбранного периода в Истории.", "warn", 5000);
+    return false;
+  };
+}catch(e){ console.warn("low traffic backup override failed", e); }
+
+try{
+  const oldLoadHistorySmart = loadHistorySmart;
+  loadHistorySmart = async function loadHistorySmartHardLowTraffic(){
+    if(!selectedUid){ showToast?.("Пользователь не выбран", "warn"); return; }
+    const {from, to} = getSelectedHistoryRange();
+    const uid = selectedUid;
+    const rangeMs = Math.max(0, to - from);
+    updateHistoryTrafficInfo(null);
+    if(historyLoadMode === "full" && rangeMs > 24*60*60*1000){
+      const ok = confirm("Ты выбрал полный режим больше чем на 24 часа. Это может сильно увеличить Firebase Downloads. Продолжить?");
+      if(!ok) return;
+    }
+    const baseRef = ref(db, `history/${uid}`);
+    const constraints = [orderByChild("timestamp"), startAt(from), endAt(to)];
+    if(historyLoadMode === "light") constraints.push(limitToLast(HISTORY_LIGHT_LIMIT));
+    const snap = await get(query(baseRef, ...constraints));
+    const raw = snap.val() || {};
+    const points = Object.values(raw).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+    historyByUid[uid] = points;
+    historyLoaded = true;
+    updateHistoryTrafficInfo(points.length, null, historyLoadMode === "light" && points.length >= HISTORY_LIGHT_LIMIT);
+    updateUsage?.();
+    updateTodaySummary?.();
+    await renderHistory?.();
+    showToast?.(`История загружена разовым запросом: ${points.length} точек`, "success");
+  };
+  window.loadHistory = () => loadHistorySmart();
+}catch(e){ console.warn("hard loadHistorySmart override failed", e); }
+
 </script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js">
 function setupJournalQuickFilters(){
@@ -1558,6 +2228,140 @@ function setupJournalQuickFilters(){
 }
 
 window.addEventListener("load", setupJournalQuickFilters);
+
+
+
+// === HARD LOW-TRAFFIC HISTORY FIX ===
+// No realtime listener and no full history reads on page open/refresh.
+try{
+  loadAllData = async function loadAllDataLowTraffic(){
+    const [liveSnap, usersSnap] = await Promise.all([
+      get(ref(db,"live")),
+      get(ref(db,"users"))
+    ]);
+
+    usersMeta = usersSnap.val() || {};
+    liveByUid = liveSnap.val() || {};
+
+    const ids = new Set([
+      ...(allUsers || []),
+      ...Object.keys(usersMeta || {}),
+      ...Object.keys(historyByUid || {}),
+      ...Object.keys(liveByUid || {}),
+      ...Object.keys(adminsMap || {})
+    ].filter(uid => uid && uid !== "_init"));
+
+    allUsers = [...ids].sort((a,b)=>getDisplayName(a).localeCompare(getDisplayName(b), "ru"));
+    if(!selectedUid && allUsers.length) selectedUid = allUsers[0];
+    renderUserSelect?.();
+
+    updateUsage?.();
+    updateTodaySummary?.();
+    await updateNowFromAvailableSources?.();
+  };
+}catch(e){ console.warn("low traffic loadAllData override failed", e); }
+
+try{
+  ensureHistoryLoaded = async function ensureHistoryLoadedLowTraffic(){
+    if(historyLoaded) return;
+    await loadHistorySmart();
+  };
+}catch(e){ console.warn("low traffic ensureHistoryLoaded override failed", e); }
+
+try{
+  runSystemCheck = async function runSystemCheckLowTraffic(){
+    const btn = qs("runSystemCheckBtn");
+    if(btn){ btn.disabled = true; btn.textContent = "Проверяю…"; }
+    setSystemCheckSummary("checkFirebaseSummary", "…");
+    setSystemCheckSummary("checkAdminSummary", "…");
+    setSystemCheckSummary("checkReadSummary", "…");
+    setSystemCheckSummary("checkWriteSummary", "…");
+    renderSystemCheckRows([{name:"Проверка запущена", status:"wait", details:"Идёт лёгкая проверка без чтения всей history."}]);
+
+    const uid = auth.currentUser?.uid || "";
+    const now = Date.now();
+    const testKey = `_system_check_${uid || "no_uid"}_${now}`;
+    const items = [];
+
+    items.push(await safeCheck("Firebase connected", async () => {
+      if(!auth.currentUser) throw new Error("Нет авторизованного пользователя");
+      const snap = await get(ref(db, "users"));
+      const count = snap.exists() && snap.val() ? Object.keys(snap.val()).length : 0;
+      return `Firebase OK · users читается · пользователей: ${count}`;
+    }));
+    items.push(await safeCheck("Admin права", async () => {
+      if(!uid) throw new Error("UID не найден");
+      const snap = await get(ref(db, `admins/${uid}`));
+      if(snap.val() !== true) throw new Error(`admins/${uid} не true`);
+      return `admins/${uid} = true`;
+    }));
+    items.push(await safeCheck("live читается", async () => {
+      const snap = await get(ref(db, "live"));
+      const count = snap.exists() ? Object.keys(snap.val() || {}).filter(k => k !== "_init").length : 0;
+      return `live UID: ${count}`;
+    }));
+    items.push(await safeCheck("history индекс timestamp", async () => {
+      if(!selectedUid) return "Пользователь не выбран, проверка пропущена";
+      const snap = await get(query(ref(db, `history/${selectedUid}`), orderByChild("timestamp"), limitToLast(1)));
+      const count = snap.exists() ? Object.keys(snap.val() || {}).length : 0;
+      return `Лёгкий запрос history/${selectedUid}: ${count} точек. Полная history не читалась.`;
+    }));
+    items.push(await safeCheck("live пишется", async () => {
+      if(!uid) throw new Error("UID не найден");
+      const testRef = ref(db, `liveSessions/${testKey}`);
+      await set(testRef, {meta:{active:false, createdAt:now, expiresAt:now, ownerUid:uid, systemCheck:true}});
+      await remove(testRef);
+      return "Тестовая запись/удаление в liveSessions выполнены";
+    }));
+
+    const okCount = items.filter(i => i.status === "ok").length;
+    const errCount = items.filter(i => i.status === "err").length;
+    renderSystemCheckRows(items);
+    setSystemCheckSummary("checkFirebaseSummary", items[0]?.status === "ok" ? "OK" : "Ошибка");
+    setSystemCheckSummary("checkAdminSummary", items[1]?.status === "ok" ? "OK" : "Ошибка");
+    setSystemCheckSummary("checkReadSummary", items.slice(2,4).every(i=>i.status === "ok") ? "OK" : "Ошибка");
+    setSystemCheckSummary("checkWriteSummary", items[4]?.status === "ok" ? "OK" : "Ошибка");
+    showToast(errCount ? `Проверка: ${okCount} OK, ${errCount} ошибок` : "Проверка системы: всё OK", errCount ? "warn" : "ok", 3500);
+    if(btn){ btn.disabled = false; btn.textContent = "Запустить проверку"; }
+  };
+  window.runSystemCheck = runSystemCheck;
+}catch(e){ console.warn("low traffic runSystemCheck override failed", e); }
+
+try{
+  createMonthlyBackup = async function createMonthlyBackupLowTraffic(force=false){
+    showToast?.("Backup всей history отключён, чтобы не расходовать Firebase Downloads. Используй экспорт выбранного периода в Истории.", "warn", 5000);
+    return false;
+  };
+}catch(e){ console.warn("low traffic backup override failed", e); }
+
+try{
+  const oldLoadHistorySmart = loadHistorySmart;
+  loadHistorySmart = async function loadHistorySmartHardLowTraffic(){
+    if(!selectedUid){ showToast?.("Пользователь не выбран", "warn"); return; }
+    const {from, to} = getSelectedHistoryRange();
+    const uid = selectedUid;
+    const rangeMs = Math.max(0, to - from);
+    updateHistoryTrafficInfo(null);
+    if(historyLoadMode === "full" && rangeMs > 24*60*60*1000){
+      const ok = confirm("Ты выбрал полный режим больше чем на 24 часа. Это может сильно увеличить Firebase Downloads. Продолжить?");
+      if(!ok) return;
+    }
+    const baseRef = ref(db, `history/${uid}`);
+    const constraints = [orderByChild("timestamp"), startAt(from), endAt(to)];
+    if(historyLoadMode === "light") constraints.push(limitToLast(HISTORY_LIGHT_LIMIT));
+    const snap = await get(query(baseRef, ...constraints));
+    const raw = snap.val() || {};
+    const points = Object.values(raw).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+    historyByUid[uid] = points;
+    historyLoaded = true;
+    updateHistoryTrafficInfo(points.length, null, historyLoadMode === "light" && points.length >= HISTORY_LIGHT_LIMIT);
+    updateUsage?.();
+    updateTodaySummary?.();
+    await renderHistory?.();
+    showToast?.(`История загружена разовым запросом: ${points.length} точек`, "success");
+  };
+  window.loadHistory = () => loadHistorySmart();
+}catch(e){ console.warn("hard loadHistorySmart override failed", e); }
 
 </script>
 
@@ -6737,30 +7541,8 @@ onAuthStateChanged(auth, async user => {
     renderJournal();
     updateNowFromAvailableSources();
   });
-  trackedOnValue(ref(db, "history"), snap => {
-    const raw=snap.val()||{};
-    historyByUid={};
-    Object.entries(raw).forEach(([uid,pointsObj])=>{
-      historyByUid[uid]=Object.values(pointsObj||{}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
-    });
-
-    const ids = new Set([
-      ...(allUsers || []),
-      ...Object.keys(usersMeta || {}),
-      ...Object.keys(historyByUid || {}),
-      ...Object.keys(liveByUid || {}),
-      ...Object.keys(adminsMap || {})
-    ].filter(uid => uid && uid !== "_init"));
-
-    allUsers = [...ids].sort((a,b)=>getDisplayName(a).localeCompare(getDisplayName(b), "ru"));
-    if(!selectedUid && allUsers.length) selectedUid = allUsers[0];
-    renderUserSelect?.();
-
-    historyLoaded = true;
-    updateUsage();
-    renderHistory();
-    updateNowFromAvailableSources();
-  });
+  // History is intentionally NOT subscribed with onValue.
+  // It is loaded only once by button/date range to prevent Firebase Downloads growth.
   trackedOnValue(query(ref(db, "liveSessions"), limitToLast(ADMIN_SESSIONS_LIMIT)), snap => { allSessions=snap.val()||{}; updateUsage(); renderSessions(); updateActiveSessionToast(); updateNowFromAvailableSources(); });
   trackedOnValue(ref(db, "adminLogs/deletions"), snap => { deletionsLog=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0)); renderJournal(); });
   trackedOnValue(ref(db, "adminLogs/actions"), snap => { actionLogs=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0)); renderJournal(); });
@@ -9546,6 +10328,140 @@ setInterval(() => {
   requireDeleteWord = function(){ return true; };
 })();
 
+
+
+// === HARD LOW-TRAFFIC HISTORY FIX ===
+// No realtime listener and no full history reads on page open/refresh.
+try{
+  loadAllData = async function loadAllDataLowTraffic(){
+    const [liveSnap, usersSnap] = await Promise.all([
+      get(ref(db,"live")),
+      get(ref(db,"users"))
+    ]);
+
+    usersMeta = usersSnap.val() || {};
+    liveByUid = liveSnap.val() || {};
+
+    const ids = new Set([
+      ...(allUsers || []),
+      ...Object.keys(usersMeta || {}),
+      ...Object.keys(historyByUid || {}),
+      ...Object.keys(liveByUid || {}),
+      ...Object.keys(adminsMap || {})
+    ].filter(uid => uid && uid !== "_init"));
+
+    allUsers = [...ids].sort((a,b)=>getDisplayName(a).localeCompare(getDisplayName(b), "ru"));
+    if(!selectedUid && allUsers.length) selectedUid = allUsers[0];
+    renderUserSelect?.();
+
+    updateUsage?.();
+    updateTodaySummary?.();
+    await updateNowFromAvailableSources?.();
+  };
+}catch(e){ console.warn("low traffic loadAllData override failed", e); }
+
+try{
+  ensureHistoryLoaded = async function ensureHistoryLoadedLowTraffic(){
+    if(historyLoaded) return;
+    await loadHistorySmart();
+  };
+}catch(e){ console.warn("low traffic ensureHistoryLoaded override failed", e); }
+
+try{
+  runSystemCheck = async function runSystemCheckLowTraffic(){
+    const btn = qs("runSystemCheckBtn");
+    if(btn){ btn.disabled = true; btn.textContent = "Проверяю…"; }
+    setSystemCheckSummary("checkFirebaseSummary", "…");
+    setSystemCheckSummary("checkAdminSummary", "…");
+    setSystemCheckSummary("checkReadSummary", "…");
+    setSystemCheckSummary("checkWriteSummary", "…");
+    renderSystemCheckRows([{name:"Проверка запущена", status:"wait", details:"Идёт лёгкая проверка без чтения всей history."}]);
+
+    const uid = auth.currentUser?.uid || "";
+    const now = Date.now();
+    const testKey = `_system_check_${uid || "no_uid"}_${now}`;
+    const items = [];
+
+    items.push(await safeCheck("Firebase connected", async () => {
+      if(!auth.currentUser) throw new Error("Нет авторизованного пользователя");
+      const snap = await get(ref(db, "users"));
+      const count = snap.exists() && snap.val() ? Object.keys(snap.val()).length : 0;
+      return `Firebase OK · users читается · пользователей: ${count}`;
+    }));
+    items.push(await safeCheck("Admin права", async () => {
+      if(!uid) throw new Error("UID не найден");
+      const snap = await get(ref(db, `admins/${uid}`));
+      if(snap.val() !== true) throw new Error(`admins/${uid} не true`);
+      return `admins/${uid} = true`;
+    }));
+    items.push(await safeCheck("live читается", async () => {
+      const snap = await get(ref(db, "live"));
+      const count = snap.exists() ? Object.keys(snap.val() || {}).filter(k => k !== "_init").length : 0;
+      return `live UID: ${count}`;
+    }));
+    items.push(await safeCheck("history индекс timestamp", async () => {
+      if(!selectedUid) return "Пользователь не выбран, проверка пропущена";
+      const snap = await get(query(ref(db, `history/${selectedUid}`), orderByChild("timestamp"), limitToLast(1)));
+      const count = snap.exists() ? Object.keys(snap.val() || {}).length : 0;
+      return `Лёгкий запрос history/${selectedUid}: ${count} точек. Полная history не читалась.`;
+    }));
+    items.push(await safeCheck("live пишется", async () => {
+      if(!uid) throw new Error("UID не найден");
+      const testRef = ref(db, `liveSessions/${testKey}`);
+      await set(testRef, {meta:{active:false, createdAt:now, expiresAt:now, ownerUid:uid, systemCheck:true}});
+      await remove(testRef);
+      return "Тестовая запись/удаление в liveSessions выполнены";
+    }));
+
+    const okCount = items.filter(i => i.status === "ok").length;
+    const errCount = items.filter(i => i.status === "err").length;
+    renderSystemCheckRows(items);
+    setSystemCheckSummary("checkFirebaseSummary", items[0]?.status === "ok" ? "OK" : "Ошибка");
+    setSystemCheckSummary("checkAdminSummary", items[1]?.status === "ok" ? "OK" : "Ошибка");
+    setSystemCheckSummary("checkReadSummary", items.slice(2,4).every(i=>i.status === "ok") ? "OK" : "Ошибка");
+    setSystemCheckSummary("checkWriteSummary", items[4]?.status === "ok" ? "OK" : "Ошибка");
+    showToast(errCount ? `Проверка: ${okCount} OK, ${errCount} ошибок` : "Проверка системы: всё OK", errCount ? "warn" : "ok", 3500);
+    if(btn){ btn.disabled = false; btn.textContent = "Запустить проверку"; }
+  };
+  window.runSystemCheck = runSystemCheck;
+}catch(e){ console.warn("low traffic runSystemCheck override failed", e); }
+
+try{
+  createMonthlyBackup = async function createMonthlyBackupLowTraffic(force=false){
+    showToast?.("Backup всей history отключён, чтобы не расходовать Firebase Downloads. Используй экспорт выбранного периода в Истории.", "warn", 5000);
+    return false;
+  };
+}catch(e){ console.warn("low traffic backup override failed", e); }
+
+try{
+  const oldLoadHistorySmart = loadHistorySmart;
+  loadHistorySmart = async function loadHistorySmartHardLowTraffic(){
+    if(!selectedUid){ showToast?.("Пользователь не выбран", "warn"); return; }
+    const {from, to} = getSelectedHistoryRange();
+    const uid = selectedUid;
+    const rangeMs = Math.max(0, to - from);
+    updateHistoryTrafficInfo(null);
+    if(historyLoadMode === "full" && rangeMs > 24*60*60*1000){
+      const ok = confirm("Ты выбрал полный режим больше чем на 24 часа. Это может сильно увеличить Firebase Downloads. Продолжить?");
+      if(!ok) return;
+    }
+    const baseRef = ref(db, `history/${uid}`);
+    const constraints = [orderByChild("timestamp"), startAt(from), endAt(to)];
+    if(historyLoadMode === "light") constraints.push(limitToLast(HISTORY_LIGHT_LIMIT));
+    const snap = await get(query(baseRef, ...constraints));
+    const raw = snap.val() || {};
+    const points = Object.values(raw).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+    historyByUid[uid] = points;
+    historyLoaded = true;
+    updateHistoryTrafficInfo(points.length, null, historyLoadMode === "light" && points.length >= HISTORY_LIGHT_LIMIT);
+    updateUsage?.();
+    updateTodaySummary?.();
+    await renderHistory?.();
+    showToast?.(`История загружена разовым запросом: ${points.length} точек`, "success");
+  };
+  window.loadHistory = () => loadHistorySmart();
+}catch(e){ console.warn("hard loadHistorySmart override failed", e); }
+
 </script>
 
 
@@ -9755,6 +10671,140 @@ document.addEventListener("click", () => setTimeout(bindHistorySmartControls, 50
   // Expose manual helper for existing code if needed.
   window.fixAdminMapsLayout = scheduleMapResize;
 })();
+
+
+// === HARD LOW-TRAFFIC HISTORY FIX ===
+// No realtime listener and no full history reads on page open/refresh.
+try{
+  loadAllData = async function loadAllDataLowTraffic(){
+    const [liveSnap, usersSnap] = await Promise.all([
+      get(ref(db,"live")),
+      get(ref(db,"users"))
+    ]);
+
+    usersMeta = usersSnap.val() || {};
+    liveByUid = liveSnap.val() || {};
+
+    const ids = new Set([
+      ...(allUsers || []),
+      ...Object.keys(usersMeta || {}),
+      ...Object.keys(historyByUid || {}),
+      ...Object.keys(liveByUid || {}),
+      ...Object.keys(adminsMap || {})
+    ].filter(uid => uid && uid !== "_init"));
+
+    allUsers = [...ids].sort((a,b)=>getDisplayName(a).localeCompare(getDisplayName(b), "ru"));
+    if(!selectedUid && allUsers.length) selectedUid = allUsers[0];
+    renderUserSelect?.();
+
+    updateUsage?.();
+    updateTodaySummary?.();
+    await updateNowFromAvailableSources?.();
+  };
+}catch(e){ console.warn("low traffic loadAllData override failed", e); }
+
+try{
+  ensureHistoryLoaded = async function ensureHistoryLoadedLowTraffic(){
+    if(historyLoaded) return;
+    await loadHistorySmart();
+  };
+}catch(e){ console.warn("low traffic ensureHistoryLoaded override failed", e); }
+
+try{
+  runSystemCheck = async function runSystemCheckLowTraffic(){
+    const btn = qs("runSystemCheckBtn");
+    if(btn){ btn.disabled = true; btn.textContent = "Проверяю…"; }
+    setSystemCheckSummary("checkFirebaseSummary", "…");
+    setSystemCheckSummary("checkAdminSummary", "…");
+    setSystemCheckSummary("checkReadSummary", "…");
+    setSystemCheckSummary("checkWriteSummary", "…");
+    renderSystemCheckRows([{name:"Проверка запущена", status:"wait", details:"Идёт лёгкая проверка без чтения всей history."}]);
+
+    const uid = auth.currentUser?.uid || "";
+    const now = Date.now();
+    const testKey = `_system_check_${uid || "no_uid"}_${now}`;
+    const items = [];
+
+    items.push(await safeCheck("Firebase connected", async () => {
+      if(!auth.currentUser) throw new Error("Нет авторизованного пользователя");
+      const snap = await get(ref(db, "users"));
+      const count = snap.exists() && snap.val() ? Object.keys(snap.val()).length : 0;
+      return `Firebase OK · users читается · пользователей: ${count}`;
+    }));
+    items.push(await safeCheck("Admin права", async () => {
+      if(!uid) throw new Error("UID не найден");
+      const snap = await get(ref(db, `admins/${uid}`));
+      if(snap.val() !== true) throw new Error(`admins/${uid} не true`);
+      return `admins/${uid} = true`;
+    }));
+    items.push(await safeCheck("live читается", async () => {
+      const snap = await get(ref(db, "live"));
+      const count = snap.exists() ? Object.keys(snap.val() || {}).filter(k => k !== "_init").length : 0;
+      return `live UID: ${count}`;
+    }));
+    items.push(await safeCheck("history индекс timestamp", async () => {
+      if(!selectedUid) return "Пользователь не выбран, проверка пропущена";
+      const snap = await get(query(ref(db, `history/${selectedUid}`), orderByChild("timestamp"), limitToLast(1)));
+      const count = snap.exists() ? Object.keys(snap.val() || {}).length : 0;
+      return `Лёгкий запрос history/${selectedUid}: ${count} точек. Полная history не читалась.`;
+    }));
+    items.push(await safeCheck("live пишется", async () => {
+      if(!uid) throw new Error("UID не найден");
+      const testRef = ref(db, `liveSessions/${testKey}`);
+      await set(testRef, {meta:{active:false, createdAt:now, expiresAt:now, ownerUid:uid, systemCheck:true}});
+      await remove(testRef);
+      return "Тестовая запись/удаление в liveSessions выполнены";
+    }));
+
+    const okCount = items.filter(i => i.status === "ok").length;
+    const errCount = items.filter(i => i.status === "err").length;
+    renderSystemCheckRows(items);
+    setSystemCheckSummary("checkFirebaseSummary", items[0]?.status === "ok" ? "OK" : "Ошибка");
+    setSystemCheckSummary("checkAdminSummary", items[1]?.status === "ok" ? "OK" : "Ошибка");
+    setSystemCheckSummary("checkReadSummary", items.slice(2,4).every(i=>i.status === "ok") ? "OK" : "Ошибка");
+    setSystemCheckSummary("checkWriteSummary", items[4]?.status === "ok" ? "OK" : "Ошибка");
+    showToast(errCount ? `Проверка: ${okCount} OK, ${errCount} ошибок` : "Проверка системы: всё OK", errCount ? "warn" : "ok", 3500);
+    if(btn){ btn.disabled = false; btn.textContent = "Запустить проверку"; }
+  };
+  window.runSystemCheck = runSystemCheck;
+}catch(e){ console.warn("low traffic runSystemCheck override failed", e); }
+
+try{
+  createMonthlyBackup = async function createMonthlyBackupLowTraffic(force=false){
+    showToast?.("Backup всей history отключён, чтобы не расходовать Firebase Downloads. Используй экспорт выбранного периода в Истории.", "warn", 5000);
+    return false;
+  };
+}catch(e){ console.warn("low traffic backup override failed", e); }
+
+try{
+  const oldLoadHistorySmart = loadHistorySmart;
+  loadHistorySmart = async function loadHistorySmartHardLowTraffic(){
+    if(!selectedUid){ showToast?.("Пользователь не выбран", "warn"); return; }
+    const {from, to} = getSelectedHistoryRange();
+    const uid = selectedUid;
+    const rangeMs = Math.max(0, to - from);
+    updateHistoryTrafficInfo(null);
+    if(historyLoadMode === "full" && rangeMs > 24*60*60*1000){
+      const ok = confirm("Ты выбрал полный режим больше чем на 24 часа. Это может сильно увеличить Firebase Downloads. Продолжить?");
+      if(!ok) return;
+    }
+    const baseRef = ref(db, `history/${uid}`);
+    const constraints = [orderByChild("timestamp"), startAt(from), endAt(to)];
+    if(historyLoadMode === "light") constraints.push(limitToLast(HISTORY_LIGHT_LIMIT));
+    const snap = await get(query(baseRef, ...constraints));
+    const raw = snap.val() || {};
+    const points = Object.values(raw).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+    historyByUid[uid] = points;
+    historyLoaded = true;
+    updateHistoryTrafficInfo(points.length, null, historyLoadMode === "light" && points.length >= HISTORY_LIGHT_LIMIT);
+    updateUsage?.();
+    updateTodaySummary?.();
+    await renderHistory?.();
+    showToast?.(`История загружена разовым запросом: ${points.length} точек`, "success");
+  };
+  window.loadHistory = () => loadHistorySmart();
+}catch(e){ console.warn("hard loadHistorySmart override failed", e); }
+
 </script>
 
 </body></html>
