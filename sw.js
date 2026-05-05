@@ -1,15 +1,14 @@
-const CACHE_NAME = 'mygps-live-pwa-v1';
+const CACHE_NAME = 'mygps-live-pwa-v3';
 const APP_SHELL = [
   './live.html',
   './manifest.json',
-  './icons/mygps-live-192.png',
-  './icons/mygps-live-512.png'
+  './icons/icon-192.png',
+  './icons/icon-512.png',
+  './icons/splash-logo.png'
 ];
 
 self.addEventListener('install', event => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL)).catch(() => null)
-  );
+  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL)).catch(() => null));
   self.skipWaiting();
 });
 
@@ -23,8 +22,10 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   const req = event.request;
   if (req.method !== 'GET') return;
-
   const url = new URL(req.url);
+
+  // Не кэшируем Firebase, карты, погоду и любые realtime/API запросы.
+  if (url.hostname.includes('firebase') || url.hostname.includes('googleapis') || url.hostname.includes('open-meteo') || url.hostname.includes('tile.openstreetmap')) return;
   if (url.origin !== location.origin) return;
 
   event.respondWith(
