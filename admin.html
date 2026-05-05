@@ -2850,7 +2850,7 @@ function trackedOnValue(...args){
 }
 
 const provider = new GoogleAuthProvider();
-const qs = (id) => document.getElementById(id);
+function qs(id){ return document.getElementById(id); }
 
 let historyByUid = {}, liveByUid = {}, allSessions = {}, selectedUid = "", allUsers = [];
 let currentFiltered = [], deletionsLog = [], actionLogs = [], appEventLogs = [], liveEventLogs = [];
