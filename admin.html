@@ -6319,12 +6319,13 @@ async function createLiveSession(){
   }
   if(!durationMinutes || durationMinutes <= 0) return showToast("Укажи корректное время","warn");
   const sourcePoints=getRecentSourcePoints();
-  if(!sourcePoints.length) return showToast("Нет данных выбранного пользователя для создания live-ссылки.","warn");
 
   const now = Date.now();
-  const token=generateSessionToken(), expiresAt=now+durationMinutes*60*1000, lastPoint=sourcePoints[sourcePoints.length-1], recentPointsObj={};
+  const liveFallback = (liveByUid && selectedUid && liveByUid[selectedUid]) ? liveByUid[selectedUid] : null;
+  const lastPoint = sourcePoints.length ? sourcePoints[sourcePoints.length-1] : (liveFallback && (liveFallback.lastPoint || liveFallback.public?.lastPoint || liveFallback));
+  const token=generateSessionToken(), expiresAt=now+durationMinutes*60*1000, recentPointsObj={};
   const liveUrl = buildShareUrl(token);
-  sourcePoints.forEach(p=>recentPointsObj[String(p.timestamp||Date.now()+Math.random())]=p);
+  sourcePoints.forEach(p=>recentPointsObj[String(p.timestamp||p.ts||Date.now()+Math.random())]=p);
   const payload={
     meta:{
       active:true, paused:false, status:"active", linkStatus:"active",
@@ -6337,7 +6338,7 @@ async function createLiveSession(){
       createdByEmail:auth.currentUser?.email||null,
       durationMinutes
     },
-    public:{lastPoint,recentPoints:recentPointsObj},
+    public:{...(lastPoint ? {lastPoint} : {}), recentPoints:recentPointsObj},
     viewStats:{openCount:0,firstOpenAt:null,lastOpenAt:null}
   };
   try{
