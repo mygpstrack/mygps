@@ -4,9 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>MyGps Live</title>
-<link rel="manifest" href="manifest.json">
+<link rel="manifest" href="./manifest.json">
 <meta name="theme-color" content="#0b1220">
-<link rel="apple-touch-icon" href="icons/mygps-live-192.png">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
 <style>
 :root{
@@ -374,7 +373,7 @@ function showEnd(message){
 }
 function hideEnd(){ qs('endOverlay').style.display='none'; }
 
-async function registerSessionOpen(meta = {}){
+async function registerSessionOpen(){
   if(!sessionId) return;
 
   const openKey = `live_open_registered_${sessionId}`;
@@ -391,25 +390,6 @@ async function registerSessionOpen(meta = {}){
         lastOpenAt: now
       };
     });
-
-    const ownerUid = meta?.ownerUid || meta?.uid || meta?.createdBy || "";
-    if(ownerUid){
-      const eventRef = push(ref(db, `events/${ownerUid}`));
-      await set(eventRef, {
-        id: eventRef.key || String(now),
-        type: "live_link_opened",
-        title: "Live-ссылка открыта",
-        message: "Кто-то открыл live-ссылку",
-        timestamp: now,
-        ts: now,
-        source: "live.html",
-        uid: ownerUid,
-        sessionId,
-        userAgent: navigator.userAgent || "",
-        url: location.href.split("#")[0]
-      });
-    }
-
     sessionStorage.setItem(openKey, '1');
   }catch(e){
     console.warn('registerSessionOpen error', e);
@@ -981,31 +961,41 @@ function rememberSlimPoint(point){
 if(!sessionId){
   showEnd('Неверная ссылка (нет session).');
 }else{
-  const metaRef = ref(db, `liveSessions/${sessionId}/meta`);
-  const lastPointRef = ref(db, `liveSessions/${sessionId}/public/lastPoint`);
+  const publicRef = ref(db, `liveSessions/${sessionId}/public`);
   let openRegistered = false;
 
-  onValue(metaRef, snap => {
-    const meta = snap.val();
-    slimSessionMeta = meta || null;
-    if(meta && !openRegistered){
-      openRegistered = true;
-      registerSessionOpen(meta);
+  onValue(publicRef, snap => {
+    const pub = snap.val();
+    if(!pub){
+      applySession(null);
+      return;
     }
-    applySlimSession();
-  }, err => {
-    console.error(err);
-    showEnd('Не удалось загрузить live meta.');
-  });
 
-  onValue(lastPointRef, snap => {
-    const point = snap.val();
-    slimLastPoint = point || null;
-    rememberSlimPoint(point);
+    // Безопасный публичный режим: live.html больше не читает meta.
+    // Всё, что нужно зрителю, берётся только из liveSessions/<sessionId>/public.
+    slimSessionMeta = {
+      active: pub.active !== false,
+      paused: !!pub.paused,
+      status: pub.status || (pub.paused ? 'paused' : 'active'),
+      expiresAt: Number(pub.expiresAt || 0),
+      remainingMs: Number(pub.remainingMs || 0),
+      startedAt: Number(pub.startedAt || pub.createdAt || 0),
+      createdAt: Number(pub.createdAt || pub.startedAt || 0)
+    };
+
+    slimLastPoint = pub.lastPoint || null;
+    slimRecentPoints = pub.recentPoints || {};
+    rememberSlimPoint(slimLastPoint);
+
+    if(!openRegistered){
+      openRegistered = true;
+      registerSessionOpen();
+    }
+
     applySlimSession();
   }, err => {
     console.error(err);
-    showEnd('Не удалось загрузить live точку.');
+    showEnd('Не удалось загрузить live-ссылку.');
   });
 }
 
@@ -1079,13 +1069,12 @@ setInterval(() => {
   }catch(e){}
 }, 1500);
 
-// PWA registration for MyGpsLive
-if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js").catch(err => console.warn("Service worker registration failed", err));
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
   });
 }
-
 </script>
 </body>
 </html>
