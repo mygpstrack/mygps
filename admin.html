@@ -11624,6 +11624,220 @@ try{
 })();
 }catch(e){ console.warn('MYGPS FINAL LIVE REALTIME SYNC PATCH failed', e); }
 
+
+
+/* MYGPS FIX 76: final unified live realtime sync from app/admin.
+   Keeps liveSessions table in sync with live/<uid>, liveOwners and liveSessions/meta
+   for pause/resume/extend/stop without manual refresh. Does not touch history. */
+try{
+(function(){
+  const PATCH='liveRealtimeFix76';
+  if(window.__MYGPS_LIVE_FIX_76_INSTALLED__) return;
+  window.__MYGPS_LIVE_FIX_76_INSTALLED__ = true;
+
+  const safe = (fn)=>{ try{return fn();}catch(e){ try{ console.warn(PATCH,e); recordError && recordError(PATCH,e); }catch(_){} } };
+  const num = (v,d=0)=> Number.isFinite(Number(v)) ? Number(v) : d;
+  const str = (v)=> String(v || '').trim();
+  const now = ()=>Date.now();
+  const tokenFrom = (o)=> str(o?.sessionId || o?.activeSessionId || o?.liveSessionId || o?.token || o?.id);
+  const uidFromMeta = (m)=> str(m?.ownerUid || m?.uid || m?.createdBy || m?.userUid);
+  const isStopped = (m)=>{
+    const s=str(m?.status || m?.linkStatus).toLowerCase();
+    return m?.active===false || s==='stopped' || s==='stop' || s==='ended' || s==='expired' || !!m?.endedAt;
+  };
+  const isPaused = (m)=>{
+    const s=str(m?.status || m?.linkStatus).toLowerCase();
+    return m?.paused===true || s==='paused' || s==='pause';
+  };
+  const isActive = (m)=>{
+    if(!m) return false;
+    if(isStopped(m)) return false;
+    if(isPaused(m)) return true;
+    const s=str(m.status || m.linkStatus).toLowerCase();
+    if(s==='active' || m.active===true) return true;
+    const exp=num(m.expiresAt,0);
+    return exp>now();
+  };
+  const leftMs = (m)=>{
+    if(!m) return 0;
+    if(isPaused(m)) return Math.max(0,num(m.remainingMs, Math.max(0,num(m.expiresAt,0)-now())));
+    return Math.max(0,num(m.expiresAt,0)-now());
+  };
+  const statusOf = (m)=>{
+    if(isStopped(m)) return 'ended';
+    if(isPaused(m)) return 'paused';
+    if(isActive(m)) return 'active';
+    return 'expired';
+  };
+  const labelOf = (status)=>{
+    if(status==='active') return '<span class="tag online">активна</span>';
+    if(status==='paused') return '<span class="tag idle">пауза</span>';
+    if(status==='ended') return '<span class="tag offline">завершена</span>';
+    return '<span class="tag">истекла</span>';
+  };
+  const rootOf = (s)=> s && s.meta ? s : {meta:(s||{})};
+  const liveUrl = (token,m)=> m?.liveUrl || m?.url || m?.link || (typeof buildShareUrl==='function' ? buildShareUrl(token) : `live.html?session=${encodeURIComponent(token)}`);
+
+  function ensureSession(token){
+    if(!token) return null;
+    window.allSessions = allSessions = allSessions || {};
+    if(!allSessions[token]) allSessions[token] = {meta:{}};
+    if(!allSessions[token].meta) allSessions[token] = {meta:Object.assign({}, allSessions[token]||{})};
+    return allSessions[token];
+  }
+
+  function controlToMeta(uid, live){
+    const token = tokenFrom(live);
+    if(!token) return null;
+    const meta = {
+      ownerUid: uid,
+      sessionId: token,
+      activeSessionId: token,
+      liveSessionId: token,
+      liveUrl: liveUrl(token, live),
+      active: live.active !== undefined ? live.active : (str(live.status).toLowerCase() !== 'stopped'),
+      paused: live.paused === true || str(live.status).toLowerCase()==='paused',
+      status: live.status || (live.paused ? 'paused' : (live.active===false ? 'stopped' : 'active')),
+      startedAt: live.startedAt || live.createdAt || live.started || undefined,
+      pausedAt: live.pausedAt || undefined,
+      resumedAt: live.resumedAt || undefined,
+      endedAt: live.endedAt || undefined,
+      expiresAt: live.expiresAt || undefined,
+      remainingMs: live.remainingMs || undefined,
+      updatedAt: live.updatedAt || live.lastUpdatedAt || Date.now(),
+      lastSyncedAt: Date.now()
+    };
+    Object.keys(meta).forEach(k=>meta[k]===undefined && delete meta[k]);
+    return meta;
+  }
+
+  function mergeLiveControlsIntoSessions(){
+    safe(()=>{
+      const liveObj = liveByUid || window.liveByUid || {};
+      const ownersObj = liveOwnersByUid || window.liveOwnersByUid || {};
+      for(const [uid,live] of Object.entries(liveObj||{})){
+        if(!live || typeof live !== 'object') continue;
+        const token = tokenFrom(live) || str(ownersObj?.[uid]?.activeSessionId);
+        if(!token) continue;
+        const ses=ensureSession(token);
+        if(!ses) continue;
+        const root=rootOf(ses);
+        const m=controlToMeta(uid, Object.assign({}, live, {sessionId: token}));
+        root.meta = Object.assign({}, root.meta||{}, m||{});
+        allSessions[token]=root;
+      }
+    });
+  }
+
+  function selectedEntry(){
+    mergeLiveControlsIntoSessions();
+    const uid = selectedUid || qs('userSelect')?.value || '';
+    const entries = Object.entries(allSessions || {}).filter(([t])=>t !== '_init');
+    return entries.find(([token,s])=>{
+      const m=rootOf(s).meta||{};
+      return (!uid || uidFromMeta(m)===uid) && isActive(m);
+    }) || null;
+  }
+
+  window.getSessionStatus = getSessionStatus = function(session){ return statusOf(rootOf(session).meta||{}); };
+  window.getSessionStatusLabel = getSessionStatusLabel = function(status){ return labelOf(status); };
+  window.findActiveSessionEntryForSelectedUser = findActiveSessionEntryForSelectedUser = selectedEntry;
+  window.getSelectedActiveSessionEntry = getSelectedActiveSessionEntry = selectedEntry;
+
+  function redraw(){
+    mergeLiveControlsIntoSessions();
+    safe(()=> renderSessions && renderSessions());
+    safe(()=> updateActiveSessionNotice && updateActiveSessionNotice());
+    safe(()=> updateActiveSessionToast && updateActiveSessionToast());
+    safe(()=> updateNowFromAvailableSources && updateNowFromAvailableSources());
+  }
+
+  window.updateActiveSessionNotice = updateActiveSessionNotice = function(){
+    const box=qs('activeSessionNotice');
+    if(!box) return;
+    const e=selectedEntry();
+    if(!e){ box.classList.add('hidden'); box.innerHTML=''; return; }
+    const [token,s]=e, m=rootOf(s).meta||{}, st=statusOf(m), left=leftMs(m), url=liveUrl(token,m);
+    if(typeof createdShareUrl !== 'undefined') createdShareUrl=url;
+    if(qs('shareLinkText')) qs('shareLinkText').textContent=url;
+    if(qs('shareExpiresText')) qs('shareExpiresText').textContent=st==='paused' ? `Пауза, осталось ${typeof fmtRemainingCompact==='function'?fmtRemainingCompact(left):formatRemainingMs(left)}` : (typeof fmtTime==='function'?fmtTime(m.expiresAt):String(m.expiresAt||'—'));
+    box.classList.remove('hidden');
+    box.innerHTML=`<strong>Live-сессия ${st==='paused'?'на паузе':'активна'}</strong><div style="margin-top:6px">${st==='paused'?'Осталось после возобновления':'Осталось'}: <b>${typeof fmtRemainingCompact==='function'?fmtRemainingCompact(left):formatRemainingMs(left)}</b></div><div style="margin-top:6px" class="mono">${url}</div>`;
+  };
+
+  window.updateActiveSessionToast = updateActiveSessionToast = function(){
+    const e=selectedEntry();
+    let el=document.getElementById('activeSessionToast');
+    if(!e){
+      if(el) el.remove();
+      const btn=qs('createShareBtn'); if(btn){ btn.disabled=false; btn.textContent='Создать live-ссылку'; }
+      return;
+    }
+    const [token,s]=e, m=rootOf(s).meta||{}, st=statusOf(m), left=leftMs(m), url=liveUrl(token,m);
+    const btn=qs('createShareBtn'); if(btn){ btn.disabled=true; btn.textContent=st==='paused'?'Live на паузе':'Есть активная ссылка'; }
+    if(!el){
+      el=document.createElement('div');
+      el.id='activeSessionToast';
+      Object.assign(el.style,{position:'fixed',zIndex:'99999',right:'14px',bottom:'14px',maxWidth:'360px',padding:'12px 14px',borderRadius:'14px',color:'#fff',boxShadow:'0 12px 30px rgba(0,0,0,.35)',cursor:'pointer'});
+      el.onclick=()=>safe(async()=>{ await navigator.clipboard.writeText(url); showToast && showToast('Live-ссылка скопирована','success'); });
+      document.body.appendChild(el);
+    }
+    el.style.background=st==='paused'?'#b45309':'#2563eb';
+    el.innerHTML=`<div style="font-weight:800">Live-сессия ${st==='paused'?'на паузе':'активна'}</div><div style="font-size:13px;opacity:.95">${st==='paused'?'Пауза, осталось':'Осталось'}: ${formatRemainingMs(left)}</div>`;
+  };
+
+  window.renderSessions = renderSessions = function(){
+    mergeLiveControlsIntoSessions();
+    const tbody=qs('sessionsTbody');
+    if(!tbody) return;
+    tbody.innerHTML='';
+    const search=(qs('sessionSearchInput')?.value||'').trim().toLowerCase();
+    const statusFilter=qs('sessionStatusFilter')?.value || 'all';
+    const viewMode=qs('viewModeSelect')?.value || 'selected';
+    const uid=selectedUid || qs('userSelect')?.value || '';
+    const entries=Object.entries(allSessions||{}).filter(([token])=>token !== '_init').map(([token,session])=>[token,rootOf(session),statusOf(rootOf(session).meta||{})]).filter(([token,session,status])=>{
+      if(search && !token.toLowerCase().includes(search)) return false;
+      if(viewMode==='selected' && uid && uidFromMeta(session.meta||{}) && uidFromMeta(session.meta||{})!==uid) return false;
+      if(statusFilter !== 'all'){
+        if(statusFilter==='active' && status!=='active' && status!=='paused') return false;
+        if(statusFilter!=='active' && status!==statusFilter) return false;
+      }
+      return true;
+    }).sort((a,b)=>num(b[1]?.meta?.createdAt || b[1]?.meta?.startedAt,0)-num(a[1]?.meta?.createdAt || a[1]?.meta?.startedAt,0));
+    if(!entries.length){ tbody.innerHTML='<tr><td colspan="8">Сессий нет</td></tr>'; updateActiveSessionToast(); return; }
+    for(const [token,session,status] of entries){
+      const m=session.meta||{}, stats=session.viewStats||{}, tr=document.createElement('tr');
+      const lpInfo = (typeof getSessionLastPointInfo==='function') ? getSessionLastPointInfo(session,status) : {html:'—',age:'—'};
+      const left=leftMs(m);
+      const expireHtml = status==='paused' ? `<span class="tag idle">пауза</span><br><span class="smallMuted">осталось ${formatRemainingMs(left)}</span>` : `${typeof fmtTime==='function'?fmtTime(m.expiresAt):'—'}<br><span class="smallMuted">осталось ${formatRemainingMs(left)}</span>`;
+      tr.innerHTML=`<td class="mono">${token}<br><span class="tag">${(typeof getDisplayName==='function'?getDisplayName(m.ownerUid):'')||m.ownerUid||'—'}</span></td><td>${labelOf(status)}</td><td>${lpInfo.html}</td><td>${lpInfo.age}</td><td>${expireHtml}</td><td>${stats.openCount||0}</td><td>${typeof fmtTime==='function'?fmtTime(stats.firstOpenAt):'—'}<br>${typeof fmtTime==='function'?fmtTime(stats.lastOpenAt):'—'}</td><td><div class="row"><button class="secondary small" data-copy="${token}">Копировать</button><button class="secondary small" data-share="${token}">Поделиться</button><button class="secondary small" data-open="${token}">Карта</button><button class="secondary small" data-gmaps="${token}">Google Maps</button><button class="secondary small" data-center="${token}">Центр</button><button class="warn small" data-end="${token}">Завершить</button><button class="danger small" data-delete="${token}">Удалить</button></div></td>`;
+      tbody.appendChild(tr);
+    }
+    tbody.querySelectorAll('[data-copy]').forEach(btn=>btn.onclick=async()=>safe(async()=>{await navigator.clipboard.writeText(liveUrl(btn.dataset.copy, rootOf(allSessions[btn.dataset.copy]).meta||{})); showToast&&showToast('Ссылка скопирована','success');}));
+    tbody.querySelectorAll('[data-share]').forEach(btn=>btn.onclick=async()=>safe(async()=>{const url=liveUrl(btn.dataset.share, rootOf(allSessions[btn.dataset.share]).meta||{}); if(navigator.share) await navigator.share({title:'MyGps Live',text:'Активная live-ссылка',url}); else {await navigator.clipboard.writeText(url); showToast&&showToast('Ссылка скопирована','success');}}));
+    tbody.querySelectorAll('[data-open]').forEach(btn=>btn.onclick=()=>window.open(liveUrl(btn.dataset.open, rootOf(allSessions[btn.dataset.open]).meta||{}),'_blank','noopener,noreferrer'));
+    tbody.querySelectorAll('[data-center]').forEach(btn=>btn.onclick=()=>safe(()=>centerSessionOnPoint(btn.dataset.center)));
+    tbody.querySelectorAll('[data-gmaps]').forEach(btn=>btn.onclick=()=>safe(()=>{ const session=rootOf(allSessions[btn.dataset.gmaps])||{}; const p=session?.public?.lastPoint; const lat=getPointLat(p), lng=getPointLng(p); if(!p||lat==null||lng==null) return showToast('Нет точки','warn'); window.open(`https://www.google.com/maps?q=${lat},${lng}`,'_blank'); }));
+    tbody.querySelectorAll('[data-end]').forEach(btn=>btn.onclick=()=>safe(()=>endSession(btn.dataset.end)));
+    tbody.querySelectorAll('[data-delete]').forEach(btn=>btn.onclick=()=>safe(()=>deleteSession(btn.dataset.delete)));
+    updateActiveSessionToast();
+  };
+
+  let unsubs=[];
+  function subscribe(){
+    if(unsubs.length) return;
+    unsubs.push(onValue(ref(db,'live'), snap=>{ liveByUid=snap.val()||{}; window.liveByUid=liveByUid; redraw(); }, err=>safe(()=>recordError&&recordError('live/globalRealtime',err))));
+    unsubs.push(onValue(ref(db,'liveOwners'), snap=>{ liveOwnersByUid=snap.val()||{}; window.liveOwnersByUid=liveOwnersByUid; redraw(); }, err=>safe(()=>recordError&&recordError('liveOwners/globalRealtime',err))));
+    unsubs.push(onValue(query(ref(db,'liveSessions'), limitToLast(typeof ADMIN_SESSIONS_LIMIT==='number'?ADMIN_SESSIONS_LIMIT:100)), snap=>{ allSessions=snap.val()||{}; window.allSessions=allSessions; mergeLiveControlsIntoSessions(); redraw(); }, err=>safe(()=>recordError&&recordError('liveSessions/globalRealtime',err))));
+  }
+  document.addEventListener('change', e=>{ if(e.target && e.target.id==='userSelect') setTimeout(redraw,50); }, true);
+  document.addEventListener('click', e=>{ if(e.target && (e.target.id==='refreshSessionsBtn' || e.target.dataset?.tab==='sessionsPanel')) setTimeout(redraw,100); }, true);
+  subscribe();
+  setInterval(()=>safe(()=>{ mergeLiveControlsIntoSessions(); updateActiveSessionNotice(); updateActiveSessionToast(); renderSessions(); }),1000);
+  setTimeout(redraw,1000);
+})();
+}catch(e){ console.warn('MYGPS FIX 76 install failed', e); }
+
 </script>
 
 </body></html>
