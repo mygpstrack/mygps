@@ -11288,6 +11288,341 @@ try{
   window.loadHistory = () => loadHistorySmart();
 }catch(e){ console.warn("hard loadHistorySmart override failed", e); }
 
+
+
+/* MYGPS FINAL LIVE REALTIME SYNC PATCH
+   Purpose: admin sees Android app live pause/resume/extend immediately.
+   Reads only small live/<uid>, liveOwners/<uid>/activeSessionId and active liveSessions/<token>.
+*/
+try{
+(function(){
+  if(window.__MYGPS_FINAL_LIVE_SYNC_PATCH__) return;
+  window.__MYGPS_FINAL_LIVE_SYNC_PATCH__ = true;
+
+  const safeCall = (fn) => { try { return fn(); } catch(e) { console.warn('live sync patch', e); } };
+  const n = (v, d=0) => { const x = Number(v); return Number.isFinite(x) ? x : d; };
+  const s = (v) => String(v || '').toLowerCase();
+  const getUid = () => selectedUid || qs('userSelect')?.value || '';
+  let liveSyncUnsubs = [];
+  let liveSyncToken = '';
+  let liveSyncUid = '';
+
+  function clearLiveSyncListeners(){
+    liveSyncUnsubs.forEach(unsub => safeCall(()=>unsub && unsub()));
+    liveSyncUnsubs = [];
+    liveSyncToken = '';
+    liveSyncUid = '';
+  }
+
+  function getMetaStatus(meta){
+    return s(meta?.status || meta?.linkStatus);
+  }
+
+  function isStoppedMeta(meta){
+    const st = getMetaStatus(meta);
+    return meta?.active === false || st === 'stopped' || st === 'ended' || !!meta?.endedAt;
+  }
+
+  function isPausedMeta(meta){
+    const st = getMetaStatus(meta);
+    return meta?.paused === true || st === 'paused';
+  }
+
+  function liveToMeta(uid, live){
+    const now = Date.now();
+    live = live || {};
+    const status = s(live.status || live.linkStatus);
+    const paused = live.paused === true || status === 'paused';
+    const stopped = live.active === false || status === 'stopped' || status === 'ended' || !!live.endedAt;
+    const expiresAt = n(live.expiresAt, 0);
+    const remainingMs = paused
+      ? n(live.remainingMs, Math.max(0, expiresAt ? expiresAt - now : 0))
+      : Math.max(0, expiresAt ? expiresAt - now : n(live.remainingMs, 0));
+    const token = live.sessionId || live.activeSessionId || live.token || '';
+    return {
+      ownerUid: live.ownerUid || uid,
+      sessionId: token,
+      active: !stopped && (paused || live.active === true || status === 'active'),
+      paused,
+      status: stopped ? 'stopped' : (paused ? 'paused' : ((live.active === true || status === 'active') ? 'active' : (live.status || ''))),
+      linkStatus: stopped ? 'stopped' : (paused ? 'paused' : ((live.active === true || status === 'active') ? 'active' : (live.linkStatus || live.status || ''))),
+      liveUrl: live.liveUrl || live.url || live.link || (token ? buildShareUrl(token) : ''),
+      startedAt: n(live.startedAt || live.createdAt, 0) || undefined,
+      pausedAt: n(live.pausedAt, 0) || undefined,
+      resumedAt: n(live.resumedAt, 0) || undefined,
+      endedAt: n(live.endedAt, 0) || undefined,
+      expiresAt,
+      remainingMs,
+      extendedAt: n(live.extendedAt, 0) || undefined,
+      lastSyncedAt: n(live.lastSyncedAt || live.updatedAt, 0) || undefined
+    };
+  }
+
+  function mergeLiveMetaIntoSession(uid, live){
+    if(!live) return '';
+    const metaFromLive = liveToMeta(uid, live);
+    const token = metaFromLive.sessionId;
+    if(!token) return '';
+    const current = getSessionRoot(allSessions?.[token]) || {};
+    const currentMeta = current.meta || {};
+    const mergedMeta = {...currentMeta};
+
+    Object.entries(metaFromLive).forEach(([k,v])=>{
+      if(v !== undefined && v !== null && v !== '') mergedMeta[k] = v;
+    });
+
+    // Android live/<uid> is the source of truth for pause/resume/extend.
+    if(metaFromLive.paused === true){
+      mergedMeta.paused = true;
+      mergedMeta.status = 'paused';
+      mergedMeta.linkStatus = 'paused';
+      mergedMeta.active = true;
+      mergedMeta.remainingMs = n(metaFromLive.remainingMs, n(currentMeta.remainingMs, Math.max(0, n(currentMeta.expiresAt,0)-Date.now())));
+    }else if(metaFromLive.status === 'active'){
+      mergedMeta.paused = false;
+      mergedMeta.status = 'active';
+      mergedMeta.linkStatus = 'active';
+      mergedMeta.active = true;
+      if(metaFromLive.expiresAt) mergedMeta.expiresAt = metaFromLive.expiresAt;
+      mergedMeta.remainingMs = Math.max(0, n(mergedMeta.expiresAt,0)-Date.now());
+    }else if(metaFromLive.status === 'stopped'){
+      mergedMeta.paused = false;
+      mergedMeta.active = false;
+      mergedMeta.status = 'stopped';
+      mergedMeta.linkStatus = 'stopped';
+    }
+
+    allSessions = allSessions || {};
+    allSessions[token] = {
+      ...current,
+      meta: mergedMeta,
+      public: current.public || {},
+      viewStats: current.viewStats || {}
+    };
+    return token;
+  }
+
+  function isSessionActiveOrPaused(session){
+    const meta = getSessionRoot(session)?.meta || {};
+    const now = Date.now();
+    if(isStoppedMeta(meta)) return false;
+    if(isPausedMeta(meta)) return true;
+    return meta.active === true && (!n(meta.expiresAt,0) || n(meta.expiresAt,0) > now);
+  }
+
+  function getSessionLeftMsPatched(meta){
+    if(!meta) return 0;
+    if(isPausedMeta(meta)) return Math.max(0, n(meta.remainingMs, Math.max(0, n(meta.expiresAt,0) - Date.now())));
+    return Math.max(0, n(meta.expiresAt,0) - Date.now());
+  }
+
+  function redrawLiveSync(){
+    safeCall(()=>renderSessions && renderSessions());
+    safeCall(()=>updateActiveSessionNotice && updateActiveSessionNotice());
+    safeCall(()=>updateActiveSessionToast && updateActiveSessionToast());
+  }
+
+  function subscribeSessionToken(token){
+    if(!token || token === liveSyncToken) return;
+    liveSyncToken = token;
+    const unsub = onValue(ref(db, `liveSessions/${token}`), snap=>{
+      const val = snap.val();
+      if(val){
+        const liveMirror = liveSyncUid && liveByUid ? liveByUid[liveSyncUid] : null;
+        allSessions = allSessions || {};
+        allSessions[token] = val;
+        if(liveMirror) mergeLiveMetaIntoSession(liveSyncUid, liveMirror);
+      }
+      redrawLiveSync();
+    }, err=>safeCall(()=>recordError && recordError(`liveSessions/${token}/realtime`, err)));
+    liveSyncUnsubs.push(unsub);
+  }
+
+  function setupSelectedLiveRealtime(){
+    const uid = getUid();
+    if(!uid || uid === liveSyncUid) return;
+    clearLiveSyncListeners();
+    liveSyncUid = uid;
+
+    liveSyncUnsubs.push(onValue(ref(db, `live/${uid}`), snap=>{
+      const live = snap.val() || {};
+      liveByUid = liveByUid || {};
+      liveByUid[uid] = live;
+      const token = mergeLiveMetaIntoSession(uid, live);
+      if(token) subscribeSessionToken(token);
+      redrawLiveSync();
+    }, err=>safeCall(()=>recordError && recordError(`live/${uid}/realtime`, err))));
+
+    liveSyncUnsubs.push(onValue(ref(db, `liveOwners/${uid}/activeSessionId`), snap=>{
+      const token = snap.val() || '';
+      if(token) subscribeSessionToken(token);
+      redrawLiveSync();
+    }, err=>safeCall(()=>recordError && recordError(`liveOwners/${uid}/activeSessionId/realtime`, err))));
+  }
+
+  // Override status helpers after all original functions are defined.
+  getSessionStatus = function(session){
+    const meta = getSessionRoot(session)?.meta || {};
+    const now = Date.now();
+    if(isStoppedMeta(meta)) return 'ended';
+    if(isPausedMeta(meta)) return 'paused';
+    if(meta.active === true && (!n(meta.expiresAt,0) || n(meta.expiresAt,0) > now)) return 'active';
+    return 'expired';
+  };
+
+  getSessionStatusLabel = function(status){
+    if(status === 'active') return '<span class="tag online">активна</span>';
+    if(status === 'paused') return '<span class="tag idle">пауза</span>';
+    if(status === 'ended') return '<span class="tag offline">завершена</span>';
+    return '<span class="tag">истекла</span>';
+  };
+
+  findActiveSessionEntryForSelectedUser = function(){
+    return Object.entries(allSessions || {}).filter(([token])=>token !== '_init')
+      .find(([token, session])=>{
+        const meta = getSessionRoot(session)?.meta || {};
+        return (!selectedUid || meta.ownerUid === selectedUid) && isSessionActiveOrPaused(session);
+      }) || null;
+  };
+
+  getSelectedActiveSessionEntry = function(){
+    return findActiveSessionEntryForSelectedUser();
+  };
+
+  updateActiveSessionNotice = function(){
+    const box = qs('activeSessionNotice');
+    if(!box) return;
+    const entry = findActiveSessionEntryForSelectedUser();
+    if(!entry){ box.classList.add('hidden'); box.innerHTML=''; return; }
+    const [token, session] = entry;
+    const meta = getSessionRoot(session)?.meta || {};
+    const paused = isPausedMeta(meta);
+    const left = getSessionLeftMsPatched(meta);
+    const url = meta.liveUrl || meta.url || meta.link || buildShareUrl(token);
+    createdShareUrl = url;
+    if(qs('shareLinkText')) qs('shareLinkText').textContent = url;
+    if(qs('shareExpiresText')) qs('shareExpiresText').textContent = paused ? `Пауза, осталось ${fmtRemainingCompact(left)}` : fmtTime(meta.expiresAt);
+    box.classList.remove('hidden');
+    box.innerHTML = `<strong>Live-сессия ${paused ? 'на паузе' : 'активна'}</strong><div style="margin-top:6px">${paused ? 'Осталось после возобновления' : 'Осталось'}: <b>${fmtRemainingCompact(left)}</b></div><div style="margin-top:6px" class="mono">${url}</div>`;
+  };
+
+  updateActiveSessionToast = function(){
+    const host = getToastHost ? getToastHost() : document.body;
+    safeCall(()=>applyToastPosition && applyToastPosition());
+    let el = document.getElementById('activeSessionToast');
+    const entry = findActiveSessionEntryForSelectedUser();
+    if(!entry){
+      if(el) el.remove();
+      const createBtn = qs('createShareBtn');
+      if(createBtn){ createBtn.disabled = false; createBtn.textContent = 'Создать live-ссылку'; }
+      return;
+    }
+    const [token, session] = entry;
+    const meta = getSessionRoot(session)?.meta || {};
+    const paused = isPausedMeta(meta);
+    const leftMs = getSessionLeftMsPatched(meta);
+    const url = meta.liveUrl || meta.url || meta.link || buildShareUrl(token);
+    const createBtn = qs('createShareBtn');
+    if(createBtn){ createBtn.disabled = true; createBtn.textContent = paused ? 'Live на паузе' : 'Есть активная ссылка'; }
+    if(!el){
+      el = document.createElement('div');
+      el.id = 'activeSessionToast';
+      el.style.position = 'fixed';
+      el.style.zIndex = '99999';
+      el.style.right = '14px';
+      el.style.bottom = '14px';
+      el.style.maxWidth = '360px';
+      el.style.padding = '12px 14px';
+      el.style.borderRadius = '14px';
+      el.style.color = '#fff';
+      el.style.boxShadow = '0 12px 30px rgba(0,0,0,.35)';
+      el.style.cursor = 'pointer';
+      el.onclick = () => { try{ navigator.clipboard.writeText(url); showToast('Live-ссылка скопирована','success'); }catch(e){} };
+      host.appendChild(el);
+    }
+    el.style.background = paused ? '#b45309' : '#2563eb';
+    el.innerHTML = `<div style="font-weight:800">Live-сессия ${paused ? 'на паузе' : 'активна'}</div><div style="font-size:13px;opacity:.95">${paused ? 'Осталось после возобновления' : 'Осталось'}: ${formatRemainingMs(leftMs)}</div>`;
+    if(el._timer) clearInterval(el._timer);
+    if(!paused){
+      const exp = n(meta.expiresAt,0);
+      el._timer = setInterval(()=>{
+        const left = Math.max(0, exp-Date.now());
+        const t = el.querySelector('div:nth-child(2)');
+        if(t) t.textContent = `Осталось: ${formatRemainingMs(left)}`;
+        if(left <= 0){ clearInterval(el._timer); el.remove(); redrawLiveSync(); }
+      },1000);
+    }
+  };
+
+  const originalRenderSessions = renderSessions;
+  renderSessions = function(){
+    const tbody=qs('sessionsTbody');
+    if(!tbody) return;
+    tbody.innerHTML='';
+    const search=(qs('sessionSearchInput')?.value||'').trim().toLowerCase();
+    const statusFilter=qs('sessionStatusFilter')?.value || 'all';
+    const entries=Object.entries(allSessions||{}).filter(([token])=>token !== '_init').map(([token,session])=>[token,getSessionRoot(session),getSessionStatus(session)]).filter(([token,session,status])=>{
+      if(statusFilter !== 'all'){
+        if(statusFilter === 'active'){
+          if(status !== 'active' && status !== 'paused') return false;
+        }else if(status !== statusFilter) return false;
+      }
+      if(search && !token.toLowerCase().includes(search)) return false;
+      if(selectedUid && session?.meta?.ownerUid && qs('viewModeSelect')?.value === 'selected' && session.meta.ownerUid !== selectedUid) return false;
+      return true;
+    }).sort((a,b)=>n(b[1]?.meta?.createdAt,0)-n(a[1]?.meta?.createdAt,0));
+
+    if(!entries.length){
+      tbody.innerHTML='<tr><td colspan="8">Сессий нет</td></tr>';
+      updateActiveSessionToast();
+      return;
+    }
+
+    for(const [token,session,status] of entries){
+      const meta=session?.meta||{}, stats=session?.viewStats||{}, tr=document.createElement('tr');
+      const lpInfo = getSessionLastPointInfo(session, status);
+      const paused = status === 'paused' || isPausedMeta(meta);
+      const left = getSessionLeftMsPatched(meta);
+      const expireHtml = paused
+        ? `<span class="tag idle">пауза</span><br><span class="smallMuted">осталось ${formatRemainingMs(left)}</span>`
+        : `${fmtTime(meta.expiresAt)}<br><span class="smallMuted">осталось ${formatRemainingMs(left)}</span>`;
+      tr.innerHTML=`<td class="mono">${token}<br><span class="tag">${getDisplayName(meta.ownerUid)||meta.ownerUid||'—'}</span></td><td>${getSessionStatusLabel(status)}</td><td>${lpInfo.html}</td><td>${lpInfo.age}</td><td>${expireHtml}</td><td>${stats.openCount||0}</td><td>${fmtTime(stats.firstOpenAt)}<br>${fmtTime(stats.lastOpenAt)}</td><td><div class="row"><button class="secondary small" data-copy="${token}">Копировать</button><button class="secondary small" data-share="${token}">Поделиться</button><button class="secondary small" data-open="${token}">Карта</button><button class="secondary small" data-gmaps="${token}">Google Maps</button><button class="secondary small" data-center="${token}">Центр</button><button class="warn small" data-end="${token}">Завершить</button><button class="danger small" data-delete="${token}">Удалить</button></div></td>`;
+      tbody.appendChild(tr);
+    }
+    tbody.querySelectorAll('[data-copy]').forEach(btn=>btn.onclick=async()=>{ try{ await navigator.clipboard.writeText(buildShareUrl(btn.dataset.copy)); showToast('Ссылка скопирована','success'); }catch(e){ alert('Ошибка копирования: '+errText(e)); }});
+    tbody.querySelectorAll('[data-share]').forEach(btn=>btn.onclick=async()=>{ const url=buildShareUrl(btn.dataset.share); try{ if(navigator.share){ await navigator.share({title:'MyGps Live', text:'Активная live-ссылка', url}); } else { await navigator.clipboard.writeText(url); showToast('Ссылка скопирована для отправки','success'); } }catch(e){} });
+    tbody.querySelectorAll('[data-open]').forEach(btn=>btn.onclick=()=>window.open(buildShareUrl(btn.dataset.open), '_blank', 'noopener,noreferrer'));
+    tbody.querySelectorAll('[data-center]').forEach(btn=>btn.onclick=()=>centerSessionOnPoint(btn.dataset.center));
+    tbody.querySelectorAll('[data-gmaps]').forEach(btn=>btn.onclick=()=>{ const session=getSessionRoot(allSessions[btn.dataset.gmaps])||{}; const p=session?.public?.lastPoint; const lat=getPointLat(p), lng=getPointLng(p); if(!p || lat==null || lng==null) return showToast('Нет точки','warn'); window.open(`https://www.google.com/maps?q=${lat},${lng}`,'_blank'); });
+    tbody.querySelectorAll('[data-end]').forEach(btn=>btn.onclick=()=>endSession(btn.dataset.end));
+    tbody.querySelectorAll('[data-delete]').forEach(btn=>btn.onclick=()=>deleteSession(btn.dataset.delete));
+    const createBtn = qs('createShareBtn');
+    if(createBtn){
+      const hasActive = entries.some(([token,session,status]) => (status==='active' || status==='paused') && (!selectedUid || session?.meta?.ownerUid===selectedUid));
+      createBtn.disabled = hasActive;
+      createBtn.textContent = hasActive ? (entries.some(e=>e[2]==='paused') ? 'Live на паузе' : 'Есть активная ссылка') : 'Создать live-ссылку';
+    }
+    updateActiveSessionToast();
+  };
+
+  const oldLoadSessions = loadSessions;
+  loadSessions = async function(){
+    const r = await oldLoadSessions.apply(this, arguments);
+    setupSelectedLiveRealtime();
+    return r;
+  };
+
+  document.addEventListener('change', (ev)=>{
+    if(ev.target && ev.target.id === 'userSelect') setTimeout(setupSelectedLiveRealtime, 50);
+  }, true);
+  document.addEventListener('click', (ev)=>{
+    if(ev.target && ev.target.id === 'refreshSessionsBtn') setTimeout(setupSelectedLiveRealtime, 100);
+  }, true);
+  setInterval(()=>{ setupSelectedLiveRealtime(); redrawLiveSync(); }, 5000);
+  setTimeout(()=>{ setupSelectedLiveRealtime(); redrawLiveSync(); }, 1200);
+})();
+}catch(e){ console.warn('MYGPS FINAL LIVE REALTIME SYNC PATCH failed', e); }
+
 </script>
 
 </body></html>
