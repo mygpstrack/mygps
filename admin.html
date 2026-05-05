@@ -10995,749 +10995,36 @@ try{
   window.loadHistory = () => loadHistorySmart();
 }catch(e){ console.warn("hard loadHistorySmart override failed", e); }
 
-</script>
 
-
-<!-- === Fix 68: Leaflet maps stable resize / no blank map after admin open === -->
-<script type="module">
-const qs = (id) => document.getElementById(id);
-const qsa = (sel) => document.querySelectorAll(sel);
-// This script runs after the main module. Most map variables are module-scoped there,
-// so we use DOM + Leaflet container resize events through global events and safe retries.
-
-// === MyGps history smart traffic mode v1 ===
-let historyLoadMode = localStorage.getItem("mygps_history_load_mode") || "light";
-const HISTORY_LIGHT_LIMIT = 3000;
-
-function getDateTimeFromHistoryInputs(prefix){
-  const dateEl = qs(prefix + "Date");
-  const hourEl = qs(prefix + "Hour");
-  const minuteEl = qs(prefix + "Minute");
-  if(!dateEl || !dateEl.value) return null;
-  const [y,m,d] = dateEl.value.split("-").map(Number);
-  const h = Number(hourEl?.value || 0);
-  const min = Number(minuteEl?.value || 0);
-  return new Date(y, (m || 1) - 1, d || 1, h, min, prefix === "to" ? 59 : 0, prefix === "to" ? 999 : 0).getTime();
-}
-
-function getSelectedHistoryRange(){
-  let from = getDateTimeFromHistoryInputs("from");
-  let to = getDateTimeFromHistoryInputs("to");
-  const now = Date.now();
-  if(!from || !to){
-    const start = new Date();
-    start.setHours(0,0,0,0);
-    from = from || start.getTime();
-    to = to || now;
-  }
-  if(from > to){
-    const t = from; from = to; to = t;
-  }
-  return {from, to};
-}
-
-function formatHistoryRangeLabel(from, to){
-  try{
-    const sameDay = new Date(from).toDateString() === new Date(to).toDateString();
-    if(sameDay) return new Date(from).toLocaleDateString("ru-RU");
-    return `${new Date(from).toLocaleDateString("ru-RU")} — ${new Date(to).toLocaleDateString("ru-RU")}`;
-  }catch(e){ return "выбранный период"; }
-}
-
-function updateHistoryModeButtons(){
-  const light = qs("historyLightModeBtn");
-  const full = qs("historyFullModeBtn");
-  if(light){ light.className = historyLoadMode === "light" ? "success" : "secondary"; }
-  if(full){ full.className = historyLoadMode === "full" ? "warn" : "secondary"; }
-}
-
-function updateHistoryTrafficInfo(loadedCount = null, totalHint = null, limitHit = false){
-  const info = qs("historyTrafficInfo");
-  const warn = qs("historyLargeRangeWarning");
-  const {from, to} = getSelectedHistoryRange();
-  const rangeMs = Math.max(0, to - from);
-  const days = rangeMs / 86400000;
-  const modeText = historyLoadMode === "light" ? `лёгкий, лимит ${HISTORY_LIGHT_LIMIT}` : "полный";
-  const countText = loadedCount == null ? "—" : String(loadedCount);
-  const periodText = formatHistoryRangeLabel(from, to);
-  const limitText = limitHit ? " Показаны последние точки в лимите — для полного маршрута нажми “Полная история”." : "";
-  if(info){
-    info.textContent = `Загружено точек: ${countText} / режим: ${modeText} / период: ${periodText}.${limitText}`;
-  }
-  if(warn){
-    const shouldWarn = days >= 1 || historyLoadMode === "full";
-    warn.classList.toggle("hidden", !shouldWarn);
-    warn.textContent = historyLoadMode === "full"
-      ? "⚠ Полная история может сильно увеличить Firebase Downloads. Лучше использовать 1 час или день."
-      : "⚠ Большой период. Лучше выбрать 1 час или день, чтобы не расходовать Firebase traffic.";
-  }
-  updateHistoryModeButtons();
-}
-
-async function loadHistorySmart(){
-  if(!selectedUid){
-    showToast?.("Пользователь не выбран", "warn");
-    return;
-  }
-  const {from, to} = getSelectedHistoryRange();
-  const uid = selectedUid;
-  const baseRef = ref(db, `history/${uid}`);
-  const constraints = [orderByChild("timestamp"), startAt(from), endAt(to)];
-  if(historyLoadMode === "light") constraints.push(limitToLast(HISTORY_LIGHT_LIMIT));
-  const snap = await get(query(baseRef, ...constraints));
-  const raw = snap.val() || {};
-  const points = Object.values(raw).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
-  historyByUid[uid] = points;
-  historyLoaded = true;
-  updateHistoryTrafficInfo(points.length, null, historyLoadMode === "light" && points.length >= HISTORY_LIGHT_LIMIT);
-  updateUsage?.();
-  updateTodaySummary?.();
-  await renderHistory?.();
-  showToast?.(`История загружена: ${points.length} точек`, "success");
-}
-
-function bindHistorySmartControls(){
-  updateHistoryTrafficInfo(null);
-  const light = qs("historyLightModeBtn");
-  const full = qs("historyFullModeBtn");
-  const refresh = qs("refreshHistoryBtn");
-  if(light && light.dataset.smartBound !== "1"){
-    light.dataset.smartBound = "1";
-    light.onclick = async () => { historyLoadMode = "light"; localStorage.setItem("mygps_history_load_mode", historyLoadMode); updateHistoryTrafficInfo(null); await loadHistorySmart(); };
-  }
-  if(full && full.dataset.smartBound !== "1"){
-    full.dataset.smartBound = "1";
-    full.onclick = async () => {
-      if(!confirm("Полная история может сильно увеличить Firebase Downloads. Загрузить полный период?")) return;
-      historyLoadMode = "full";
-      localStorage.setItem("mygps_history_load_mode", historyLoadMode);
-      updateHistoryTrafficInfo(null);
-      await loadHistorySmart();
-    };
-  }
-  if(refresh){
-    refresh.onclick = async () => { await loadHistorySmart(); };
-  }
-  ["fromDate","fromHour","fromMinute","toDate","toHour","toMinute"].forEach(id => {
-    const el = qs(id);
-    if(el && el.dataset.historyInfoBound !== "1"){
-      el.dataset.historyInfoBound = "1";
-      el.addEventListener("change", () => updateHistoryTrafficInfo(null));
-    }
-  });
-}
-
-// Used by existing tab refresh code. It must stay light by default.
-async function loadHistory(){
-  return loadHistorySmart();
-}
-
-window.addEventListener("load", bindHistorySmartControls);
-document.addEventListener("click", () => setTimeout(bindHistorySmartControls, 50), true);
-
-(function(){
-  const mapIds = ['liveMap','historyMap','sessionMap','geofenceMap'];
-  let resizeTimer = null;
-
-  function visible(el){
-    if(!el) return false;
-    const r = el.getBoundingClientRect();
-    return r.width > 40 && r.height > 40 && getComputedStyle(el).display !== 'none' && !el.closest('.hidden');
-  }
-
-  function fireMapResize(reason){
-    try{
-      // Leaflet listens to window resize and recalculates tile layout.
-      window.dispatchEvent(new Event('resize'));
-    }catch(e){}
-
-    // Retry several times because tabs/panels become visible after CSS/layout settles.
-    [60, 180, 420, 900].forEach(delay => {
-      setTimeout(() => {
-        try{ window.dispatchEvent(new Event('resize')); }catch(e){}
-        mapIds.forEach(id => {
-          const el = document.getElementById(id);
-          if(!visible(el)) return;
-          // Force browser layout recalculation for Leaflet tile containers.
-          el.style.minHeight = el.style.minHeight || '';
-          el.getBoundingClientRect();
-        });
-      }, delay);
-    });
-  }
-
-  function scheduleMapResize(reason=''){
-    clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => fireMapResize(reason), 40);
-  }
-
-  // Tab switching: fixes white/half-loaded maps when a Leaflet map was initialized hidden.
-  document.addEventListener('click', (ev) => {
-    const btn = ev.target && ev.target.closest ? ev.target.closest('.tab-btn[data-tab]') : null;
-    if(btn) scheduleMapResize('tab');
-  }, true);
-
-  // Initial admin open/login and browser resize/orientation changes.
-  window.addEventListener('load', () => scheduleMapResize('load'));
-  window.addEventListener('resize', () => scheduleMapResize('resize'));
-  window.addEventListener('orientationchange', () => scheduleMapResize('orientation'));
-
-  // When hidden panels become visible after login/tab restore, resize maps automatically.
-  const observer = new MutationObserver((mutations) => {
-    for(const m of mutations){
-      if(m.type === 'attributes' && (m.attributeName === 'class' || m.attributeName === 'style')){
-        const t = m.target;
-        if(t && (t.id === 'adminPanel' || /Panel$/.test(t.id || '') || mapIds.includes(t.id || ''))){
-          scheduleMapResize('mutation');
-          return;
-        }
-      }
-    }
-  });
-
-  window.addEventListener('DOMContentLoaded', () => {
-    try{
-      document.querySelectorAll('#adminPanel,#nowPanel,#historyPanel,#sessionsPanel,#geofencesPanel,#liveMap,#historyMap,#sessionMap,#geofenceMap')
-        .forEach(el => observer.observe(el, {attributes:true, attributeFilter:['class','style']}));
-    }catch(e){}
-    scheduleMapResize('dom');
-  });
-
-  // Expose manual helper for existing code if needed.
-  window.fixAdminMapsLayout = scheduleMapResize;
-})();
-
-
-// === HARD LOW-TRAFFIC HISTORY FIX ===
-// No realtime listener and no full history reads on page open/refresh.
-try{
-  loadAllData = async function loadAllDataLowTraffic(){
-    const [liveSnap, usersSnap] = await Promise.all([
-      get(ref(db,"live")),
-      get(ref(db,"users"))
-    ]);
-
-    usersMeta = usersSnap.val() || {};
-    liveByUid = liveSnap.val() || {};
-
-    const ids = new Set([
-      ...(allUsers || []),
-      ...Object.keys(usersMeta || {}),
-      ...Object.keys(historyByUid || {}),
-      ...Object.keys(liveByUid || {}),
-      ...Object.keys(adminsMap || {})
-    ].filter(uid => uid && uid !== "_init"));
-
-    allUsers = [...ids].sort((a,b)=>getDisplayName(a).localeCompare(getDisplayName(b), "ru"));
-    if(!selectedUid && allUsers.length) selectedUid = allUsers[0];
-    renderUserSelect?.();
-
-    updateUsage?.();
-    updateTodaySummary?.();
-    await updateNowFromAvailableSources?.();
-  };
-}catch(e){ console.warn("low traffic loadAllData override failed", e); }
-
-try{
-  ensureHistoryLoaded = async function ensureHistoryLoadedLowTraffic(){
-    if(historyLoaded) return;
-    await loadHistorySmart();
-  };
-}catch(e){ console.warn("low traffic ensureHistoryLoaded override failed", e); }
-
-try{
-  runSystemCheck = async function runSystemCheckLowTraffic(){
-    const btn = qs("runSystemCheckBtn");
-    if(btn){ btn.disabled = true; btn.textContent = "Проверяю…"; }
-    setSystemCheckSummary("checkFirebaseSummary", "…");
-    setSystemCheckSummary("checkAdminSummary", "…");
-    setSystemCheckSummary("checkReadSummary", "…");
-    setSystemCheckSummary("checkWriteSummary", "…");
-    renderSystemCheckRows([{name:"Проверка запущена", status:"wait", details:"Идёт лёгкая проверка без чтения всей history."}]);
-
-    const uid = auth.currentUser?.uid || "";
-    const now = Date.now();
-    const testKey = `_system_check_${uid || "no_uid"}_${now}`;
-    const items = [];
-
-    items.push(await safeCheck("Firebase connected", async () => {
-      if(!auth.currentUser) throw new Error("Нет авторизованного пользователя");
-      const snap = await get(ref(db, "users"));
-      const count = snap.exists() && snap.val() ? Object.keys(snap.val()).length : 0;
-      return `Firebase OK · users читается · пользователей: ${count}`;
-    }));
-    items.push(await safeCheck("Admin права", async () => {
-      if(!uid) throw new Error("UID не найден");
-      const snap = await get(ref(db, `admins/${uid}`));
-      if(snap.val() !== true) throw new Error(`admins/${uid} не true`);
-      return `admins/${uid} = true`;
-    }));
-    items.push(await safeCheck("live читается", async () => {
-      const snap = await get(ref(db, "live"));
-      const count = snap.exists() ? Object.keys(snap.val() || {}).filter(k => k !== "_init").length : 0;
-      return `live UID: ${count}`;
-    }));
-    items.push(await safeCheck("history индекс timestamp", async () => {
-      if(!selectedUid) return "Пользователь не выбран, проверка пропущена";
-      const snap = await get(query(ref(db, `history/${selectedUid}`), orderByChild("timestamp"), limitToLast(1)));
-      const count = snap.exists() ? Object.keys(snap.val() || {}).length : 0;
-      return `Лёгкий запрос history/${selectedUid}: ${count} точек. Полная history не читалась.`;
-    }));
-    items.push(await safeCheck("live пишется", async () => {
-      if(!uid) throw new Error("UID не найден");
-      const testRef = ref(db, `liveSessions/${testKey}`);
-      await set(testRef, {meta:{active:false, createdAt:now, expiresAt:now, ownerUid:uid, systemCheck:true}});
-      await remove(testRef);
-      return "Тестовая запись/удаление в liveSessions выполнены";
-    }));
-
-    const okCount = items.filter(i => i.status === "ok").length;
-    const errCount = items.filter(i => i.status === "err").length;
-    renderSystemCheckRows(items);
-    setSystemCheckSummary("checkFirebaseSummary", items[0]?.status === "ok" ? "OK" : "Ошибка");
-    setSystemCheckSummary("checkAdminSummary", items[1]?.status === "ok" ? "OK" : "Ошибка");
-    setSystemCheckSummary("checkReadSummary", items.slice(2,4).every(i=>i.status === "ok") ? "OK" : "Ошибка");
-    setSystemCheckSummary("checkWriteSummary", items[4]?.status === "ok" ? "OK" : "Ошибка");
-    showToast(errCount ? `Проверка: ${okCount} OK, ${errCount} ошибок` : "Проверка системы: всё OK", errCount ? "warn" : "ok", 3500);
-    if(btn){ btn.disabled = false; btn.textContent = "Запустить проверку"; }
-  };
-  window.runSystemCheck = runSystemCheck;
-}catch(e){ console.warn("low traffic runSystemCheck override failed", e); }
-
-try{
-  createMonthlyBackup = async function createMonthlyBackupLowTraffic(force=false){
-    showToast?.("Backup всей history отключён, чтобы не расходовать Firebase Downloads. Используй экспорт выбранного периода в Истории.", "warn", 5000);
-    return false;
-  };
-}catch(e){ console.warn("low traffic backup override failed", e); }
-
-try{
-  const oldLoadHistorySmart = loadHistorySmart;
-  loadHistorySmart = async function loadHistorySmartHardLowTraffic(){
-    if(!selectedUid){ showToast?.("Пользователь не выбран", "warn"); return; }
-    const {from, to} = getSelectedHistoryRange();
-    const uid = selectedUid;
-    const rangeMs = Math.max(0, to - from);
-    updateHistoryTrafficInfo(null);
-    if(historyLoadMode === "full" && rangeMs > 24*60*60*1000){
-      const ok = confirm("Ты выбрал полный режим больше чем на 24 часа. Это может сильно увеличить Firebase Downloads. Продолжить?");
-      if(!ok) return;
-    }
-    const baseRef = ref(db, `history/${uid}`);
-    const constraints = [orderByChild("timestamp"), startAt(from), endAt(to)];
-    if(historyLoadMode === "light") constraints.push(limitToLast(HISTORY_LIGHT_LIMIT));
-    const snap = await get(query(baseRef, ...constraints));
-    const raw = snap.val() || {};
-    const points = Object.values(raw).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
-    historyByUid[uid] = points;
-    historyLoaded = true;
-    updateHistoryTrafficInfo(points.length, null, historyLoadMode === "light" && points.length >= HISTORY_LIGHT_LIMIT);
-    updateUsage?.();
-    updateTodaySummary?.();
-    await renderHistory?.();
-    showToast?.(`История загружена разовым запросом: ${points.length} точек`, "success");
-  };
-  window.loadHistory = () => loadHistorySmart();
-}catch(e){ console.warn("hard loadHistorySmart override failed", e); }
-
-
-
-/* MYGPS FINAL LIVE REALTIME SYNC PATCH
-   Purpose: admin sees Android app live pause/resume/extend immediately.
-   Reads only small live/<uid>, liveOwners/<uid>/activeSessionId and active liveSessions/<token>.
-*/
+/* === MYGPS FINAL PATCH 2026-05-05: stable active live notice + app/admin realtime sync === */
 try{
 (function(){
-  if(window.__MYGPS_FINAL_LIVE_SYNC_PATCH__) return;
-  window.__MYGPS_FINAL_LIVE_SYNC_PATCH__ = true;
+  const PATCH = 'stableLiveSyncFinal';
+  if(window.__MYGPS_STABLE_LIVE_SYNC_FINAL__) return;
+  window.__MYGPS_STABLE_LIVE_SYNC_FINAL__ = true;
 
-  const safeCall = (fn) => { try { return fn(); } catch(e) { console.warn('live sync patch', e); } };
-  const n = (v, d=0) => { const x = Number(v); return Number.isFinite(x) ? x : d; };
-  const s = (v) => String(v || '').toLowerCase();
-  const getUid = () => selectedUid || qs('userSelect')?.value || '';
-  let liveSyncUnsubs = [];
-  let liveSyncToken = '';
-  let liveSyncUid = '';
+  const byId = (id)=>document.getElementById(id);
+  const safe = (fn)=>{ try{return fn();}catch(e){ try{ console.warn(PATCH, e); recordError && recordError(PATCH, e); }catch(_){} } };
+  const asStr = (v)=>String(v == null ? '' : v).trim();
+  const asNum = (v,d=0)=>Number.isFinite(Number(v)) ? Number(v) : d;
+  const tokenFrom = (o)=>asStr(o && (o.sessionId || o.activeSessionId || o.liveSessionId || o.token || o.id));
+  const uidOf = (m)=>asStr(m && (m.ownerUid || m.uid || m.createdBy || m.userUid));
+  const getRoot = (s)=> s && s.meta ? s : { meta: (s || {}) };
+  const urlFor = (token, meta)=> asStr(meta && (meta.liveUrl || meta.url || meta.link)) || (typeof buildShareUrl === 'function' ? buildShareUrl(token) : ('live.html?session=' + encodeURIComponent(token)));
 
-  function clearLiveSyncListeners(){
-    liveSyncUnsubs.forEach(unsub => safeCall(()=>unsub && unsub()));
-    liveSyncUnsubs = [];
-    liveSyncToken = '';
-    liveSyncUid = '';
+  function metaState(meta){
+    meta = meta || {};
+    const raw = asStr(meta.status || meta.linkStatus).toLowerCase();
+    const stopped = meta.active === false || !!meta.endedAt || raw === 'stopped' || raw === 'ended' || raw === 'expired' || raw === 'stop';
+    const paused = !stopped && (meta.paused === true || raw === 'paused' || raw === 'pause');
+    const exp = asNum(meta.expiresAt, 0);
+    const active = !stopped && (paused || meta.active === true || raw === 'active') && (!exp || paused || exp > Date.now());
+    const left = paused ? Math.max(0, asNum(meta.remainingMs, Math.max(0, exp - Date.now()))) : Math.max(0, exp - Date.now());
+    return {active, paused, stopped, expired: !active && !paused && !stopped, leftMs:left};
   }
 
-  function getMetaStatus(meta){
-    return s(meta?.status || meta?.linkStatus);
-  }
-
-  function isStoppedMeta(meta){
-    const st = getMetaStatus(meta);
-    return meta?.active === false || st === 'stopped' || st === 'ended' || !!meta?.endedAt;
-  }
-
-  function isPausedMeta(meta){
-    const st = getMetaStatus(meta);
-    return meta?.paused === true || st === 'paused';
-  }
-
-  function liveToMeta(uid, live){
-    const now = Date.now();
-    live = live || {};
-    const status = s(live.status || live.linkStatus);
-    const paused = live.paused === true || status === 'paused';
-    const stopped = live.active === false || status === 'stopped' || status === 'ended' || !!live.endedAt;
-    const expiresAt = n(live.expiresAt, 0);
-    const remainingMs = paused
-      ? n(live.remainingMs, Math.max(0, expiresAt ? expiresAt - now : 0))
-      : Math.max(0, expiresAt ? expiresAt - now : n(live.remainingMs, 0));
-    const token = live.sessionId || live.activeSessionId || live.token || '';
-    return {
-      ownerUid: live.ownerUid || uid,
-      sessionId: token,
-      active: !stopped && (paused || live.active === true || status === 'active'),
-      paused,
-      status: stopped ? 'stopped' : (paused ? 'paused' : ((live.active === true || status === 'active') ? 'active' : (live.status || ''))),
-      linkStatus: stopped ? 'stopped' : (paused ? 'paused' : ((live.active === true || status === 'active') ? 'active' : (live.linkStatus || live.status || ''))),
-      liveUrl: live.liveUrl || live.url || live.link || (token ? buildShareUrl(token) : ''),
-      startedAt: n(live.startedAt || live.createdAt, 0) || undefined,
-      pausedAt: n(live.pausedAt, 0) || undefined,
-      resumedAt: n(live.resumedAt, 0) || undefined,
-      endedAt: n(live.endedAt, 0) || undefined,
-      expiresAt,
-      remainingMs,
-      extendedAt: n(live.extendedAt, 0) || undefined,
-      lastSyncedAt: n(live.lastSyncedAt || live.updatedAt, 0) || undefined
-    };
-  }
-
-  function mergeLiveMetaIntoSession(uid, live){
-    if(!live) return '';
-    const metaFromLive = liveToMeta(uid, live);
-    const token = metaFromLive.sessionId;
-    if(!token) return '';
-    const current = getSessionRoot(allSessions?.[token]) || {};
-    const currentMeta = current.meta || {};
-    const mergedMeta = {...currentMeta};
-
-    Object.entries(metaFromLive).forEach(([k,v])=>{
-      if(v !== undefined && v !== null && v !== '') mergedMeta[k] = v;
-    });
-
-    // Android live/<uid> is the source of truth for pause/resume/extend.
-    if(metaFromLive.paused === true){
-      mergedMeta.paused = true;
-      mergedMeta.status = 'paused';
-      mergedMeta.linkStatus = 'paused';
-      mergedMeta.active = true;
-      mergedMeta.remainingMs = n(metaFromLive.remainingMs, n(currentMeta.remainingMs, Math.max(0, n(currentMeta.expiresAt,0)-Date.now())));
-    }else if(metaFromLive.status === 'active'){
-      mergedMeta.paused = false;
-      mergedMeta.status = 'active';
-      mergedMeta.linkStatus = 'active';
-      mergedMeta.active = true;
-      if(metaFromLive.expiresAt) mergedMeta.expiresAt = metaFromLive.expiresAt;
-      mergedMeta.remainingMs = Math.max(0, n(mergedMeta.expiresAt,0)-Date.now());
-    }else if(metaFromLive.status === 'stopped'){
-      mergedMeta.paused = false;
-      mergedMeta.active = false;
-      mergedMeta.status = 'stopped';
-      mergedMeta.linkStatus = 'stopped';
-    }
-
-    allSessions = allSessions || {};
-    allSessions[token] = {
-      ...current,
-      meta: mergedMeta,
-      public: current.public || {},
-      viewStats: current.viewStats || {}
-    };
-    return token;
-  }
-
-  function isSessionActiveOrPaused(session){
-    const meta = getSessionRoot(session)?.meta || {};
-    const now = Date.now();
-    if(isStoppedMeta(meta)) return false;
-    if(isPausedMeta(meta)) return true;
-    return meta.active === true && (!n(meta.expiresAt,0) || n(meta.expiresAt,0) > now);
-  }
-
-  function getSessionLeftMsPatched(meta){
-    if(!meta) return 0;
-    if(isPausedMeta(meta)) return Math.max(0, n(meta.remainingMs, Math.max(0, n(meta.expiresAt,0) - Date.now())));
-    return Math.max(0, n(meta.expiresAt,0) - Date.now());
-  }
-
-  function redrawLiveSync(){
-    safeCall(()=>renderSessions && renderSessions());
-    safeCall(()=>updateActiveSessionNotice && updateActiveSessionNotice());
-    safeCall(()=>updateActiveSessionToast && updateActiveSessionToast());
-  }
-
-  function subscribeSessionToken(token){
-    if(!token || token === liveSyncToken) return;
-    liveSyncToken = token;
-    const unsub = onValue(ref(db, `liveSessions/${token}`), snap=>{
-      const val = snap.val();
-      if(val){
-        const liveMirror = liveSyncUid && liveByUid ? liveByUid[liveSyncUid] : null;
-        allSessions = allSessions || {};
-        allSessions[token] = val;
-        if(liveMirror) mergeLiveMetaIntoSession(liveSyncUid, liveMirror);
-      }
-      redrawLiveSync();
-    }, err=>safeCall(()=>recordError && recordError(`liveSessions/${token}/realtime`, err)));
-    liveSyncUnsubs.push(unsub);
-  }
-
-  function setupSelectedLiveRealtime(){
-    const uid = getUid();
-    if(!uid || uid === liveSyncUid) return;
-    clearLiveSyncListeners();
-    liveSyncUid = uid;
-
-    liveSyncUnsubs.push(onValue(ref(db, `live/${uid}`), snap=>{
-      const live = snap.val() || {};
-      liveByUid = liveByUid || {};
-      liveByUid[uid] = live;
-      const token = mergeLiveMetaIntoSession(uid, live);
-      if(token) subscribeSessionToken(token);
-      redrawLiveSync();
-    }, err=>safeCall(()=>recordError && recordError(`live/${uid}/realtime`, err))));
-
-    liveSyncUnsubs.push(onValue(ref(db, `liveOwners/${uid}/activeSessionId`), snap=>{
-      const token = snap.val() || '';
-      if(token) subscribeSessionToken(token);
-      redrawLiveSync();
-    }, err=>safeCall(()=>recordError && recordError(`liveOwners/${uid}/activeSessionId/realtime`, err))));
-  }
-
-  // Override status helpers after all original functions are defined.
-  getSessionStatus = function(session){
-    const meta = getSessionRoot(session)?.meta || {};
-    const now = Date.now();
-    if(isStoppedMeta(meta)) return 'ended';
-    if(isPausedMeta(meta)) return 'paused';
-    if(meta.active === true && (!n(meta.expiresAt,0) || n(meta.expiresAt,0) > now)) return 'active';
-    return 'expired';
-  };
-
-  getSessionStatusLabel = function(status){
-    if(status === 'active') return '<span class="tag online">активна</span>';
-    if(status === 'paused') return '<span class="tag idle">пауза</span>';
-    if(status === 'ended') return '<span class="tag offline">завершена</span>';
-    return '<span class="tag">истекла</span>';
-  };
-
-  findActiveSessionEntryForSelectedUser = function(){
-    return Object.entries(allSessions || {}).filter(([token])=>token !== '_init')
-      .find(([token, session])=>{
-        const meta = getSessionRoot(session)?.meta || {};
-        return (!selectedUid || meta.ownerUid === selectedUid) && isSessionActiveOrPaused(session);
-      }) || null;
-  };
-
-  getSelectedActiveSessionEntry = function(){
-    return findActiveSessionEntryForSelectedUser();
-  };
-
-  updateActiveSessionNotice = function(){
-    const box = qs('activeSessionNotice');
-    if(!box) return;
-    const entry = findActiveSessionEntryForSelectedUser();
-    if(!entry){ box.classList.add('hidden'); box.innerHTML=''; return; }
-    const [token, session] = entry;
-    const meta = getSessionRoot(session)?.meta || {};
-    const paused = isPausedMeta(meta);
-    const left = getSessionLeftMsPatched(meta);
-    const url = meta.liveUrl || meta.url || meta.link || buildShareUrl(token);
-    createdShareUrl = url;
-    if(qs('shareLinkText')) qs('shareLinkText').textContent = url;
-    if(qs('shareExpiresText')) qs('shareExpiresText').textContent = paused ? `Пауза, осталось ${fmtRemainingCompact(left)}` : `${fmtTime(meta.expiresAt)} · осталось ${fmtRemainingCompact(left)}`;
-    box.classList.remove('hidden');
-    box.innerHTML = `<strong>Live-сессия ${paused ? 'на паузе' : 'активна'}</strong><div style="margin-top:6px">${paused ? 'Осталось после возобновления' : 'Осталось'}: <b>${fmtRemainingCompact(left)}</b></div><div style="margin-top:6px" class="mono">${url}</div>`;
-  };
-
-  updateActiveSessionToast = function(){
-    const host = getToastHost ? getToastHost() : document.body;
-    safeCall(()=>applyToastPosition && applyToastPosition());
-    let el = document.getElementById('activeSessionToast');
-    const entry = findActiveSessionEntryForSelectedUser();
-    if(!entry){
-      if(el) el.remove();
-      const createBtn = qs('createShareBtn');
-      if(createBtn){ createBtn.disabled = false; createBtn.textContent = 'Создать live-ссылку'; }
-      return;
-    }
-    const [token, session] = entry;
-    const meta = getSessionRoot(session)?.meta || {};
-    const paused = isPausedMeta(meta);
-    const leftMs = getSessionLeftMsPatched(meta);
-    const url = meta.liveUrl || meta.url || meta.link || buildShareUrl(token);
-    const createBtn = qs('createShareBtn');
-    if(createBtn){ createBtn.disabled = true; createBtn.textContent = paused ? 'Live на паузе' : 'Есть активная ссылка'; }
-    if(!el){
-      el = document.createElement('div');
-      el.id = 'activeSessionToast';
-      el.style.position = 'fixed';
-      el.style.zIndex = '99999';
-      el.style.right = '14px';
-      el.style.bottom = '14px';
-      el.style.maxWidth = '360px';
-      el.style.padding = '12px 14px';
-      el.style.borderRadius = '14px';
-      el.style.color = '#fff';
-      el.style.boxShadow = '0 12px 30px rgba(0,0,0,.35)';
-      el.style.cursor = 'pointer';
-      el.onclick = () => { try{ navigator.clipboard.writeText(url); showToast('Live-ссылка скопирована','success'); }catch(e){} };
-      host.appendChild(el);
-    }
-    el.style.background = paused ? '#b45309' : '#2563eb';
-    el.innerHTML = `<div style="font-weight:800">Live-сессия ${paused ? 'на паузе' : 'активна'}</div><div style="font-size:13px;opacity:.95">${paused ? 'Осталось после возобновления' : 'Осталось'}: ${formatRemainingMs(leftMs)}</div>`;
-    if(el._timer) clearInterval(el._timer);
-    if(!paused){
-      const exp = n(meta.expiresAt,0);
-      el._timer = setInterval(()=>{
-        const left = Math.max(0, exp-Date.now());
-        const t = el.querySelector('div:nth-child(2)');
-        if(t) t.textContent = `Осталось: ${formatRemainingMs(left)}`;
-        if(left <= 0){ clearInterval(el._timer); el.remove(); redrawLiveSync(); }
-      },1000);
-    }
-  };
-
-  const originalRenderSessions = renderSessions;
-  renderSessions = function(){
-    const tbody=qs('sessionsTbody');
-    if(!tbody) return;
-    tbody.innerHTML='';
-    const search=(qs('sessionSearchInput')?.value||'').trim().toLowerCase();
-    const statusFilter=qs('sessionStatusFilter')?.value || 'all';
-    const entries=Object.entries(allSessions||{}).filter(([token])=>token !== '_init').map(([token,session])=>[token,getSessionRoot(session),getSessionStatus(session)]).filter(([token,session,status])=>{
-      if(statusFilter !== 'all'){
-        if(statusFilter === 'active'){
-          if(status !== 'active' && status !== 'paused') return false;
-        }else if(status !== statusFilter) return false;
-      }
-      if(search && !token.toLowerCase().includes(search)) return false;
-      if(selectedUid && session?.meta?.ownerUid && qs('viewModeSelect')?.value === 'selected' && session.meta.ownerUid !== selectedUid) return false;
-      return true;
-    }).sort((a,b)=>n(b[1]?.meta?.createdAt,0)-n(a[1]?.meta?.createdAt,0));
-
-    if(!entries.length){
-      tbody.innerHTML='<tr><td colspan="8">Сессий нет</td></tr>';
-      updateActiveSessionToast();
-      return;
-    }
-
-    for(const [token,session,status] of entries){
-      const meta=session?.meta||{}, stats=session?.viewStats||{}, tr=document.createElement('tr');
-      const lpInfo = getSessionLastPointInfo(session, status);
-      const paused = status === 'paused' || isPausedMeta(meta);
-      const left = getSessionLeftMsPatched(meta);
-      const expireHtml = paused
-        ? `<span class="tag idle">пауза</span><br><span class="smallMuted">осталось ${formatRemainingMs(left)}</span>`
-        : `${fmtTime(meta.expiresAt)}<br><span class="smallMuted">осталось ${formatRemainingMs(left)}</span>`;
-      tr.innerHTML=`<td class="mono">${token}<br><span class="tag">${getDisplayName(meta.ownerUid)||meta.ownerUid||'—'}</span></td><td>${getSessionStatusLabel(status)}</td><td>${lpInfo.html}</td><td>${lpInfo.age}</td><td>${expireHtml}</td><td>${stats.openCount||0}</td><td>${fmtTime(stats.firstOpenAt)}<br>${fmtTime(stats.lastOpenAt)}</td><td><div class="row"><button class="secondary small" data-copy="${token}">Копировать</button><button class="secondary small" data-share="${token}">Поделиться</button><button class="secondary small" data-open="${token}">Карта</button><button class="secondary small" data-gmaps="${token}">Google Maps</button><button class="secondary small" data-center="${token}">Центр</button><button class="warn small" data-end="${token}">Завершить</button><button class="danger small" data-delete="${token}">Удалить</button></div></td>`;
-      tbody.appendChild(tr);
-    }
-    tbody.querySelectorAll('[data-copy]').forEach(btn=>btn.onclick=async()=>{ try{ await navigator.clipboard.writeText(buildShareUrl(btn.dataset.copy)); showToast('Ссылка скопирована','success'); }catch(e){ alert('Ошибка копирования: '+errText(e)); }});
-    tbody.querySelectorAll('[data-share]').forEach(btn=>btn.onclick=async()=>{ const url=buildShareUrl(btn.dataset.share); try{ if(navigator.share){ await navigator.share({title:'MyGps Live', text:'Активная live-ссылка', url}); } else { await navigator.clipboard.writeText(url); showToast('Ссылка скопирована для отправки','success'); } }catch(e){} });
-    tbody.querySelectorAll('[data-open]').forEach(btn=>btn.onclick=()=>window.open(buildShareUrl(btn.dataset.open), '_blank', 'noopener,noreferrer'));
-    tbody.querySelectorAll('[data-center]').forEach(btn=>btn.onclick=()=>centerSessionOnPoint(btn.dataset.center));
-    tbody.querySelectorAll('[data-gmaps]').forEach(btn=>btn.onclick=()=>{ const session=getSessionRoot(allSessions[btn.dataset.gmaps])||{}; const p=session?.public?.lastPoint; const lat=getPointLat(p), lng=getPointLng(p); if(!p || lat==null || lng==null) return showToast('Нет точки','warn'); window.open(`https://www.google.com/maps?q=${lat},${lng}`,'_blank'); });
-    tbody.querySelectorAll('[data-end]').forEach(btn=>btn.onclick=()=>endSession(btn.dataset.end));
-    tbody.querySelectorAll('[data-delete]').forEach(btn=>btn.onclick=()=>deleteSession(btn.dataset.delete));
-    const createBtn = qs('createShareBtn');
-    if(createBtn){
-      const hasActive = entries.some(([token,session,status]) => (status==='active' || status==='paused') && (!selectedUid || session?.meta?.ownerUid===selectedUid));
-      createBtn.disabled = hasActive;
-      createBtn.textContent = hasActive ? (entries.some(e=>e[2]==='paused') ? 'Live на паузе' : 'Есть активная ссылка') : 'Создать live-ссылку';
-    }
-    updateActiveSessionToast();
-  };
-
-  const oldLoadSessions = loadSessions;
-  loadSessions = async function(){
-    const r = await oldLoadSessions.apply(this, arguments);
-    setupSelectedLiveRealtime();
-    return r;
-  };
-
-  document.addEventListener('change', (ev)=>{
-    if(ev.target && ev.target.id === 'userSelect') setTimeout(setupSelectedLiveRealtime, 50);
-  }, true);
-  document.addEventListener('click', (ev)=>{
-    if(ev.target && ev.target.id === 'refreshSessionsBtn') setTimeout(setupSelectedLiveRealtime, 100);
-  }, true);
-  setInterval(()=>{ setupSelectedLiveRealtime(); redrawLiveSync(); }, 5000);
-  setTimeout(()=>{ setupSelectedLiveRealtime(); redrawLiveSync(); }, 1200);
-})();
-}catch(e){ console.warn('MYGPS FINAL LIVE REALTIME SYNC PATCH failed', e); }
-
-
-
-/* MYGPS FIX 76: final unified live realtime sync from app/admin.
-   Keeps liveSessions table in sync with live/<uid>, liveOwners and liveSessions/meta
-   for pause/resume/extend/stop without manual refresh. Does not touch history. */
-try{
-(function(){
-  const PATCH='liveRealtimeFix76';
-  if(window.__MYGPS_LIVE_FIX_76_INSTALLED__) return;
-  window.__MYGPS_LIVE_FIX_76_INSTALLED__ = true;
-
-  const safe = (fn)=>{ try{return fn();}catch(e){ try{ console.warn(PATCH,e); recordError && recordError(PATCH,e); }catch(_){} } };
-  const num = (v,d=0)=> Number.isFinite(Number(v)) ? Number(v) : d;
-  const str = (v)=> String(v || '').trim();
-  const now = ()=>Date.now();
-  const tokenFrom = (o)=> str(o?.sessionId || o?.activeSessionId || o?.liveSessionId || o?.token || o?.id);
-  const uidFromMeta = (m)=> str(m?.ownerUid || m?.uid || m?.createdBy || m?.userUid);
-  const isStopped = (m)=>{
-    const s=str(m?.status || m?.linkStatus).toLowerCase();
-    return m?.active===false || s==='stopped' || s==='stop' || s==='ended' || s==='expired' || !!m?.endedAt;
-  };
-  const isPaused = (m)=>{
-    const s=str(m?.status || m?.linkStatus).toLowerCase();
-    return m?.paused===true || s==='paused' || s==='pause';
-  };
-  const isActive = (m)=>{
-    if(!m) return false;
-    if(isStopped(m)) return false;
-    if(isPaused(m)) return true;
-    const s=str(m.status || m.linkStatus).toLowerCase();
-    if(s==='active' || m.active===true) return true;
-    const exp=num(m.expiresAt,0);
-    return exp>now();
-  };
-  const leftMs = (m)=>{
-    if(!m) return 0;
-    if(isPaused(m)) return Math.max(0,num(m.remainingMs, Math.max(0,num(m.expiresAt,0)-now())));
-    return Math.max(0,num(m.expiresAt,0)-now());
-  };
-  const statusOf = (m)=>{
-    if(isStopped(m)) return 'ended';
-    if(isPaused(m)) return 'paused';
-    if(isActive(m)) return 'active';
-    return 'expired';
-  };
-  const labelOf = (status)=>{
-    if(status==='active') return '<span class="tag online">активна</span>';
-    if(status==='paused') return '<span class="tag idle">пауза</span>';
-    if(status==='ended') return '<span class="tag offline">завершена</span>';
-    return '<span class="tag">истекла</span>';
-  };
-  const rootOf = (s)=> s && s.meta ? s : {meta:(s||{})};
-  const liveUrl = (token,m)=> m?.liveUrl || m?.url || m?.link || (typeof buildShareUrl==='function' ? buildShareUrl(token) : `live.html?session=${encodeURIComponent(token)}`);
-
-  function ensureSession(token){
-    if(!token) return null;
-    window.allSessions = allSessions = allSessions || {};
-    if(!allSessions[token]) allSessions[token] = {meta:{}};
-    if(!allSessions[token].meta) allSessions[token] = {meta:Object.assign({}, allSessions[token]||{})};
-    return allSessions[token];
-  }
-
-  function controlToMeta(uid, live){
+  function sessionFromLive(uid, live){
+    if(!uid || !live || typeof live !== 'object') return null;
     const token = tokenFrom(live);
     if(!token) return null;
     const meta = {
@@ -11745,170 +11032,220 @@ try{
       sessionId: token,
       activeSessionId: token,
       liveSessionId: token,
-      liveUrl: liveUrl(token, live),
-      active: live.active !== undefined ? live.active : (str(live.status).toLowerCase() !== 'stopped'),
-      paused: live.paused === true || str(live.status).toLowerCase()==='paused',
-      status: live.status || (live.paused ? 'paused' : (live.active===false ? 'stopped' : 'active')),
-      startedAt: live.startedAt || live.createdAt || live.started || undefined,
-      pausedAt: live.pausedAt || undefined,
-      resumedAt: live.resumedAt || undefined,
-      endedAt: live.endedAt || undefined,
-      expiresAt: live.expiresAt || undefined,
-      remainingMs: live.remainingMs || undefined,
-      updatedAt: live.updatedAt || live.lastUpdatedAt || Date.now(),
-      lastSyncedAt: Date.now()
+      active: live.active !== undefined ? live.active : true,
+      paused: live.paused === true,
+      status: live.status || live.linkStatus || (live.paused ? 'paused' : (live.active === false ? 'stopped' : 'active')),
+      linkStatus: live.linkStatus || live.status || (live.paused ? 'paused' : (live.active === false ? 'stopped' : 'active')),
+      startedAt: asNum(live.startedAt || live.createdAt, 0),
+      createdAt: asNum(live.createdAt || live.startedAt, 0),
+      pausedAt: live.pausedAt || null,
+      resumedAt: live.resumedAt || null,
+      endedAt: live.endedAt || null,
+      expiresAt: asNum(live.expiresAt, 0),
+      remainingMs: asNum(live.remainingMs, 0),
+      liveUrl: asStr(live.liveUrl || live.link || live.url) || (typeof buildShareUrl === 'function' ? buildShareUrl(token) : ('live.html?session=' + encodeURIComponent(token))),
+      updatedAt: asNum(live.updatedAt || live.lastSyncedAt || Date.now(), Date.now())
     };
-    Object.keys(meta).forEach(k=>meta[k]===undefined && delete meta[k]);
-    return meta;
+    return [token, {meta, public:{lastPoint: live.lastPoint || live.point || null}, viewStats:{}}];
   }
 
-  function mergeLiveControlsIntoSessions(){
-    safe(()=>{
-      const liveObj = liveByUid || window.liveByUid || {};
-      const ownersObj = liveOwnersByUid || window.liveOwnersByUid || {};
-      for(const [uid,live] of Object.entries(liveObj||{})){
-        if(!live || typeof live !== 'object') continue;
-        const token = tokenFrom(live) || str(ownersObj?.[uid]?.activeSessionId);
-        if(!token) continue;
-        const ses=ensureSession(token);
-        if(!ses) continue;
-        const root=rootOf(ses);
-        const m=controlToMeta(uid, Object.assign({}, live, {sessionId: token}));
-        root.meta = Object.assign({}, root.meta||{}, m||{});
-        allSessions[token]=root;
-      }
+  function mergeLiveIntoSession(uid, live){
+    const pseudo = sessionFromLive(uid, live);
+    if(!pseudo) return null;
+    const [token, pseudoSession] = pseudo;
+    allSessions = allSessions || {};
+    const existing = allSessions[token] || {};
+    const root = getRoot(existing);
+    const merged = Object.assign({}, root, {
+      meta: Object.assign({}, root.meta || {}, pseudoSession.meta || {}),
+      public: Object.assign({}, root.public || {}, pseudoSession.public || {}),
+      viewStats: Object.assign({}, root.viewStats || {})
     });
+    allSessions[token] = merged;
+    return [token, merged];
   }
 
-  function selectedEntry(){
-    mergeLiveControlsIntoSessions();
-    const uid = selectedUid || qs('userSelect')?.value || '';
-    const entries = Object.entries(allSessions || {}).filter(([t])=>t !== '_init');
-    return entries.find(([token,s])=>{
-      const m=rootOf(s).meta||{};
-      return (!uid || uidFromMeta(m)===uid) && isActive(m);
-    }) || null;
-  }
-
-  window.getSessionStatus = getSessionStatus = function(session){ return statusOf(rootOf(session).meta||{}); };
-  window.getSessionStatusLabel = getSessionStatusLabel = function(status){ return labelOf(status); };
-  window.findActiveSessionEntryForSelectedUser = findActiveSessionEntryForSelectedUser = selectedEntry;
-  window.getSelectedActiveSessionEntry = getSelectedActiveSessionEntry = selectedEntry;
-
-  function redraw(){
-    mergeLiveControlsIntoSessions();
-    safe(()=> renderSessions && renderSessions());
-    safe(()=> updateActiveSessionNotice && updateActiveSessionNotice());
-    safe(()=> updateActiveSessionToast && updateActiveSessionToast());
-    safe(()=> updateNowFromAvailableSources && updateNowFromAvailableSources());
-  }
-
-  window.updateActiveSessionNotice = updateActiveSessionNotice = function(){
-    const box=qs('activeSessionNotice');
-    if(!box) return;
-    const e=selectedEntry();
-    if(!e){ box.classList.add('hidden'); box.innerHTML=''; return; }
-    const [token,s]=e, m=rootOf(s).meta||{}, st=statusOf(m), left=leftMs(m), url=liveUrl(token,m);
-    if(typeof createdShareUrl !== 'undefined') createdShareUrl=url;
-    const shareLink = qs('shareLinkText');
-    const shareExpires = qs('shareExpiresText');
-    const leftText = typeof fmtRemainingCompact==='function' ? fmtRemainingCompact(left) : formatRemainingMs(left);
-    if(shareLink) shareLink.textContent=url;
-    if(shareExpires) shareExpires.textContent=st==='paused' ? `Пауза, осталось ${leftText}` : `${typeof fmtTime==='function'?fmtTime(m.expiresAt):String(m.expiresAt||'—')} · осталось ${leftText}`;
-    box.classList.remove('hidden');
-    if(!qs('activeSessionNoticeTitle') || !qs('activeSessionNoticeTime') || !qs('activeSessionNoticeUrl')){
-      box.innerHTML='<strong id="activeSessionNoticeTitle"></strong><div style="margin-top:6px"><span id="activeSessionNoticeLabel"></span>: <b id="activeSessionNoticeTime"></b></div><div style="margin-top:6px" class="mono" id="activeSessionNoticeUrl"></div>';
+  function ensureKnownUid(uid){
+    if(!uid) return;
+    allUsers = Array.isArray(allUsers) ? allUsers : [];
+    if(!allUsers.includes(uid)){
+      allUsers.push(uid);
+      allUsers.sort((a,b)=>String((typeof getDisplayName==='function'?getDisplayName(a):a)).localeCompare(String((typeof getDisplayName==='function'?getDisplayName(b):b)), 'ru'));
+      safe(()=>renderUserSelect && renderUserSelect());
     }
-    const titleEl = qs('activeSessionNoticeTitle');
-    const labelEl = qs('activeSessionNoticeLabel');
-    const timeEl = qs('activeSessionNoticeTime');
-    const urlEl = qs('activeSessionNoticeUrl');
-    if(titleEl) titleEl.textContent = `Live-сессия ${st==='paused'?'на паузе':'активна'}`;
-    if(labelEl) labelEl.textContent = st==='paused'?'Осталось после возобновления':'Осталось';
-    if(timeEl) timeEl.textContent = leftText;
-    if(urlEl) urlEl.textContent = url;
-  };
+  }
 
-  window.updateActiveSessionToast = updateActiveSessionToast = function(){
-    const e=selectedEntry();
-    let el=document.getElementById('activeSessionToast');
-    if(!e){
-      if(el) el.remove();
-      const btn=qs('createShareBtn'); if(btn){ btn.disabled=false; btn.textContent='Создать live-ссылку'; }
+  function currentUid(){
+    return selectedUid || byId('userSelect')?.value || '';
+  }
+
+  function findActiveEntry(){
+    const uid = currentUid();
+    if(uid){
+      const live = liveByUid && liveByUid[uid];
+      const merged = mergeLiveIntoSession(uid, live);
+      if(merged && metaState(getRoot(merged[1]).meta).active) return merged;
+      const ownerToken = asStr((window.liveOwnersByUid && window.liveOwnersByUid[uid] && window.liveOwnersByUid[uid].activeSessionId) || '');
+      if(ownerToken && allSessions && allSessions[ownerToken]){
+        const s = allSessions[ownerToken];
+        const m = getRoot(s).meta || {};
+        if((!uidOf(m) || uidOf(m) === uid) && metaState(m).active) return [ownerToken, s];
+      }
+    }
+    const entries = Object.entries(allSessions || {}).filter(([token])=>token !== '_init');
+    const found = entries.find(([token, session])=>{
+      const m = getRoot(session).meta || {};
+      if(uid && uidOf(m) && uidOf(m) !== uid) return false;
+      return metaState(m).active;
+    });
+    return found || null;
+  }
+
+  getSelectedActiveSessionEntry = function(){ return findActiveEntry(); };
+  findActiveSessionEntryForSelectedUser = function(){ return findActiveEntry(); };
+
+  function updateButtonByEntry(entry){
+    const btn = byId('createShareBtn');
+    if(!btn) return;
+    if(entry){
+      const m = getRoot(entry[1]).meta || {};
+      const st = metaState(m);
+      btn.disabled = true;
+      btn.textContent = st.paused ? 'Live на паузе' : 'Есть активная ссылка';
+    }else{
+      btn.disabled = false;
+      btn.textContent = 'Создать live-ссылку';
+    }
+  }
+
+  updateActiveSessionNotice = function(){
+    const box = byId('activeSessionNotice');
+    if(!box) return;
+    const entry = findActiveEntry();
+    updateButtonByEntry(entry);
+    if(!entry){
+      box.classList.add('hidden');
+      if(box.dataset.token){ box.innerHTML = ''; box.dataset.token = ''; box.dataset.paused = ''; }
+      createdShareUrl = '';
       return;
     }
-    const [token,s]=e, m=rootOf(s).meta||{}, st=statusOf(m), left=leftMs(m), url=liveUrl(token,m);
-    const btn=qs('createShareBtn'); if(btn){ btn.disabled=true; btn.textContent=st==='paused'?'Live на паузе':'Есть активная ссылка'; }
+    const [token, session] = entry;
+    const m = getRoot(session).meta || {};
+    const st = metaState(m);
+    if(!st.active){
+      box.classList.add('hidden');
+      if(box.dataset.token){ box.innerHTML = ''; box.dataset.token = ''; box.dataset.paused = ''; }
+      createdShareUrl = '';
+      updateButtonByEntry(null);
+      return;
+    }
+    const url = urlFor(token, m);
+    createdShareUrl = url;
+    const pausedMark = st.paused ? '1' : '0';
+    box.classList.remove('hidden');
+    if(box.dataset.token !== token || box.dataset.paused !== pausedMark || !byId('activeSessionNoticeTime')){
+      box.dataset.token = token;
+      box.dataset.paused = pausedMark;
+      box.innerHTML = '<strong id="activeSessionNoticeTitle"></strong><div style="margin-top:6px"><span id="activeSessionNoticeLabel"></span>: <b id="activeSessionNoticeTime"></b></div><div style="margin-top:6px" class="mono" id="activeSessionNoticeUrl"></div>';
+    }
+    const leftText = typeof fmtRemainingCompact === 'function' ? fmtRemainingCompact(st.leftMs) : (typeof formatRemainingMs === 'function' ? formatRemainingMs(st.leftMs) : Math.ceil(st.leftMs/1000)+'с');
+    const title = byId('activeSessionNoticeTitle');
+    const label = byId('activeSessionNoticeLabel');
+    const time = byId('activeSessionNoticeTime');
+    const urlEl = byId('activeSessionNoticeUrl');
+    if(title && title.textContent !== (st.paused ? 'Live-сессия на паузе' : 'Live-сессия активна')) title.textContent = st.paused ? 'Live-сессия на паузе' : 'Live-сессия активна';
+    if(label && label.textContent !== (st.paused ? 'Пауза' : 'Осталось')) label.textContent = st.paused ? 'Пауза' : 'Осталось';
+    if(time && time.textContent !== leftText) time.textContent = leftText;
+    if(urlEl && urlEl.textContent !== url) urlEl.textContent = url;
+    const linkEl = byId('shareLinkText');
+    const expEl = byId('shareExpiresText');
+    if(linkEl && linkEl.textContent !== url) linkEl.textContent = url;
+    if(expEl){
+      const expText = st.paused ? ('Пауза, осталось ' + leftText) : ((typeof fmtTime==='function'?fmtTime(m.expiresAt):'—') + ' · осталось ' + leftText);
+      if(expEl.textContent !== expText) expEl.textContent = expText;
+    }
+  };
+
+  updateActiveSessionToast = function(){
+    const entry = findActiveEntry();
+    updateButtonByEntry(entry);
+    let el = byId('activeSessionToast');
+    if(!entry){ if(el) el.remove(); updateActiveSessionNotice(); return; }
+    const [token, session] = entry;
+    const m = getRoot(session).meta || {};
+    const st = metaState(m);
+    if(!st.active){ if(el) el.remove(); updateButtonByEntry(null); updateActiveSessionNotice(); return; }
     if(!el){
-      el=document.createElement('div');
-      el.id='activeSessionToast';
-      Object.assign(el.style,{position:'fixed',zIndex:'99999',right:'14px',bottom:'14px',maxWidth:'360px',padding:'12px 14px',borderRadius:'14px',color:'#fff',boxShadow:'0 12px 30px rgba(0,0,0,.35)',cursor:'pointer'});
-      el.onclick=()=>safe(async()=>{ await navigator.clipboard.writeText(url); showToast && showToast('Live-ссылка скопирована','success'); });
+      el = document.createElement('div');
+      el.id = 'activeSessionToast';
+      Object.assign(el.style,{position:'fixed',zIndex:'99999',right:'14px',bottom:'14px',maxWidth:'360px',padding:'12px 14px',borderRadius:'14px',color:'#fff',boxShadow:'0 10px 28px rgba(0,0,0,.28)',fontWeight:'600',lineHeight:'1.35',wordBreak:'break-word',cursor:'pointer'});
       document.body.appendChild(el);
     }
-    el.style.background=st==='paused'?'#b45309':'#2563eb';
-    if(!document.getElementById('activeSessionToastTitle') || !document.getElementById('activeSessionToastTime')){
-      el.innerHTML='<div id="activeSessionToastTitle" style="font-weight:800"></div><div id="activeSessionToastTime" style="font-size:13px;opacity:.95"></div>';
+    el.style.background = st.paused ? '#b45309' : '#2563eb';
+    if(el.dataset.token !== token || el.dataset.paused !== (st.paused?'1':'0') || !byId('activeSessionToastTime')){
+      el.dataset.token = token;
+      el.dataset.paused = st.paused ? '1' : '0';
+      el.innerHTML = '<div id="activeSessionToastTitle" style="font-weight:800"></div><div id="activeSessionToastTime" style="font-size:13px;opacity:.95"></div>';
     }
-    const toastTitle = document.getElementById('activeSessionToastTitle');
-    const toastTime = document.getElementById('activeSessionToastTime');
-    if(toastTitle) toastTitle.textContent = `Live-сессия ${st==='paused'?'на паузе':'активна'}`;
-    if(toastTime) toastTime.textContent = `${st==='paused'?'Пауза, осталось':'Осталось'}: ${formatRemainingMs(left)}`;
+    const leftText = typeof formatRemainingMs === 'function' ? formatRemainingMs(st.leftMs) : Math.ceil(st.leftMs/1000)+'с';
+    const t = byId('activeSessionToastTitle');
+    const tm = byId('activeSessionToastTime');
+    if(t) t.textContent = st.paused ? 'Live-сессия на паузе' : 'Live-сессия активна';
+    if(tm) tm.textContent = (st.paused ? 'Пауза: ' : 'Осталось: ') + leftText;
+    updateActiveSessionNotice();
   };
 
-  window.renderSessions = renderSessions = function(){
-    mergeLiveControlsIntoSessions();
-    const tbody=qs('sessionsTbody');
-    if(!tbody) return;
-    tbody.innerHTML='';
-    const search=(qs('sessionSearchInput')?.value||'').trim().toLowerCase();
-    const statusFilter=qs('sessionStatusFilter')?.value || 'all';
-    const viewMode=qs('viewModeSelect')?.value || 'selected';
-    const uid=selectedUid || qs('userSelect')?.value || '';
-    const entries=Object.entries(allSessions||{}).filter(([token])=>token !== '_init').map(([token,session])=>[token,rootOf(session),statusOf(rootOf(session).meta||{})]).filter(([token,session,status])=>{
-      if(search && !token.toLowerCase().includes(search)) return false;
-      if(viewMode==='selected' && uid && uidFromMeta(session.meta||{}) && uidFromMeta(session.meta||{})!==uid) return false;
-      if(statusFilter !== 'all'){
-        if(statusFilter==='active' && status!=='active' && status!=='paused') return false;
-        if(statusFilter!=='active' && status!==statusFilter) return false;
-      }
-      return true;
-    }).sort((a,b)=>num(b[1]?.meta?.createdAt || b[1]?.meta?.startedAt,0)-num(a[1]?.meta?.createdAt || a[1]?.meta?.startedAt,0));
-    if(!entries.length){ tbody.innerHTML='<tr><td colspan="8">Сессий нет</td></tr>'; updateActiveSessionToast(); return; }
-    for(const [token,session,status] of entries){
-      const m=session.meta||{}, stats=session.viewStats||{}, tr=document.createElement('tr');
-      const lpInfo = (typeof getSessionLastPointInfo==='function') ? getSessionLastPointInfo(session,status) : {html:'—',age:'—'};
-      const left=leftMs(m);
-      const expireHtml = status==='paused' ? `<span class="tag idle">пауза</span><br><span class="smallMuted">осталось ${formatRemainingMs(left)}</span>` : `${typeof fmtTime==='function'?fmtTime(m.expiresAt):'—'}<br><span class="smallMuted">осталось ${formatRemainingMs(left)}</span>`;
-      tr.innerHTML=`<td class="mono">${token}<br><span class="tag">${(typeof getDisplayName==='function'?getDisplayName(m.ownerUid):'')||m.ownerUid||'—'}</span></td><td>${labelOf(status)}</td><td>${lpInfo.html}</td><td>${lpInfo.age}</td><td>${expireHtml}</td><td>${stats.openCount||0}</td><td>${typeof fmtTime==='function'?fmtTime(stats.firstOpenAt):'—'}<br>${typeof fmtTime==='function'?fmtTime(stats.lastOpenAt):'—'}</td><td><div class="row"><button class="secondary small" data-copy="${token}">Копировать</button><button class="secondary small" data-share="${token}">Поделиться</button><button class="secondary small" data-open="${token}">Карта</button><button class="secondary small" data-gmaps="${token}">Google Maps</button><button class="secondary small" data-center="${token}">Центр</button><button class="warn small" data-end="${token}">Завершить</button><button class="danger small" data-delete="${token}">Удалить</button></div></td>`;
-      tbody.appendChild(tr);
+  const oldRenderSessions = renderSessions;
+  renderSessions = function(){
+    safe(()=>{ Object.entries(liveByUid || {}).forEach(([uid, live])=>mergeLiveIntoSession(uid, live)); });
+    const result = oldRenderSessions.apply(this, arguments);
+    updateButtonByEntry(findActiveEntry());
+    return result;
+  };
+
+  const oldCreateLive = createLiveSession;
+  createLiveSession = async function(){
+    const active = findActiveEntry();
+    if(active){
+      const url = urlFor(active[0], getRoot(active[1]).meta || {});
+      createdShareUrl = url;
+      updateActiveSessionNotice();
+      updateActiveSessionToast();
+      showToast && showToast('Уже есть активная live-ссылка', 'warn');
+      return;
     }
-    tbody.querySelectorAll('[data-copy]').forEach(btn=>btn.onclick=async()=>safe(async()=>{await navigator.clipboard.writeText(liveUrl(btn.dataset.copy, rootOf(allSessions[btn.dataset.copy]).meta||{})); showToast&&showToast('Ссылка скопирована','success');}));
-    tbody.querySelectorAll('[data-share]').forEach(btn=>btn.onclick=async()=>safe(async()=>{const url=liveUrl(btn.dataset.share, rootOf(allSessions[btn.dataset.share]).meta||{}); if(navigator.share) await navigator.share({title:'MyGps Live',text:'Активная live-ссылка',url}); else {await navigator.clipboard.writeText(url); showToast&&showToast('Ссылка скопирована','success');}}));
-    tbody.querySelectorAll('[data-open]').forEach(btn=>btn.onclick=()=>window.open(liveUrl(btn.dataset.open, rootOf(allSessions[btn.dataset.open]).meta||{}),'_blank','noopener,noreferrer'));
-    tbody.querySelectorAll('[data-center]').forEach(btn=>btn.onclick=()=>safe(()=>centerSessionOnPoint(btn.dataset.center)));
-    tbody.querySelectorAll('[data-gmaps]').forEach(btn=>btn.onclick=()=>safe(()=>{ const session=rootOf(allSessions[btn.dataset.gmaps])||{}; const p=session?.public?.lastPoint; const lat=getPointLat(p), lng=getPointLng(p); if(!p||lat==null||lng==null) return showToast('Нет точки','warn'); window.open(`https://www.google.com/maps?q=${lat},${lng}`,'_blank'); }));
-    tbody.querySelectorAll('[data-end]').forEach(btn=>btn.onclick=()=>safe(()=>endSession(btn.dataset.end)));
-    tbody.querySelectorAll('[data-delete]').forEach(btn=>btn.onclick=()=>safe(()=>deleteSession(btn.dataset.delete)));
+    const r = await oldCreateLive.apply(this, arguments);
+    setTimeout(()=>{ safe(()=>loadSessions && loadSessions()); updateActiveSessionNotice(); updateActiveSessionToast(); }, 300);
+    return r;
+  };
+
+  safe(()=>trackedOnValue(ref(db, 'live'), snap=>{
+    liveByUid = snap.val() || {};
+    Object.keys(liveByUid || {}).forEach(ensureKnownUid);
+    Object.entries(liveByUid || {}).forEach(([uid, live])=>mergeLiveIntoSession(uid, live));
+    safe(()=>renderUserSelect && renderUserSelect());
+    safe(()=>renderSessions && renderSessions());
+    updateActiveSessionNotice();
     updateActiveSessionToast();
-  };
+  }));
 
-  let unsubs=[];
-  function subscribe(){
-    if(unsubs.length) return;
-    unsubs.push(onValue(ref(db,'live'), snap=>{ liveByUid=snap.val()||{}; window.liveByUid=liveByUid; redraw(); }, err=>safe(()=>recordError&&recordError('live/globalRealtime',err))));
-    unsubs.push(onValue(ref(db,'liveOwners'), snap=>{ liveOwnersByUid=snap.val()||{}; window.liveOwnersByUid=liveOwnersByUid; redraw(); }, err=>safe(()=>recordError&&recordError('liveOwners/globalRealtime',err))));
-    unsubs.push(onValue(query(ref(db,'liveSessions'), limitToLast(typeof ADMIN_SESSIONS_LIMIT==='number'?ADMIN_SESSIONS_LIMIT:100)), snap=>{ allSessions=snap.val()||{}; window.allSessions=allSessions; mergeLiveControlsIntoSessions(); redraw(); }, err=>safe(()=>recordError&&recordError('liveSessions/globalRealtime',err))));
-  }
-  document.addEventListener('change', e=>{ if(e.target && e.target.id==='userSelect') setTimeout(redraw,50); }, true);
-  document.addEventListener('click', e=>{ if(e.target && (e.target.id==='refreshSessionsBtn' || e.target.dataset?.tab==='sessionsPanel')) setTimeout(redraw,100); }, true);
-  subscribe();
-  setInterval(()=>safe(()=>{ mergeLiveControlsIntoSessions(); updateActiveSessionNotice(); updateActiveSessionToast(); renderSessions(); }),1000);
-  setTimeout(redraw,1000);
+  safe(()=>trackedOnValue(ref(db, 'liveOwners'), snap=>{
+    window.liveOwnersByUid = snap.val() || {};
+    Object.keys(window.liveOwnersByUid || {}).forEach(ensureKnownUid);
+    updateActiveSessionNotice();
+    updateActiveSessionToast();
+  }));
+
+  document.addEventListener('change', (ev)=>{ if(ev.target && ev.target.id === 'userSelect') setTimeout(()=>{ updateActiveSessionNotice(); updateActiveSessionToast(); }, 50); }, true);
+  setInterval(()=>{ updateActiveSessionNotice(); updateActiveSessionToast(); }, 1000);
+  setTimeout(()=>{ updateActiveSessionNotice(); updateActiveSessionToast(); }, 800);
 })();
-}catch(e){ console.warn('MYGPS FIX 76 install failed', e); }
+}catch(e){ try{ console.warn('stableLiveSyncFinal install failed', e); }catch(_){} }
 
 </script>
+
+
+
 
 
 <!-- MYGPS admin create live timer immediate fix -->
