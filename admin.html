@@ -1669,6 +1669,282 @@ try{
   setTimeout(activeLiveFixInstall, 1200);
 })();
 
+
+
+// === FINAL FIX: REALTIME SYNC FOR APP LIVE EXTEND / PAUSE / RESUME ===
+// Android may update live/<uid> faster than liveSessions/<sessionId>/meta.
+// Admin must treat live/<uid> as the live state mirror and refresh UI without manual button.
+(function(){
+  let watchedUid = '';
+  let watchedToken = '';
+  let unsubLiveUid = null;
+  let unsubOwner = null;
+  let unsubSession = null;
+  let liveSyncTimer = null;
+
+  function safe(fn){ try{ return fn(); }catch(e){ try{ recordError && recordError('liveAppRealtimeSync', e); }catch(_){} } }
+  function currentUid(){ return String(selectedUid || (qs('userSelect') && qs('userSelect').value) || '').trim(); }
+  function asNum(v, fallback=0){ const n=Number(v); return Number.isFinite(n) ? n : fallback; }
+  function sessionRoot(session){ return (typeof getSessionRoot === 'function' ? getSessionRoot(session) : session) || {}; }
+  function liveToken(live){ return String(live?.sessionId || live?.activeSessionId || live?.liveSessionId || '').trim(); }
+  function isLiveStillRelevant(live){
+    if(!live) return false;
+    const status = String(live.status || live.linkStatus || '').toLowerCase();
+    if(status === 'stopped' || status === 'ended' || status === 'expired') return false;
+    if(live.active === true || live.paused === true || status === 'active' || status === 'paused') return true;
+    const exp = asNum(live.expiresAt, 0);
+    return !!liveToken(live) && exp > Date.now();
+  }
+
+  function mergeLiveIntoSession(uid, live){
+    if(!uid || !live) return '';
+    const token = liveToken(live);
+    if(!token) return '';
+    if(!allSessions || typeof allSessions !== 'object') allSessions = {};
+    const root = sessionRoot(allSessions[token]) || {};
+    const meta = Object.assign({}, root.meta || {});
+    const status = String(live.status || live.linkStatus || '').toLowerCase();
+    const paused = live.paused === true || status === 'paused';
+    const stopped = status === 'stopped' || status === 'ended' || live.active === false;
+    const expired = status === 'expired';
+    const liveActive = isLiveStillRelevant(live) && !stopped && !expired;
+
+    const mergedMeta = Object.assign({}, meta, {
+      ownerUid: meta.ownerUid || live.ownerUid || uid,
+      sessionId: token,
+      liveSessionId: token,
+      activeSessionId: token,
+      liveUrl: live.liveUrl || live.url || meta.liveUrl || meta.url || '',
+      active: liveActive,
+      paused: paused,
+      status: paused ? 'paused' : (stopped ? 'stopped' : (expired ? 'expired' : (liveActive ? 'active' : (meta.status || '')))),
+      linkStatus: paused ? 'paused' : (stopped ? 'stopped' : (expired ? 'expired' : (liveActive ? 'active' : (meta.linkStatus || ''))))
+    });
+
+    ['startedAt','createdAt','pausedAt','resumedAt','endedAt','expiresAt','remainingMs','extendedAt','lastSyncedAt'].forEach(k=>{
+      if(live[k] !== undefined && live[k] !== null && live[k] !== '') mergedMeta[k] = live[k];
+    });
+    if(paused && mergedMeta.remainingMs == null && mergedMeta.expiresAt){
+      mergedMeta.remainingMs = Math.max(0, asNum(mergedMeta.expiresAt) - Date.now());
+    }
+
+    const publicPart = Object.assign({}, root.public || {});
+    if(live.lastPoint) publicPart.lastPoint = live.lastPoint;
+    if(live.recentPoints) publicPart.recentPoints = live.recentPoints;
+
+    allSessions[token] = Object.assign({}, root, { meta: mergedMeta, public: publicPart });
+    return token;
+  }
+
+  function syncAllLiveMirrors(){
+    safe(()=>{
+      const lives = liveByUid || {};
+      Object.entries(lives).forEach(([uid, live])=>mergeLiveIntoSession(uid, live));
+    });
+  }
+
+  function fixCreateButton(){
+    const btn = qs('createShareBtn');
+    if(!btn) return;
+    const uid = currentUid();
+    const now = Date.now();
+    const hasActiveOrPaused = Object.entries(allSessions || {}).some(([token, session])=>{
+      if(token === '_init') return false;
+      const meta = sessionRoot(session).meta || {};
+      if(uid && meta.ownerUid && meta.ownerUid !== uid) return false;
+      const status = String(meta.status || meta.linkStatus || '').toLowerCase();
+      const paused = meta.paused === true || status === 'paused';
+      const stopped = status === 'stopped' || status === 'ended' || status === 'expired' || meta.active === false;
+      const exp = asNum(meta.expiresAt, 0);
+      return !stopped && (paused || meta.active === true) && (paused || !exp || exp > now);
+    });
+    btn.disabled = hasActiveOrPaused;
+    btn.textContent = hasActiveOrPaused ? 'Есть активная ссылка' : 'Создать live-ссылку';
+  }
+
+  function redraw(){
+    syncAllLiveMirrors();
+    safe(()=>typeof updateUsage === 'function' && updateUsage());
+    safe(()=>typeof renderSessions === 'function' && renderSessions());
+    safe(()=>typeof updateActiveSessionNotice === 'function' && updateActiveSessionNotice());
+    safe(()=>typeof updateActiveSessionToast === 'function' && updateActiveSessionToast());
+    safe(()=>typeof updateNowFromAvailableSources === 'function' && updateNowFromAvailableSources());
+    safe(fixCreateButton);
+  }
+
+  // Status should show pause and should not treat paused session as expired just because countdown is stopped.
+  if(typeof getSessionStatus === 'function'){
+    getSessionStatus = function(session){
+      const root = sessionRoot(session), meta = root.meta || {}, now = Date.now();
+      const status = String(meta.status || meta.linkStatus || '').toLowerCase();
+      if(meta.paused === true || status === 'paused') return 'paused';
+      if(status === 'stopped' || status === 'ended' || meta.active === false) return 'ended';
+      if(status === 'expired') return 'expired';
+      const exp = asNum(meta.expiresAt, 0);
+      if(meta.active === true && (!exp || exp > now)) return 'active';
+      if(exp && exp <= now) return 'expired';
+      return 'ended';
+    };
+  }
+  if(typeof getSessionStatusLabel === 'function'){
+    getSessionStatusLabel = function(status){
+      if(status === 'paused') return '<span class="tag idle">пауза</span>';
+      if(status === 'active') return '<span class="tag online">активна</span>';
+      if(status === 'ended') return '<span class="tag offline">завершена</span>';
+      return '<span class="tag offline">истекла</span>';
+    };
+  }
+
+  function selectedActiveOrPausedEntry(){
+    const uid = currentUid();
+    const now = Date.now();
+    return Object.entries(allSessions || {}).find(([token, session])=>{
+      if(token === '_init') return false;
+      const meta = sessionRoot(session).meta || {};
+      if(uid && meta.ownerUid && meta.ownerUid !== uid) return false;
+      const status = String(meta.status || meta.linkStatus || '').toLowerCase();
+      const paused = meta.paused === true || status === 'paused';
+      const stopped = status === 'stopped' || status === 'ended' || status === 'expired' || meta.active === false;
+      const exp = asNum(meta.expiresAt, 0);
+      return !stopped && (paused || meta.active === true) && (paused || !exp || exp > now);
+    }) || null;
+  }
+
+  if(typeof getSelectedActiveSessionEntry === 'function'){
+    getSelectedActiveSessionEntry = selectedActiveOrPausedEntry;
+  }
+
+  if(typeof updateActiveSessionNotice === 'function'){
+    updateActiveSessionNotice = function(){
+      const box = qs('activeSessionNotice');
+      if(!box) return;
+      syncAllLiveMirrors();
+      const entry = selectedActiveOrPausedEntry();
+      if(!entry){ box.classList.add('hidden'); box.innerHTML=''; return; }
+      const [token, session] = entry;
+      const meta = sessionRoot(session).meta || {};
+      const paused = meta.paused === true || String(meta.status || '').toLowerCase() === 'paused';
+      const left = paused ? asNum(meta.remainingMs, Math.max(0, asNum(meta.expiresAt) - Date.now())) : Math.max(0, asNum(meta.expiresAt) - Date.now());
+      const url = buildShareUrl(token);
+      createdShareUrl = url;
+      box.classList.remove('hidden');
+      box.innerHTML = `<strong>Live-сессия ${paused ? 'на паузе' : 'активна'}</strong><div style="margin-top:6px">${paused ? 'Осталось после возобновления' : 'Осталось'}: <b>${fmtRemainingCompact ? fmtRemainingCompact(left) : formatRemainingMs(left)}</b></div><div style="margin-top:6px" class="mono">${url}</div>`;
+    };
+  }
+
+  if(typeof updateActiveSessionToast === 'function'){
+    updateActiveSessionToast = function(){
+      const host = typeof getToastHost === 'function' ? getToastHost() : document.body;
+      safe(()=>typeof applyToastPosition === 'function' && applyToastPosition());
+      let el = document.getElementById('activeSessionToast');
+      syncAllLiveMirrors();
+      const entry = selectedActiveOrPausedEntry();
+      if(!entry){
+        if(el){ clearInterval(el._timer); el.remove(); }
+        fixCreateButton();
+        return;
+      }
+      const [token, session] = entry;
+      const meta = sessionRoot(session).meta || {};
+      const paused = meta.paused === true || String(meta.status || '').toLowerCase() === 'paused';
+      const leftMs = paused ? asNum(meta.remainingMs, Math.max(0, asNum(meta.expiresAt) - Date.now())) : Math.max(0, asNum(meta.expiresAt) - Date.now());
+      if(!paused && leftMs <= 0){ if(el){ clearInterval(el._timer); el.remove(); } fixCreateButton(); redraw(); return; }
+      if(!el){
+        el = document.createElement('div');
+        el.id = 'activeSessionToast';
+        el.style.pointerEvents = 'auto';
+        el.style.display = 'flex';
+        el.style.flexDirection = 'column';
+        el.style.gap = '8px';
+        el.style.padding = '12px 14px';
+        el.style.borderRadius = '14px';
+        el.style.background = paused ? '#b45309' : '#2563eb';
+        el.style.color = '#fff';
+        el.style.boxShadow = '0 10px 28px rgba(0,0,0,.28)';
+        el.style.fontWeight = '600';
+        el.style.lineHeight = '1.35';
+        el.style.wordBreak = 'break-word';
+        host.appendChild(el);
+      }
+      el.style.background = paused ? '#b45309' : '#2563eb';
+      el.innerHTML = `<div style="font-weight:800">Live-сессия ${paused ? 'на паузе' : 'активна'}</div><div id="activeSessionToastTime" style="font-size:13px;opacity:.95">${paused ? 'Осталось после возобновления' : 'Осталось'}: ${formatRemainingMs(leftMs)}</div>`;
+      clearInterval(el._timer);
+      if(!paused){
+        el._expiresAt = asNum(meta.expiresAt, 0);
+        el._timer = setInterval(()=>{
+          const left = Math.max(0, el._expiresAt - Date.now());
+          const timeEl = document.getElementById('activeSessionToastTime');
+          if(timeEl) timeEl.textContent = `Осталось: ${formatRemainingMs(left)}`;
+          if(left <= 0){ clearInterval(el._timer); el.remove(); fixCreateButton(); redraw(); }
+        }, 1000);
+      }
+      fixCreateButton();
+    };
+  }
+
+  // Wrap renderSessions so any render uses the freshest live/<uid> mirror first.
+  if(typeof renderSessions === 'function' && !renderSessions.__mygpsLiveSyncWrapped){
+    const originalRenderSessions = renderSessions;
+    renderSessions = function(){
+      syncAllLiveMirrors();
+      const result = originalRenderSessions.apply(this, arguments);
+      fixCreateButton();
+      return result;
+    };
+    renderSessions.__mygpsLiveSyncWrapped = true;
+  }
+
+  function watchSelected(){
+    const uid = currentUid();
+    if(!uid || uid === watchedUid) return;
+    watchedUid = uid;
+    watchedToken = '';
+    if(unsubLiveUid){ try{unsubLiveUid();}catch(e){} unsubLiveUid = null; }
+    if(unsubOwner){ try{unsubOwner();}catch(e){} unsubOwner = null; }
+    if(unsubSession){ try{unsubSession();}catch(e){} unsubSession = null; }
+
+    unsubLiveUid = onValue(ref(db, `live/${uid}`), snap=>{
+      const live = snap.val() || null;
+      if(!liveByUid || typeof liveByUid !== 'object') liveByUid = {};
+      if(live) liveByUid[uid] = live; else delete liveByUid[uid];
+      const token = mergeLiveIntoSession(uid, live);
+      if(token) watchSessionToken(token);
+      redraw();
+    }, err=>safe(()=>recordError && recordError(`live/${uid}/sync`, err)));
+
+    unsubOwner = onValue(ref(db, `liveOwners/${uid}/activeSessionId`), snap=>{
+      const token = String(snap.val() || '').trim();
+      if(token) watchSessionToken(token);
+      redraw();
+    }, err=>safe(()=>recordError && recordError(`liveOwners/${uid}/activeSessionId/sync`, err)));
+  }
+
+  function watchSessionToken(token){
+    token = String(token || '').trim();
+    if(!token || token === watchedToken) return;
+    watchedToken = token;
+    if(unsubSession){ try{unsubSession();}catch(e){} unsubSession = null; }
+    unsubSession = onValue(ref(db, `liveSessions/${token}`), snap=>{
+      if(!allSessions || typeof allSessions !== 'object') allSessions = {};
+      const val = snap.val();
+      if(val) allSessions[token] = val; else delete allSessions[token];
+      syncAllLiveMirrors();
+      redraw();
+    }, err=>safe(()=>recordError && recordError(`liveSessions/${token}/sync`, err)));
+  }
+
+  const select = qs('userSelect');
+  if(select && !select.dataset.liveAppRealtimeSync){
+    select.addEventListener('change', ()=>setTimeout(()=>{ watchedUid=''; watchSelected(); redraw(); }, 100));
+    select.dataset.liveAppRealtimeSync = '1';
+  }
+
+  watchSelected();
+  liveSyncTimer = setInterval(()=>{ watchSelected(); syncAllLiveMirrors(); fixCreateButton(); }, 1500);
+  setTimeout(redraw, 300);
+  setTimeout(redraw, 1500);
+})();
+
 </script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js">
 function setupJournalQuickFilters(){
