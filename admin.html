@@ -1553,6 +1553,122 @@ try{
   window.loadHistory = () => loadHistorySmart();
 }catch(e){ console.warn("hard loadHistorySmart override failed", e); }
 
+
+
+// === FIX: AUTO UPDATE ACTIVE LIVE SESSION TIME AFTER APP EXTEND ===
+// Keeps admin live-session table/notice in sync when Android app changes expiresAt/remainingMs/status/paused.
+(function(){
+  let activeLiveFixUnsubOwner = null;
+  let activeLiveFixUnsubSession = null;
+  let activeLiveFixToken = '';
+  let activeLiveFixUid = '';
+
+  function activeLiveFixSafe(fn){
+    try{ return fn(); }catch(e){ try{ recordError && recordError('activeLiveAutoRefreshFix', e); }catch(_){} }
+  }
+
+  function activeLiveFixRender(){
+    activeLiveFixSafe(()=>{
+      if(typeof updateUsage === 'function') updateUsage();
+      if(typeof renderSessions === 'function') renderSessions();
+      if(typeof updateActiveSessionNotice === 'function') updateActiveSessionNotice();
+      if(typeof updateActiveSessionToast === 'function') updateActiveSessionToast();
+      if(typeof updateNowFromAvailableSources === 'function') updateNowFromAvailableSources();
+    });
+  }
+
+  function activeLiveFixMergeSession(token, session){
+    if(!token) return;
+    if(!allSessions || typeof allSessions !== 'object') allSessions = {};
+    if(session){
+      allSessions[token] = session;
+    }else{
+      delete allSessions[token];
+    }
+    activeLiveFixRender();
+  }
+
+  function activeLiveFixStopSessionWatch(){
+    if(activeLiveFixUnsubSession){
+      try{ activeLiveFixUnsubSession(); }catch(e){}
+    }
+    activeLiveFixUnsubSession = null;
+    activeLiveFixToken = '';
+  }
+
+  function activeLiveFixWatchSession(token){
+    token = String(token || '').trim();
+    if(!token){
+      activeLiveFixStopSessionWatch();
+      activeLiveFixRender();
+      return;
+    }
+    if(activeLiveFixToken === token && activeLiveFixUnsubSession) return;
+    activeLiveFixStopSessionWatch();
+    activeLiveFixToken = token;
+    activeLiveFixUnsubSession = onValue(ref(db, `liveSessions/${token}`), snap => {
+      activeLiveFixMergeSession(token, snap.val() || null);
+    }, err => {
+      activeLiveFixSafe(()=>recordError && recordError(`liveSessions/${token}/autoRefresh`, err));
+    });
+  }
+
+  function activeLiveFixWatchSelectedOwner(){
+    const uid = String(selectedUid || (qs('userSelect') && qs('userSelect').value) || '').trim();
+    if(!uid) return;
+    if(activeLiveFixUid === uid && activeLiveFixUnsubOwner) return;
+
+    if(activeLiveFixUnsubOwner){
+      try{ activeLiveFixUnsubOwner(); }catch(e){}
+    }
+    activeLiveFixUnsubOwner = null;
+    activeLiveFixUid = uid;
+
+    activeLiveFixUnsubOwner = onValue(ref(db, `liveOwners/${uid}/activeSessionId`), snap => {
+      const token = String(snap.val() || '').trim();
+      if(window.liveOwnersByUid && typeof window.liveOwnersByUid === 'object'){
+        window.liveOwnersByUid[uid] = Object.assign({}, window.liveOwnersByUid[uid] || {}, {activeSessionId: token});
+      }
+      activeLiveFixWatchSession(token);
+    }, err => {
+      activeLiveFixSafe(()=>recordError && recordError(`liveOwners/${uid}/activeSessionId/autoRefresh`, err));
+    });
+  }
+
+  function activeLiveFixInstall(){
+    activeLiveFixWatchSelectedOwner();
+
+    const userSelect = qs('userSelect');
+    if(userSelect && !userSelect.dataset.activeLiveAutoRefreshFix){
+      const oldOnChange = userSelect.onchange;
+      userSelect.onchange = function(ev){
+        const result = oldOnChange ? oldOnChange.call(this, ev) : undefined;
+        setTimeout(activeLiveFixWatchSelectedOwner, 0);
+        return result;
+      };
+      userSelect.dataset.activeLiveAutoRefreshFix = '1';
+    }
+  }
+
+  const oldRenderSessions = typeof renderSessions === 'function' ? renderSessions : null;
+  if(oldRenderSessions && !oldRenderSessions.__activeLiveAutoRefreshFix){
+    renderSessions = function(...args){
+      const result = oldRenderSessions.apply(this, args);
+      setTimeout(activeLiveFixWatchSelectedOwner, 0);
+      return result;
+    };
+    renderSessions.__activeLiveAutoRefreshFix = true;
+  }
+
+  setInterval(() => {
+    activeLiveFixInstall();
+    activeLiveFixRender();
+  }, 15000);
+
+  window.startActiveLiveAutoRefreshFix = activeLiveFixInstall;
+  setTimeout(activeLiveFixInstall, 1200);
+})();
+
 </script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js">
 function setupJournalQuickFilters(){
