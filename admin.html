@@ -3,9 +3,6 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate" />
-  <meta http-equiv="Pragma" content="no-cache" />
-  <meta http-equiv="Expires" content="0" />
   <title>MyGps Admin</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
   <style>
@@ -596,11 +593,7 @@
           <button id="range1hBtn" class="secondary">1 час</button>
           <button id="range24hBtn" class="secondary">24 часа</button>
           <button id="refreshHistoryBtn">Обновить историю</button>
-          <button id="historyLightModeBtn" class="success" type="button">Лёгкая история</button>
-          <button id="historyFullModeBtn" class="secondary" type="button">Полная история</button>
         </div>
-        <div id="historyTrafficInfo" class="notice smallMuted">История: лёгкий режим, максимум 3000 точек. Выбери период и нажми “Обновить историю”.</div>
-        <div id="historyLargeRangeWarning" class="notice hidden" style="border-color:rgba(234,179,8,.45);background:rgba(180,83,9,.18);color:#fde68a;font-weight:700">⚠ Большой период. Лучше выбрать 1 час или день, чтобы не расходовать Firebase traffic.</div>
         <div class="row">
           <input id="maxAccuracyFilter" type="number" min="0" step="0.01" placeholder="Макс. accuracy, м"/>
           <input id="minSpeedFilter" type="number" min="0" step="0.1" placeholder="Скорость от, км/ч"/>
@@ -1422,532 +1415,6 @@ window.addEventListener("load", () => {
 
 
 
-
-
-// === HARD LOW-TRAFFIC HISTORY FIX ===
-// No realtime listener and no full history reads on page open/refresh.
-try{
-  loadAllData = async function loadAllDataLowTraffic(){
-    const [liveSnap, usersSnap] = await Promise.all([
-      get(ref(db,"live")),
-      get(ref(db,"users"))
-    ]);
-
-    usersMeta = usersSnap.val() || {};
-    liveByUid = liveSnap.val() || {};
-
-    const ids = new Set([
-      ...(allUsers || []),
-      ...Object.keys(usersMeta || {}),
-      ...Object.keys(historyByUid || {}),
-      ...Object.keys(liveByUid || {}),
-      ...Object.keys(adminsMap || {})
-    ].filter(uid => uid && uid !== "_init"));
-
-    allUsers = [...ids].sort((a,b)=>getDisplayName(a).localeCompare(getDisplayName(b), "ru"));
-    if(!selectedUid && allUsers.length) selectedUid = allUsers[0];
-    renderUserSelect?.();
-
-    updateUsage?.();
-    updateTodaySummary?.();
-    await updateNowFromAvailableSources?.();
-  };
-}catch(e){ console.warn("low traffic loadAllData override failed", e); }
-
-try{
-  ensureHistoryLoaded = async function ensureHistoryLoadedLowTraffic(){
-    if(historyLoaded) return;
-    await loadHistorySmart();
-  };
-}catch(e){ console.warn("low traffic ensureHistoryLoaded override failed", e); }
-
-try{
-  runSystemCheck = async function runSystemCheckLowTraffic(){
-    const btn = qs("runSystemCheckBtn");
-    if(btn){ btn.disabled = true; btn.textContent = "Проверяю…"; }
-    setSystemCheckSummary("checkFirebaseSummary", "…");
-    setSystemCheckSummary("checkAdminSummary", "…");
-    setSystemCheckSummary("checkReadSummary", "…");
-    setSystemCheckSummary("checkWriteSummary", "…");
-    renderSystemCheckRows([{name:"Проверка запущена", status:"wait", details:"Идёт лёгкая проверка без чтения всей history."}]);
-
-    const uid = auth.currentUser?.uid || "";
-    const now = Date.now();
-    const testKey = `_system_check_${uid || "no_uid"}_${now}`;
-    const items = [];
-
-    items.push(await safeCheck("Firebase connected", async () => {
-      if(!auth.currentUser) throw new Error("Нет авторизованного пользователя");
-      const snap = await get(ref(db, "users"));
-      const count = snap.exists() && snap.val() ? Object.keys(snap.val()).length : 0;
-      return `Firebase OK · users читается · пользователей: ${count}`;
-    }));
-    items.push(await safeCheck("Admin права", async () => {
-      if(!uid) throw new Error("UID не найден");
-      const snap = await get(ref(db, `admins/${uid}`));
-      if(snap.val() !== true) throw new Error(`admins/${uid} не true`);
-      return `admins/${uid} = true`;
-    }));
-    items.push(await safeCheck("live читается", async () => {
-      const snap = await get(ref(db, "live"));
-      const count = snap.exists() ? Object.keys(snap.val() || {}).filter(k => k !== "_init").length : 0;
-      return `live UID: ${count}`;
-    }));
-    items.push(await safeCheck("history индекс timestamp", async () => {
-      if(!selectedUid) return "Пользователь не выбран, проверка пропущена";
-      const snap = await get(query(ref(db, `history/${selectedUid}`), orderByChild("timestamp"), limitToLast(1)));
-      const count = snap.exists() ? Object.keys(snap.val() || {}).length : 0;
-      return `Лёгкий запрос history/${selectedUid}: ${count} точек. Полная history не читалась.`;
-    }));
-    items.push(await safeCheck("live пишется", async () => {
-      if(!uid) throw new Error("UID не найден");
-      const testRef = ref(db, `liveSessions/${testKey}`);
-      await set(testRef, {meta:{active:false, createdAt:now, expiresAt:now, ownerUid:uid, systemCheck:true}});
-      await remove(testRef);
-      return "Тестовая запись/удаление в liveSessions выполнены";
-    }));
-
-    const okCount = items.filter(i => i.status === "ok").length;
-    const errCount = items.filter(i => i.status === "err").length;
-    renderSystemCheckRows(items);
-    setSystemCheckSummary("checkFirebaseSummary", items[0]?.status === "ok" ? "OK" : "Ошибка");
-    setSystemCheckSummary("checkAdminSummary", items[1]?.status === "ok" ? "OK" : "Ошибка");
-    setSystemCheckSummary("checkReadSummary", items.slice(2,4).every(i=>i.status === "ok") ? "OK" : "Ошибка");
-    setSystemCheckSummary("checkWriteSummary", items[4]?.status === "ok" ? "OK" : "Ошибка");
-    showToast(errCount ? `Проверка: ${okCount} OK, ${errCount} ошибок` : "Проверка системы: всё OK", errCount ? "warn" : "ok", 3500);
-    if(btn){ btn.disabled = false; btn.textContent = "Запустить проверку"; }
-  };
-  window.runSystemCheck = runSystemCheck;
-}catch(e){ console.warn("low traffic runSystemCheck override failed", e); }
-
-try{
-  createMonthlyBackup = async function createMonthlyBackupLowTraffic(force=false){
-    showToast?.("Backup всей history отключён, чтобы не расходовать Firebase Downloads. Используй экспорт выбранного периода в Истории.", "warn", 5000);
-    return false;
-  };
-}catch(e){ console.warn("low traffic backup override failed", e); }
-
-try{
-  const oldLoadHistorySmart = loadHistorySmart;
-  loadHistorySmart = async function loadHistorySmartHardLowTraffic(){
-    if(!selectedUid){ showToast?.("Пользователь не выбран", "warn"); return; }
-    const {from, to} = getSelectedHistoryRange();
-    const uid = selectedUid;
-    const rangeMs = Math.max(0, to - from);
-    updateHistoryTrafficInfo(null);
-    if(historyLoadMode === "full" && rangeMs > 24*60*60*1000){
-      const ok = confirm("Ты выбрал полный режим больше чем на 24 часа. Это может сильно увеличить Firebase Downloads. Продолжить?");
-      if(!ok) return;
-    }
-    const baseRef = ref(db, `history/${uid}`);
-    const constraints = [orderByChild("timestamp"), startAt(from), endAt(to)];
-    if(historyLoadMode === "light") constraints.push(limitToLast(HISTORY_LIGHT_LIMIT));
-    const snap = await get(query(baseRef, ...constraints));
-    const raw = snap.val() || {};
-    const points = Object.values(raw).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
-    historyByUid[uid] = points;
-    historyLoaded = true;
-    updateHistoryTrafficInfo(points.length, null, historyLoadMode === "light" && points.length >= HISTORY_LIGHT_LIMIT);
-    updateUsage?.();
-    updateTodaySummary?.();
-    await renderHistory?.();
-    showToast?.(`История загружена разовым запросом: ${points.length} точек`, "success");
-  };
-  window.loadHistory = () => loadHistorySmart();
-}catch(e){ console.warn("hard loadHistorySmart override failed", e); }
-
-
-
-// === FIX: AUTO UPDATE ACTIVE LIVE SESSION TIME AFTER APP EXTEND ===
-// Keeps admin live-session table/notice in sync when Android app changes expiresAt/remainingMs/status/paused.
-(function(){
-  let activeLiveFixUnsubOwner = null;
-  let activeLiveFixUnsubSession = null;
-  let activeLiveFixToken = '';
-  let activeLiveFixUid = '';
-
-  function activeLiveFixSafe(fn){
-    try{ return fn(); }catch(e){ try{ recordError && recordError('activeLiveAutoRefreshFix', e); }catch(_){} }
-  }
-
-  function activeLiveFixRender(){
-    activeLiveFixSafe(()=>{
-      if(typeof updateUsage === 'function') updateUsage();
-      if(typeof renderSessions === 'function') renderSessions();
-      if(typeof updateActiveSessionNotice === 'function') updateActiveSessionNotice();
-      if(typeof updateActiveSessionToast === 'function') updateActiveSessionToast();
-      if(typeof updateNowFromAvailableSources === 'function') updateNowFromAvailableSources();
-    });
-  }
-
-  function activeLiveFixMergeSession(token, session){
-    if(!token) return;
-    if(!allSessions || typeof allSessions !== 'object') allSessions = {};
-    if(session){
-      allSessions[token] = session;
-    }else{
-      delete allSessions[token];
-    }
-    activeLiveFixRender();
-  }
-
-  function activeLiveFixStopSessionWatch(){
-    if(activeLiveFixUnsubSession){
-      try{ activeLiveFixUnsubSession(); }catch(e){}
-    }
-    activeLiveFixUnsubSession = null;
-    activeLiveFixToken = '';
-  }
-
-  function activeLiveFixWatchSession(token){
-    token = String(token || '').trim();
-    if(!token){
-      activeLiveFixStopSessionWatch();
-      activeLiveFixRender();
-      return;
-    }
-    if(activeLiveFixToken === token && activeLiveFixUnsubSession) return;
-    activeLiveFixStopSessionWatch();
-    activeLiveFixToken = token;
-    activeLiveFixUnsubSession = onValue(ref(db, `liveSessions/${token}`), snap => {
-      activeLiveFixMergeSession(token, snap.val() || null);
-    }, err => {
-      activeLiveFixSafe(()=>recordError && recordError(`liveSessions/${token}/autoRefresh`, err));
-    });
-  }
-
-  function activeLiveFixWatchSelectedOwner(){
-    const uid = String(selectedUid || (qs('userSelect') && qs('userSelect').value) || '').trim();
-    if(!uid) return;
-    if(activeLiveFixUid === uid && activeLiveFixUnsubOwner) return;
-
-    if(activeLiveFixUnsubOwner){
-      try{ activeLiveFixUnsubOwner(); }catch(e){}
-    }
-    activeLiveFixUnsubOwner = null;
-    activeLiveFixUid = uid;
-
-    activeLiveFixUnsubOwner = onValue(ref(db, `liveOwners/${uid}/activeSessionId`), snap => {
-      const token = String(snap.val() || '').trim();
-      if(window.liveOwnersByUid && typeof window.liveOwnersByUid === 'object'){
-        window.liveOwnersByUid[uid] = Object.assign({}, window.liveOwnersByUid[uid] || {}, {activeSessionId: token});
-      }
-      activeLiveFixWatchSession(token);
-    }, err => {
-      activeLiveFixSafe(()=>recordError && recordError(`liveOwners/${uid}/activeSessionId/autoRefresh`, err));
-    });
-  }
-
-  function activeLiveFixInstall(){
-    activeLiveFixWatchSelectedOwner();
-
-    const userSelect = qs('userSelect');
-    if(userSelect && !userSelect.dataset.activeLiveAutoRefreshFix){
-      const oldOnChange = userSelect.onchange;
-      userSelect.onchange = function(ev){
-        const result = oldOnChange ? oldOnChange.call(this, ev) : undefined;
-        setTimeout(activeLiveFixWatchSelectedOwner, 0);
-        return result;
-      };
-      userSelect.dataset.activeLiveAutoRefreshFix = '1';
-    }
-  }
-
-  const oldRenderSessions = typeof renderSessions === 'function' ? renderSessions : null;
-  if(oldRenderSessions && !oldRenderSessions.__activeLiveAutoRefreshFix){
-    renderSessions = function(...args){
-      const result = oldRenderSessions.apply(this, args);
-      setTimeout(activeLiveFixWatchSelectedOwner, 0);
-      return result;
-    };
-    renderSessions.__activeLiveAutoRefreshFix = true;
-  }
-
-  setInterval(() => {
-    activeLiveFixInstall();
-    activeLiveFixRender();
-  }, 15000);
-
-  window.startActiveLiveAutoRefreshFix = activeLiveFixInstall;
-  setTimeout(activeLiveFixInstall, 1200);
-})();
-
-
-
-// === FINAL FIX: REALTIME SYNC FOR APP LIVE EXTEND / PAUSE / RESUME ===
-// Android may update live/<uid> faster than liveSessions/<sessionId>/meta.
-// Admin must treat live/<uid> as the live state mirror and refresh UI without manual button.
-(function(){
-  let watchedUid = '';
-  let watchedToken = '';
-  let unsubLiveUid = null;
-  let unsubOwner = null;
-  let unsubSession = null;
-  let liveSyncTimer = null;
-
-  function safe(fn){ try{ return fn(); }catch(e){ try{ recordError && recordError('liveAppRealtimeSync', e); }catch(_){} } }
-  function currentUid(){ return String(selectedUid || (qs('userSelect') && qs('userSelect').value) || '').trim(); }
-  function asNum(v, fallback=0){ const n=Number(v); return Number.isFinite(n) ? n : fallback; }
-  function sessionRoot(session){ return (typeof getSessionRoot === 'function' ? getSessionRoot(session) : session) || {}; }
-  function liveToken(live){ return String(live?.sessionId || live?.activeSessionId || live?.liveSessionId || '').trim(); }
-  function isLiveStillRelevant(live){
-    if(!live) return false;
-    const status = String(live.status || live.linkStatus || '').toLowerCase();
-    if(status === 'stopped' || status === 'ended' || status === 'expired') return false;
-    if(live.active === true || live.paused === true || status === 'active' || status === 'paused') return true;
-    const exp = asNum(live.expiresAt, 0);
-    return !!liveToken(live) && exp > Date.now();
-  }
-
-  function mergeLiveIntoSession(uid, live){
-    if(!uid || !live) return '';
-    const token = liveToken(live);
-    if(!token) return '';
-    if(!allSessions || typeof allSessions !== 'object') allSessions = {};
-    const root = sessionRoot(allSessions[token]) || {};
-    const meta = Object.assign({}, root.meta || {});
-    const status = String(live.status || live.linkStatus || '').toLowerCase();
-    const paused = live.paused === true || status === 'paused';
-    const stopped = status === 'stopped' || status === 'ended' || live.active === false;
-    const expired = status === 'expired';
-    const liveActive = isLiveStillRelevant(live) && !stopped && !expired;
-
-    const mergedMeta = Object.assign({}, meta, {
-      ownerUid: meta.ownerUid || live.ownerUid || uid,
-      sessionId: token,
-      liveSessionId: token,
-      activeSessionId: token,
-      liveUrl: live.liveUrl || live.url || meta.liveUrl || meta.url || '',
-      active: liveActive,
-      paused: paused,
-      status: paused ? 'paused' : (stopped ? 'stopped' : (expired ? 'expired' : (liveActive ? 'active' : (meta.status || '')))),
-      linkStatus: paused ? 'paused' : (stopped ? 'stopped' : (expired ? 'expired' : (liveActive ? 'active' : (meta.linkStatus || ''))))
-    });
-
-    ['startedAt','createdAt','pausedAt','resumedAt','endedAt','expiresAt','remainingMs','extendedAt','lastSyncedAt'].forEach(k=>{
-      if(live[k] !== undefined && live[k] !== null && live[k] !== '') mergedMeta[k] = live[k];
-    });
-    if(paused && mergedMeta.remainingMs == null && mergedMeta.expiresAt){
-      mergedMeta.remainingMs = Math.max(0, asNum(mergedMeta.expiresAt) - Date.now());
-    }
-
-    const publicPart = Object.assign({}, root.public || {});
-    if(live.lastPoint) publicPart.lastPoint = live.lastPoint;
-    if(live.recentPoints) publicPart.recentPoints = live.recentPoints;
-
-    allSessions[token] = Object.assign({}, root, { meta: mergedMeta, public: publicPart });
-    return token;
-  }
-
-  function syncAllLiveMirrors(){
-    safe(()=>{
-      const lives = liveByUid || {};
-      Object.entries(lives).forEach(([uid, live])=>mergeLiveIntoSession(uid, live));
-    });
-  }
-
-  function fixCreateButton(){
-    const btn = qs('createShareBtn');
-    if(!btn) return;
-    const uid = currentUid();
-    const now = Date.now();
-    const hasActiveOrPaused = Object.entries(allSessions || {}).some(([token, session])=>{
-      if(token === '_init') return false;
-      const meta = sessionRoot(session).meta || {};
-      if(uid && meta.ownerUid && meta.ownerUid !== uid) return false;
-      const status = String(meta.status || meta.linkStatus || '').toLowerCase();
-      const paused = meta.paused === true || status === 'paused';
-      const stopped = status === 'stopped' || status === 'ended' || status === 'expired' || meta.active === false;
-      const exp = asNum(meta.expiresAt, 0);
-      return !stopped && (paused || meta.active === true) && (paused || !exp || exp > now);
-    });
-    btn.disabled = hasActiveOrPaused;
-    btn.textContent = hasActiveOrPaused ? 'Есть активная ссылка' : 'Создать live-ссылку';
-  }
-
-  function redraw(){
-    syncAllLiveMirrors();
-    safe(()=>typeof updateUsage === 'function' && updateUsage());
-    safe(()=>typeof renderSessions === 'function' && renderSessions());
-    safe(()=>typeof updateActiveSessionNotice === 'function' && updateActiveSessionNotice());
-    safe(()=>typeof updateActiveSessionToast === 'function' && updateActiveSessionToast());
-    safe(()=>typeof updateNowFromAvailableSources === 'function' && updateNowFromAvailableSources());
-    safe(fixCreateButton);
-  }
-
-  // Status should show pause and should not treat paused session as expired just because countdown is stopped.
-  if(typeof getSessionStatus === 'function'){
-    getSessionStatus = function(session){
-      const root = sessionRoot(session), meta = root.meta || {}, now = Date.now();
-      const status = String(meta.status || meta.linkStatus || '').toLowerCase();
-      if(meta.paused === true || status === 'paused') return 'paused';
-      if(status === 'stopped' || status === 'ended' || meta.active === false) return 'ended';
-      if(status === 'expired') return 'expired';
-      const exp = asNum(meta.expiresAt, 0);
-      if(meta.active === true && (!exp || exp > now)) return 'active';
-      if(exp && exp <= now) return 'expired';
-      return 'ended';
-    };
-  }
-  if(typeof getSessionStatusLabel === 'function'){
-    getSessionStatusLabel = function(status){
-      if(status === 'paused') return '<span class="tag idle">пауза</span>';
-      if(status === 'active') return '<span class="tag online">активна</span>';
-      if(status === 'ended') return '<span class="tag offline">завершена</span>';
-      return '<span class="tag offline">истекла</span>';
-    };
-  }
-
-  function selectedActiveOrPausedEntry(){
-    const uid = currentUid();
-    const now = Date.now();
-    return Object.entries(allSessions || {}).find(([token, session])=>{
-      if(token === '_init') return false;
-      const meta = sessionRoot(session).meta || {};
-      if(uid && meta.ownerUid && meta.ownerUid !== uid) return false;
-      const status = String(meta.status || meta.linkStatus || '').toLowerCase();
-      const paused = meta.paused === true || status === 'paused';
-      const stopped = status === 'stopped' || status === 'ended' || status === 'expired' || meta.active === false;
-      const exp = asNum(meta.expiresAt, 0);
-      return !stopped && (paused || meta.active === true) && (paused || !exp || exp > now);
-    }) || null;
-  }
-
-  if(typeof getSelectedActiveSessionEntry === 'function'){
-    getSelectedActiveSessionEntry = selectedActiveOrPausedEntry;
-  }
-
-  if(typeof updateActiveSessionNotice === 'function'){
-    updateActiveSessionNotice = function(){
-      const box = qs('activeSessionNotice');
-      if(!box) return;
-      syncAllLiveMirrors();
-      const entry = selectedActiveOrPausedEntry();
-      if(!entry){ box.classList.add('hidden'); box.innerHTML=''; return; }
-      const [token, session] = entry;
-      const meta = sessionRoot(session).meta || {};
-      const paused = meta.paused === true || String(meta.status || '').toLowerCase() === 'paused';
-      const left = paused ? asNum(meta.remainingMs, Math.max(0, asNum(meta.expiresAt) - Date.now())) : Math.max(0, asNum(meta.expiresAt) - Date.now());
-      const url = buildShareUrl(token);
-      createdShareUrl = url;
-      box.classList.remove('hidden');
-      box.innerHTML = `<strong>Live-сессия ${paused ? 'на паузе' : 'активна'}</strong><div style="margin-top:6px">${paused ? 'Осталось после возобновления' : 'Осталось'}: <b>${fmtRemainingCompact ? fmtRemainingCompact(left) : formatRemainingMs(left)}</b></div><div style="margin-top:6px" class="mono">${url}</div>`;
-    };
-  }
-
-  if(typeof updateActiveSessionToast === 'function'){
-    updateActiveSessionToast = function(){
-      const host = typeof getToastHost === 'function' ? getToastHost() : document.body;
-      safe(()=>typeof applyToastPosition === 'function' && applyToastPosition());
-      let el = document.getElementById('activeSessionToast');
-      syncAllLiveMirrors();
-      const entry = selectedActiveOrPausedEntry();
-      if(!entry){
-        if(el){ clearInterval(el._timer); el.remove(); }
-        fixCreateButton();
-        return;
-      }
-      const [token, session] = entry;
-      const meta = sessionRoot(session).meta || {};
-      const paused = meta.paused === true || String(meta.status || '').toLowerCase() === 'paused';
-      const leftMs = paused ? asNum(meta.remainingMs, Math.max(0, asNum(meta.expiresAt) - Date.now())) : Math.max(0, asNum(meta.expiresAt) - Date.now());
-      if(!paused && leftMs <= 0){ if(el){ clearInterval(el._timer); el.remove(); } fixCreateButton(); redraw(); return; }
-      if(!el){
-        el = document.createElement('div');
-        el.id = 'activeSessionToast';
-        el.style.pointerEvents = 'auto';
-        el.style.display = 'flex';
-        el.style.flexDirection = 'column';
-        el.style.gap = '8px';
-        el.style.padding = '12px 14px';
-        el.style.borderRadius = '14px';
-        el.style.background = paused ? '#b45309' : '#2563eb';
-        el.style.color = '#fff';
-        el.style.boxShadow = '0 10px 28px rgba(0,0,0,.28)';
-        el.style.fontWeight = '600';
-        el.style.lineHeight = '1.35';
-        el.style.wordBreak = 'break-word';
-        host.appendChild(el);
-      }
-      el.style.background = paused ? '#b45309' : '#2563eb';
-      el.innerHTML = `<div style="font-weight:800">Live-сессия ${paused ? 'на паузе' : 'активна'}</div><div id="activeSessionToastTime" style="font-size:13px;opacity:.95">${paused ? 'Осталось после возобновления' : 'Осталось'}: ${formatRemainingMs(leftMs)}</div>`;
-      clearInterval(el._timer);
-      if(!paused){
-        el._expiresAt = asNum(meta.expiresAt, 0);
-        el._timer = setInterval(()=>{
-          const left = Math.max(0, el._expiresAt - Date.now());
-          const timeEl = document.getElementById('activeSessionToastTime');
-          if(timeEl) timeEl.textContent = `Осталось: ${formatRemainingMs(left)}`;
-          if(left <= 0){ clearInterval(el._timer); el.remove(); fixCreateButton(); redraw(); }
-        }, 1000);
-      }
-      fixCreateButton();
-    };
-  }
-
-  // Wrap renderSessions so any render uses the freshest live/<uid> mirror first.
-  if(typeof renderSessions === 'function' && !renderSessions.__mygpsLiveSyncWrapped){
-    const originalRenderSessions = renderSessions;
-    renderSessions = function(){
-      syncAllLiveMirrors();
-      const result = originalRenderSessions.apply(this, arguments);
-      fixCreateButton();
-      return result;
-    };
-    renderSessions.__mygpsLiveSyncWrapped = true;
-  }
-
-  function watchSelected(){
-    const uid = currentUid();
-    if(!uid || uid === watchedUid) return;
-    watchedUid = uid;
-    watchedToken = '';
-    if(unsubLiveUid){ try{unsubLiveUid();}catch(e){} unsubLiveUid = null; }
-    if(unsubOwner){ try{unsubOwner();}catch(e){} unsubOwner = null; }
-    if(unsubSession){ try{unsubSession();}catch(e){} unsubSession = null; }
-
-    unsubLiveUid = onValue(ref(db, `live/${uid}`), snap=>{
-      const live = snap.val() || null;
-      if(!liveByUid || typeof liveByUid !== 'object') liveByUid = {};
-      if(live) liveByUid[uid] = live; else delete liveByUid[uid];
-      const token = mergeLiveIntoSession(uid, live);
-      if(token) watchSessionToken(token);
-      redraw();
-    }, err=>safe(()=>recordError && recordError(`live/${uid}/sync`, err)));
-
-    unsubOwner = onValue(ref(db, `liveOwners/${uid}/activeSessionId`), snap=>{
-      const token = String(snap.val() || '').trim();
-      if(token) watchSessionToken(token);
-      redraw();
-    }, err=>safe(()=>recordError && recordError(`liveOwners/${uid}/activeSessionId/sync`, err)));
-  }
-
-  function watchSessionToken(token){
-    token = String(token || '').trim();
-    if(!token || token === watchedToken) return;
-    watchedToken = token;
-    if(unsubSession){ try{unsubSession();}catch(e){} unsubSession = null; }
-    unsubSession = onValue(ref(db, `liveSessions/${token}`), snap=>{
-      if(!allSessions || typeof allSessions !== 'object') allSessions = {};
-      const val = snap.val();
-      if(val) allSessions[token] = val; else delete allSessions[token];
-      syncAllLiveMirrors();
-      redraw();
-    }, err=>safe(()=>recordError && recordError(`liveSessions/${token}/sync`, err)));
-  }
-
-  const select = qs('userSelect');
-  if(select && !select.dataset.liveAppRealtimeSync){
-    select.addEventListener('change', ()=>setTimeout(()=>{ watchedUid=''; watchSelected(); redraw(); }, 100));
-    select.dataset.liveAppRealtimeSync = '1';
-  }
-
-  watchSelected();
-  liveSyncTimer = setInterval(()=>{ watchSelected(); syncAllLiveMirrors(); fixCreateButton(); }, 1500);
-  setTimeout(redraw, 300);
-  setTimeout(redraw, 1500);
-})();
-
 </script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js">
 function setupJournalQuickFilters(){
@@ -1975,140 +1442,6 @@ function setupJournalQuickFilters(){
 }
 
 window.addEventListener("load", setupJournalQuickFilters);
-
-
-
-// === HARD LOW-TRAFFIC HISTORY FIX ===
-// No realtime listener and no full history reads on page open/refresh.
-try{
-  loadAllData = async function loadAllDataLowTraffic(){
-    const [liveSnap, usersSnap] = await Promise.all([
-      get(ref(db,"live")),
-      get(ref(db,"users"))
-    ]);
-
-    usersMeta = usersSnap.val() || {};
-    liveByUid = liveSnap.val() || {};
-
-    const ids = new Set([
-      ...(allUsers || []),
-      ...Object.keys(usersMeta || {}),
-      ...Object.keys(historyByUid || {}),
-      ...Object.keys(liveByUid || {}),
-      ...Object.keys(adminsMap || {})
-    ].filter(uid => uid && uid !== "_init"));
-
-    allUsers = [...ids].sort((a,b)=>getDisplayName(a).localeCompare(getDisplayName(b), "ru"));
-    if(!selectedUid && allUsers.length) selectedUid = allUsers[0];
-    renderUserSelect?.();
-
-    updateUsage?.();
-    updateTodaySummary?.();
-    await updateNowFromAvailableSources?.();
-  };
-}catch(e){ console.warn("low traffic loadAllData override failed", e); }
-
-try{
-  ensureHistoryLoaded = async function ensureHistoryLoadedLowTraffic(){
-    if(historyLoaded) return;
-    await loadHistorySmart();
-  };
-}catch(e){ console.warn("low traffic ensureHistoryLoaded override failed", e); }
-
-try{
-  runSystemCheck = async function runSystemCheckLowTraffic(){
-    const btn = qs("runSystemCheckBtn");
-    if(btn){ btn.disabled = true; btn.textContent = "Проверяю…"; }
-    setSystemCheckSummary("checkFirebaseSummary", "…");
-    setSystemCheckSummary("checkAdminSummary", "…");
-    setSystemCheckSummary("checkReadSummary", "…");
-    setSystemCheckSummary("checkWriteSummary", "…");
-    renderSystemCheckRows([{name:"Проверка запущена", status:"wait", details:"Идёт лёгкая проверка без чтения всей history."}]);
-
-    const uid = auth.currentUser?.uid || "";
-    const now = Date.now();
-    const testKey = `_system_check_${uid || "no_uid"}_${now}`;
-    const items = [];
-
-    items.push(await safeCheck("Firebase connected", async () => {
-      if(!auth.currentUser) throw new Error("Нет авторизованного пользователя");
-      const snap = await get(ref(db, "users"));
-      const count = snap.exists() && snap.val() ? Object.keys(snap.val()).length : 0;
-      return `Firebase OK · users читается · пользователей: ${count}`;
-    }));
-    items.push(await safeCheck("Admin права", async () => {
-      if(!uid) throw new Error("UID не найден");
-      const snap = await get(ref(db, `admins/${uid}`));
-      if(snap.val() !== true) throw new Error(`admins/${uid} не true`);
-      return `admins/${uid} = true`;
-    }));
-    items.push(await safeCheck("live читается", async () => {
-      const snap = await get(ref(db, "live"));
-      const count = snap.exists() ? Object.keys(snap.val() || {}).filter(k => k !== "_init").length : 0;
-      return `live UID: ${count}`;
-    }));
-    items.push(await safeCheck("history индекс timestamp", async () => {
-      if(!selectedUid) return "Пользователь не выбран, проверка пропущена";
-      const snap = await get(query(ref(db, `history/${selectedUid}`), orderByChild("timestamp"), limitToLast(1)));
-      const count = snap.exists() ? Object.keys(snap.val() || {}).length : 0;
-      return `Лёгкий запрос history/${selectedUid}: ${count} точек. Полная history не читалась.`;
-    }));
-    items.push(await safeCheck("live пишется", async () => {
-      if(!uid) throw new Error("UID не найден");
-      const testRef = ref(db, `liveSessions/${testKey}`);
-      await set(testRef, {meta:{active:false, createdAt:now, expiresAt:now, ownerUid:uid, systemCheck:true}});
-      await remove(testRef);
-      return "Тестовая запись/удаление в liveSessions выполнены";
-    }));
-
-    const okCount = items.filter(i => i.status === "ok").length;
-    const errCount = items.filter(i => i.status === "err").length;
-    renderSystemCheckRows(items);
-    setSystemCheckSummary("checkFirebaseSummary", items[0]?.status === "ok" ? "OK" : "Ошибка");
-    setSystemCheckSummary("checkAdminSummary", items[1]?.status === "ok" ? "OK" : "Ошибка");
-    setSystemCheckSummary("checkReadSummary", items.slice(2,4).every(i=>i.status === "ok") ? "OK" : "Ошибка");
-    setSystemCheckSummary("checkWriteSummary", items[4]?.status === "ok" ? "OK" : "Ошибка");
-    showToast(errCount ? `Проверка: ${okCount} OK, ${errCount} ошибок` : "Проверка системы: всё OK", errCount ? "warn" : "ok", 3500);
-    if(btn){ btn.disabled = false; btn.textContent = "Запустить проверку"; }
-  };
-  window.runSystemCheck = runSystemCheck;
-}catch(e){ console.warn("low traffic runSystemCheck override failed", e); }
-
-try{
-  createMonthlyBackup = async function createMonthlyBackupLowTraffic(force=false){
-    showToast?.("Backup всей history отключён, чтобы не расходовать Firebase Downloads. Используй экспорт выбранного периода в Истории.", "warn", 5000);
-    return false;
-  };
-}catch(e){ console.warn("low traffic backup override failed", e); }
-
-try{
-  const oldLoadHistorySmart = loadHistorySmart;
-  loadHistorySmart = async function loadHistorySmartHardLowTraffic(){
-    if(!selectedUid){ showToast?.("Пользователь не выбран", "warn"); return; }
-    const {from, to} = getSelectedHistoryRange();
-    const uid = selectedUid;
-    const rangeMs = Math.max(0, to - from);
-    updateHistoryTrafficInfo(null);
-    if(historyLoadMode === "full" && rangeMs > 24*60*60*1000){
-      const ok = confirm("Ты выбрал полный режим больше чем на 24 часа. Это может сильно увеличить Firebase Downloads. Продолжить?");
-      if(!ok) return;
-    }
-    const baseRef = ref(db, `history/${uid}`);
-    const constraints = [orderByChild("timestamp"), startAt(from), endAt(to)];
-    if(historyLoadMode === "light") constraints.push(limitToLast(HISTORY_LIGHT_LIMIT));
-    const snap = await get(query(baseRef, ...constraints));
-    const raw = snap.val() || {};
-    const points = Object.values(raw).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
-    historyByUid[uid] = points;
-    historyLoaded = true;
-    updateHistoryTrafficInfo(points.length, null, historyLoadMode === "light" && points.length >= HISTORY_LIGHT_LIMIT);
-    updateUsage?.();
-    updateTodaySummary?.();
-    await renderHistory?.();
-    showToast?.(`История загружена разовым запросом: ${points.length} точек`, "success");
-  };
-  window.loadHistory = () => loadHistorySmart();
-}catch(e){ console.warn("hard loadHistorySmart override failed", e); }
 
 </script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js">
@@ -2138,140 +1471,6 @@ function setupJournalQuickFilters(){
 
 window.addEventListener("load", setupJournalQuickFilters);
 
-
-
-// === HARD LOW-TRAFFIC HISTORY FIX ===
-// No realtime listener and no full history reads on page open/refresh.
-try{
-  loadAllData = async function loadAllDataLowTraffic(){
-    const [liveSnap, usersSnap] = await Promise.all([
-      get(ref(db,"live")),
-      get(ref(db,"users"))
-    ]);
-
-    usersMeta = usersSnap.val() || {};
-    liveByUid = liveSnap.val() || {};
-
-    const ids = new Set([
-      ...(allUsers || []),
-      ...Object.keys(usersMeta || {}),
-      ...Object.keys(historyByUid || {}),
-      ...Object.keys(liveByUid || {}),
-      ...Object.keys(adminsMap || {})
-    ].filter(uid => uid && uid !== "_init"));
-
-    allUsers = [...ids].sort((a,b)=>getDisplayName(a).localeCompare(getDisplayName(b), "ru"));
-    if(!selectedUid && allUsers.length) selectedUid = allUsers[0];
-    renderUserSelect?.();
-
-    updateUsage?.();
-    updateTodaySummary?.();
-    await updateNowFromAvailableSources?.();
-  };
-}catch(e){ console.warn("low traffic loadAllData override failed", e); }
-
-try{
-  ensureHistoryLoaded = async function ensureHistoryLoadedLowTraffic(){
-    if(historyLoaded) return;
-    await loadHistorySmart();
-  };
-}catch(e){ console.warn("low traffic ensureHistoryLoaded override failed", e); }
-
-try{
-  runSystemCheck = async function runSystemCheckLowTraffic(){
-    const btn = qs("runSystemCheckBtn");
-    if(btn){ btn.disabled = true; btn.textContent = "Проверяю…"; }
-    setSystemCheckSummary("checkFirebaseSummary", "…");
-    setSystemCheckSummary("checkAdminSummary", "…");
-    setSystemCheckSummary("checkReadSummary", "…");
-    setSystemCheckSummary("checkWriteSummary", "…");
-    renderSystemCheckRows([{name:"Проверка запущена", status:"wait", details:"Идёт лёгкая проверка без чтения всей history."}]);
-
-    const uid = auth.currentUser?.uid || "";
-    const now = Date.now();
-    const testKey = `_system_check_${uid || "no_uid"}_${now}`;
-    const items = [];
-
-    items.push(await safeCheck("Firebase connected", async () => {
-      if(!auth.currentUser) throw new Error("Нет авторизованного пользователя");
-      const snap = await get(ref(db, "users"));
-      const count = snap.exists() && snap.val() ? Object.keys(snap.val()).length : 0;
-      return `Firebase OK · users читается · пользователей: ${count}`;
-    }));
-    items.push(await safeCheck("Admin права", async () => {
-      if(!uid) throw new Error("UID не найден");
-      const snap = await get(ref(db, `admins/${uid}`));
-      if(snap.val() !== true) throw new Error(`admins/${uid} не true`);
-      return `admins/${uid} = true`;
-    }));
-    items.push(await safeCheck("live читается", async () => {
-      const snap = await get(ref(db, "live"));
-      const count = snap.exists() ? Object.keys(snap.val() || {}).filter(k => k !== "_init").length : 0;
-      return `live UID: ${count}`;
-    }));
-    items.push(await safeCheck("history индекс timestamp", async () => {
-      if(!selectedUid) return "Пользователь не выбран, проверка пропущена";
-      const snap = await get(query(ref(db, `history/${selectedUid}`), orderByChild("timestamp"), limitToLast(1)));
-      const count = snap.exists() ? Object.keys(snap.val() || {}).length : 0;
-      return `Лёгкий запрос history/${selectedUid}: ${count} точек. Полная history не читалась.`;
-    }));
-    items.push(await safeCheck("live пишется", async () => {
-      if(!uid) throw new Error("UID не найден");
-      const testRef = ref(db, `liveSessions/${testKey}`);
-      await set(testRef, {meta:{active:false, createdAt:now, expiresAt:now, ownerUid:uid, systemCheck:true}});
-      await remove(testRef);
-      return "Тестовая запись/удаление в liveSessions выполнены";
-    }));
-
-    const okCount = items.filter(i => i.status === "ok").length;
-    const errCount = items.filter(i => i.status === "err").length;
-    renderSystemCheckRows(items);
-    setSystemCheckSummary("checkFirebaseSummary", items[0]?.status === "ok" ? "OK" : "Ошибка");
-    setSystemCheckSummary("checkAdminSummary", items[1]?.status === "ok" ? "OK" : "Ошибка");
-    setSystemCheckSummary("checkReadSummary", items.slice(2,4).every(i=>i.status === "ok") ? "OK" : "Ошибка");
-    setSystemCheckSummary("checkWriteSummary", items[4]?.status === "ok" ? "OK" : "Ошибка");
-    showToast(errCount ? `Проверка: ${okCount} OK, ${errCount} ошибок` : "Проверка системы: всё OK", errCount ? "warn" : "ok", 3500);
-    if(btn){ btn.disabled = false; btn.textContent = "Запустить проверку"; }
-  };
-  window.runSystemCheck = runSystemCheck;
-}catch(e){ console.warn("low traffic runSystemCheck override failed", e); }
-
-try{
-  createMonthlyBackup = async function createMonthlyBackupLowTraffic(force=false){
-    showToast?.("Backup всей history отключён, чтобы не расходовать Firebase Downloads. Используй экспорт выбранного периода в Истории.", "warn", 5000);
-    return false;
-  };
-}catch(e){ console.warn("low traffic backup override failed", e); }
-
-try{
-  const oldLoadHistorySmart = loadHistorySmart;
-  loadHistorySmart = async function loadHistorySmartHardLowTraffic(){
-    if(!selectedUid){ showToast?.("Пользователь не выбран", "warn"); return; }
-    const {from, to} = getSelectedHistoryRange();
-    const uid = selectedUid;
-    const rangeMs = Math.max(0, to - from);
-    updateHistoryTrafficInfo(null);
-    if(historyLoadMode === "full" && rangeMs > 24*60*60*1000){
-      const ok = confirm("Ты выбрал полный режим больше чем на 24 часа. Это может сильно увеличить Firebase Downloads. Продолжить?");
-      if(!ok) return;
-    }
-    const baseRef = ref(db, `history/${uid}`);
-    const constraints = [orderByChild("timestamp"), startAt(from), endAt(to)];
-    if(historyLoadMode === "light") constraints.push(limitToLast(HISTORY_LIGHT_LIMIT));
-    const snap = await get(query(baseRef, ...constraints));
-    const raw = snap.val() || {};
-    const points = Object.values(raw).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
-    historyByUid[uid] = points;
-    historyLoaded = true;
-    updateHistoryTrafficInfo(points.length, null, historyLoadMode === "light" && points.length >= HISTORY_LIGHT_LIMIT);
-    updateUsage?.();
-    updateTodaySummary?.();
-    await renderHistory?.();
-    showToast?.(`История загружена разовым запросом: ${points.length} точек`, "success");
-  };
-  window.loadHistory = () => loadHistorySmart();
-}catch(e){ console.warn("hard loadHistorySmart override failed", e); }
-
 </script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js">
 function setupJournalQuickFilters(){
@@ -2299,140 +1498,6 @@ function setupJournalQuickFilters(){
 }
 
 window.addEventListener("load", setupJournalQuickFilters);
-
-
-
-// === HARD LOW-TRAFFIC HISTORY FIX ===
-// No realtime listener and no full history reads on page open/refresh.
-try{
-  loadAllData = async function loadAllDataLowTraffic(){
-    const [liveSnap, usersSnap] = await Promise.all([
-      get(ref(db,"live")),
-      get(ref(db,"users"))
-    ]);
-
-    usersMeta = usersSnap.val() || {};
-    liveByUid = liveSnap.val() || {};
-
-    const ids = new Set([
-      ...(allUsers || []),
-      ...Object.keys(usersMeta || {}),
-      ...Object.keys(historyByUid || {}),
-      ...Object.keys(liveByUid || {}),
-      ...Object.keys(adminsMap || {})
-    ].filter(uid => uid && uid !== "_init"));
-
-    allUsers = [...ids].sort((a,b)=>getDisplayName(a).localeCompare(getDisplayName(b), "ru"));
-    if(!selectedUid && allUsers.length) selectedUid = allUsers[0];
-    renderUserSelect?.();
-
-    updateUsage?.();
-    updateTodaySummary?.();
-    await updateNowFromAvailableSources?.();
-  };
-}catch(e){ console.warn("low traffic loadAllData override failed", e); }
-
-try{
-  ensureHistoryLoaded = async function ensureHistoryLoadedLowTraffic(){
-    if(historyLoaded) return;
-    await loadHistorySmart();
-  };
-}catch(e){ console.warn("low traffic ensureHistoryLoaded override failed", e); }
-
-try{
-  runSystemCheck = async function runSystemCheckLowTraffic(){
-    const btn = qs("runSystemCheckBtn");
-    if(btn){ btn.disabled = true; btn.textContent = "Проверяю…"; }
-    setSystemCheckSummary("checkFirebaseSummary", "…");
-    setSystemCheckSummary("checkAdminSummary", "…");
-    setSystemCheckSummary("checkReadSummary", "…");
-    setSystemCheckSummary("checkWriteSummary", "…");
-    renderSystemCheckRows([{name:"Проверка запущена", status:"wait", details:"Идёт лёгкая проверка без чтения всей history."}]);
-
-    const uid = auth.currentUser?.uid || "";
-    const now = Date.now();
-    const testKey = `_system_check_${uid || "no_uid"}_${now}`;
-    const items = [];
-
-    items.push(await safeCheck("Firebase connected", async () => {
-      if(!auth.currentUser) throw new Error("Нет авторизованного пользователя");
-      const snap = await get(ref(db, "users"));
-      const count = snap.exists() && snap.val() ? Object.keys(snap.val()).length : 0;
-      return `Firebase OK · users читается · пользователей: ${count}`;
-    }));
-    items.push(await safeCheck("Admin права", async () => {
-      if(!uid) throw new Error("UID не найден");
-      const snap = await get(ref(db, `admins/${uid}`));
-      if(snap.val() !== true) throw new Error(`admins/${uid} не true`);
-      return `admins/${uid} = true`;
-    }));
-    items.push(await safeCheck("live читается", async () => {
-      const snap = await get(ref(db, "live"));
-      const count = snap.exists() ? Object.keys(snap.val() || {}).filter(k => k !== "_init").length : 0;
-      return `live UID: ${count}`;
-    }));
-    items.push(await safeCheck("history индекс timestamp", async () => {
-      if(!selectedUid) return "Пользователь не выбран, проверка пропущена";
-      const snap = await get(query(ref(db, `history/${selectedUid}`), orderByChild("timestamp"), limitToLast(1)));
-      const count = snap.exists() ? Object.keys(snap.val() || {}).length : 0;
-      return `Лёгкий запрос history/${selectedUid}: ${count} точек. Полная history не читалась.`;
-    }));
-    items.push(await safeCheck("live пишется", async () => {
-      if(!uid) throw new Error("UID не найден");
-      const testRef = ref(db, `liveSessions/${testKey}`);
-      await set(testRef, {meta:{active:false, createdAt:now, expiresAt:now, ownerUid:uid, systemCheck:true}});
-      await remove(testRef);
-      return "Тестовая запись/удаление в liveSessions выполнены";
-    }));
-
-    const okCount = items.filter(i => i.status === "ok").length;
-    const errCount = items.filter(i => i.status === "err").length;
-    renderSystemCheckRows(items);
-    setSystemCheckSummary("checkFirebaseSummary", items[0]?.status === "ok" ? "OK" : "Ошибка");
-    setSystemCheckSummary("checkAdminSummary", items[1]?.status === "ok" ? "OK" : "Ошибка");
-    setSystemCheckSummary("checkReadSummary", items.slice(2,4).every(i=>i.status === "ok") ? "OK" : "Ошибка");
-    setSystemCheckSummary("checkWriteSummary", items[4]?.status === "ok" ? "OK" : "Ошибка");
-    showToast(errCount ? `Проверка: ${okCount} OK, ${errCount} ошибок` : "Проверка системы: всё OK", errCount ? "warn" : "ok", 3500);
-    if(btn){ btn.disabled = false; btn.textContent = "Запустить проверку"; }
-  };
-  window.runSystemCheck = runSystemCheck;
-}catch(e){ console.warn("low traffic runSystemCheck override failed", e); }
-
-try{
-  createMonthlyBackup = async function createMonthlyBackupLowTraffic(force=false){
-    showToast?.("Backup всей history отключён, чтобы не расходовать Firebase Downloads. Используй экспорт выбранного периода в Истории.", "warn", 5000);
-    return false;
-  };
-}catch(e){ console.warn("low traffic backup override failed", e); }
-
-try{
-  const oldLoadHistorySmart = loadHistorySmart;
-  loadHistorySmart = async function loadHistorySmartHardLowTraffic(){
-    if(!selectedUid){ showToast?.("Пользователь не выбран", "warn"); return; }
-    const {from, to} = getSelectedHistoryRange();
-    const uid = selectedUid;
-    const rangeMs = Math.max(0, to - from);
-    updateHistoryTrafficInfo(null);
-    if(historyLoadMode === "full" && rangeMs > 24*60*60*1000){
-      const ok = confirm("Ты выбрал полный режим больше чем на 24 часа. Это может сильно увеличить Firebase Downloads. Продолжить?");
-      if(!ok) return;
-    }
-    const baseRef = ref(db, `history/${uid}`);
-    const constraints = [orderByChild("timestamp"), startAt(from), endAt(to)];
-    if(historyLoadMode === "light") constraints.push(limitToLast(HISTORY_LIGHT_LIMIT));
-    const snap = await get(query(baseRef, ...constraints));
-    const raw = snap.val() || {};
-    const points = Object.values(raw).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
-    historyByUid[uid] = points;
-    historyLoaded = true;
-    updateHistoryTrafficInfo(points.length, null, historyLoadMode === "light" && points.length >= HISTORY_LIGHT_LIMIT);
-    updateUsage?.();
-    updateTodaySummary?.();
-    await renderHistory?.();
-    showToast?.(`История загружена разовым запросом: ${points.length} точек`, "success");
-  };
-  window.loadHistory = () => loadHistorySmart();
-}catch(e){ console.warn("hard loadHistorySmart override failed", e); }
 
 </script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js">
@@ -2462,140 +1527,6 @@ function setupJournalQuickFilters(){
 
 window.addEventListener("load", setupJournalQuickFilters);
 
-
-
-// === HARD LOW-TRAFFIC HISTORY FIX ===
-// No realtime listener and no full history reads on page open/refresh.
-try{
-  loadAllData = async function loadAllDataLowTraffic(){
-    const [liveSnap, usersSnap] = await Promise.all([
-      get(ref(db,"live")),
-      get(ref(db,"users"))
-    ]);
-
-    usersMeta = usersSnap.val() || {};
-    liveByUid = liveSnap.val() || {};
-
-    const ids = new Set([
-      ...(allUsers || []),
-      ...Object.keys(usersMeta || {}),
-      ...Object.keys(historyByUid || {}),
-      ...Object.keys(liveByUid || {}),
-      ...Object.keys(adminsMap || {})
-    ].filter(uid => uid && uid !== "_init"));
-
-    allUsers = [...ids].sort((a,b)=>getDisplayName(a).localeCompare(getDisplayName(b), "ru"));
-    if(!selectedUid && allUsers.length) selectedUid = allUsers[0];
-    renderUserSelect?.();
-
-    updateUsage?.();
-    updateTodaySummary?.();
-    await updateNowFromAvailableSources?.();
-  };
-}catch(e){ console.warn("low traffic loadAllData override failed", e); }
-
-try{
-  ensureHistoryLoaded = async function ensureHistoryLoadedLowTraffic(){
-    if(historyLoaded) return;
-    await loadHistorySmart();
-  };
-}catch(e){ console.warn("low traffic ensureHistoryLoaded override failed", e); }
-
-try{
-  runSystemCheck = async function runSystemCheckLowTraffic(){
-    const btn = qs("runSystemCheckBtn");
-    if(btn){ btn.disabled = true; btn.textContent = "Проверяю…"; }
-    setSystemCheckSummary("checkFirebaseSummary", "…");
-    setSystemCheckSummary("checkAdminSummary", "…");
-    setSystemCheckSummary("checkReadSummary", "…");
-    setSystemCheckSummary("checkWriteSummary", "…");
-    renderSystemCheckRows([{name:"Проверка запущена", status:"wait", details:"Идёт лёгкая проверка без чтения всей history."}]);
-
-    const uid = auth.currentUser?.uid || "";
-    const now = Date.now();
-    const testKey = `_system_check_${uid || "no_uid"}_${now}`;
-    const items = [];
-
-    items.push(await safeCheck("Firebase connected", async () => {
-      if(!auth.currentUser) throw new Error("Нет авторизованного пользователя");
-      const snap = await get(ref(db, "users"));
-      const count = snap.exists() && snap.val() ? Object.keys(snap.val()).length : 0;
-      return `Firebase OK · users читается · пользователей: ${count}`;
-    }));
-    items.push(await safeCheck("Admin права", async () => {
-      if(!uid) throw new Error("UID не найден");
-      const snap = await get(ref(db, `admins/${uid}`));
-      if(snap.val() !== true) throw new Error(`admins/${uid} не true`);
-      return `admins/${uid} = true`;
-    }));
-    items.push(await safeCheck("live читается", async () => {
-      const snap = await get(ref(db, "live"));
-      const count = snap.exists() ? Object.keys(snap.val() || {}).filter(k => k !== "_init").length : 0;
-      return `live UID: ${count}`;
-    }));
-    items.push(await safeCheck("history индекс timestamp", async () => {
-      if(!selectedUid) return "Пользователь не выбран, проверка пропущена";
-      const snap = await get(query(ref(db, `history/${selectedUid}`), orderByChild("timestamp"), limitToLast(1)));
-      const count = snap.exists() ? Object.keys(snap.val() || {}).length : 0;
-      return `Лёгкий запрос history/${selectedUid}: ${count} точек. Полная history не читалась.`;
-    }));
-    items.push(await safeCheck("live пишется", async () => {
-      if(!uid) throw new Error("UID не найден");
-      const testRef = ref(db, `liveSessions/${testKey}`);
-      await set(testRef, {meta:{active:false, createdAt:now, expiresAt:now, ownerUid:uid, systemCheck:true}});
-      await remove(testRef);
-      return "Тестовая запись/удаление в liveSessions выполнены";
-    }));
-
-    const okCount = items.filter(i => i.status === "ok").length;
-    const errCount = items.filter(i => i.status === "err").length;
-    renderSystemCheckRows(items);
-    setSystemCheckSummary("checkFirebaseSummary", items[0]?.status === "ok" ? "OK" : "Ошибка");
-    setSystemCheckSummary("checkAdminSummary", items[1]?.status === "ok" ? "OK" : "Ошибка");
-    setSystemCheckSummary("checkReadSummary", items.slice(2,4).every(i=>i.status === "ok") ? "OK" : "Ошибка");
-    setSystemCheckSummary("checkWriteSummary", items[4]?.status === "ok" ? "OK" : "Ошибка");
-    showToast(errCount ? `Проверка: ${okCount} OK, ${errCount} ошибок` : "Проверка системы: всё OK", errCount ? "warn" : "ok", 3500);
-    if(btn){ btn.disabled = false; btn.textContent = "Запустить проверку"; }
-  };
-  window.runSystemCheck = runSystemCheck;
-}catch(e){ console.warn("low traffic runSystemCheck override failed", e); }
-
-try{
-  createMonthlyBackup = async function createMonthlyBackupLowTraffic(force=false){
-    showToast?.("Backup всей history отключён, чтобы не расходовать Firebase Downloads. Используй экспорт выбранного периода в Истории.", "warn", 5000);
-    return false;
-  };
-}catch(e){ console.warn("low traffic backup override failed", e); }
-
-try{
-  const oldLoadHistorySmart = loadHistorySmart;
-  loadHistorySmart = async function loadHistorySmartHardLowTraffic(){
-    if(!selectedUid){ showToast?.("Пользователь не выбран", "warn"); return; }
-    const {from, to} = getSelectedHistoryRange();
-    const uid = selectedUid;
-    const rangeMs = Math.max(0, to - from);
-    updateHistoryTrafficInfo(null);
-    if(historyLoadMode === "full" && rangeMs > 24*60*60*1000){
-      const ok = confirm("Ты выбрал полный режим больше чем на 24 часа. Это может сильно увеличить Firebase Downloads. Продолжить?");
-      if(!ok) return;
-    }
-    const baseRef = ref(db, `history/${uid}`);
-    const constraints = [orderByChild("timestamp"), startAt(from), endAt(to)];
-    if(historyLoadMode === "light") constraints.push(limitToLast(HISTORY_LIGHT_LIMIT));
-    const snap = await get(query(baseRef, ...constraints));
-    const raw = snap.val() || {};
-    const points = Object.values(raw).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
-    historyByUid[uid] = points;
-    historyLoaded = true;
-    updateHistoryTrafficInfo(points.length, null, historyLoadMode === "light" && points.length >= HISTORY_LIGHT_LIMIT);
-    updateUsage?.();
-    updateTodaySummary?.();
-    await renderHistory?.();
-    showToast?.(`История загружена разовым запросом: ${points.length} точек`, "success");
-  };
-  window.loadHistory = () => loadHistorySmart();
-}catch(e){ console.warn("hard loadHistorySmart override failed", e); }
-
 </script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js">
 function setupJournalQuickFilters(){
@@ -2624,146 +1555,12 @@ function setupJournalQuickFilters(){
 
 window.addEventListener("load", setupJournalQuickFilters);
 
-
-
-// === HARD LOW-TRAFFIC HISTORY FIX ===
-// No realtime listener and no full history reads on page open/refresh.
-try{
-  loadAllData = async function loadAllDataLowTraffic(){
-    const [liveSnap, usersSnap] = await Promise.all([
-      get(ref(db,"live")),
-      get(ref(db,"users"))
-    ]);
-
-    usersMeta = usersSnap.val() || {};
-    liveByUid = liveSnap.val() || {};
-
-    const ids = new Set([
-      ...(allUsers || []),
-      ...Object.keys(usersMeta || {}),
-      ...Object.keys(historyByUid || {}),
-      ...Object.keys(liveByUid || {}),
-      ...Object.keys(adminsMap || {})
-    ].filter(uid => uid && uid !== "_init"));
-
-    allUsers = [...ids].sort((a,b)=>getDisplayName(a).localeCompare(getDisplayName(b), "ru"));
-    if(!selectedUid && allUsers.length) selectedUid = allUsers[0];
-    renderUserSelect?.();
-
-    updateUsage?.();
-    updateTodaySummary?.();
-    await updateNowFromAvailableSources?.();
-  };
-}catch(e){ console.warn("low traffic loadAllData override failed", e); }
-
-try{
-  ensureHistoryLoaded = async function ensureHistoryLoadedLowTraffic(){
-    if(historyLoaded) return;
-    await loadHistorySmart();
-  };
-}catch(e){ console.warn("low traffic ensureHistoryLoaded override failed", e); }
-
-try{
-  runSystemCheck = async function runSystemCheckLowTraffic(){
-    const btn = qs("runSystemCheckBtn");
-    if(btn){ btn.disabled = true; btn.textContent = "Проверяю…"; }
-    setSystemCheckSummary("checkFirebaseSummary", "…");
-    setSystemCheckSummary("checkAdminSummary", "…");
-    setSystemCheckSummary("checkReadSummary", "…");
-    setSystemCheckSummary("checkWriteSummary", "…");
-    renderSystemCheckRows([{name:"Проверка запущена", status:"wait", details:"Идёт лёгкая проверка без чтения всей history."}]);
-
-    const uid = auth.currentUser?.uid || "";
-    const now = Date.now();
-    const testKey = `_system_check_${uid || "no_uid"}_${now}`;
-    const items = [];
-
-    items.push(await safeCheck("Firebase connected", async () => {
-      if(!auth.currentUser) throw new Error("Нет авторизованного пользователя");
-      const snap = await get(ref(db, "users"));
-      const count = snap.exists() && snap.val() ? Object.keys(snap.val()).length : 0;
-      return `Firebase OK · users читается · пользователей: ${count}`;
-    }));
-    items.push(await safeCheck("Admin права", async () => {
-      if(!uid) throw new Error("UID не найден");
-      const snap = await get(ref(db, `admins/${uid}`));
-      if(snap.val() !== true) throw new Error(`admins/${uid} не true`);
-      return `admins/${uid} = true`;
-    }));
-    items.push(await safeCheck("live читается", async () => {
-      const snap = await get(ref(db, "live"));
-      const count = snap.exists() ? Object.keys(snap.val() || {}).filter(k => k !== "_init").length : 0;
-      return `live UID: ${count}`;
-    }));
-    items.push(await safeCheck("history индекс timestamp", async () => {
-      if(!selectedUid) return "Пользователь не выбран, проверка пропущена";
-      const snap = await get(query(ref(db, `history/${selectedUid}`), orderByChild("timestamp"), limitToLast(1)));
-      const count = snap.exists() ? Object.keys(snap.val() || {}).length : 0;
-      return `Лёгкий запрос history/${selectedUid}: ${count} точек. Полная history не читалась.`;
-    }));
-    items.push(await safeCheck("live пишется", async () => {
-      if(!uid) throw new Error("UID не найден");
-      const testRef = ref(db, `liveSessions/${testKey}`);
-      await set(testRef, {meta:{active:false, createdAt:now, expiresAt:now, ownerUid:uid, systemCheck:true}});
-      await remove(testRef);
-      return "Тестовая запись/удаление в liveSessions выполнены";
-    }));
-
-    const okCount = items.filter(i => i.status === "ok").length;
-    const errCount = items.filter(i => i.status === "err").length;
-    renderSystemCheckRows(items);
-    setSystemCheckSummary("checkFirebaseSummary", items[0]?.status === "ok" ? "OK" : "Ошибка");
-    setSystemCheckSummary("checkAdminSummary", items[1]?.status === "ok" ? "OK" : "Ошибка");
-    setSystemCheckSummary("checkReadSummary", items.slice(2,4).every(i=>i.status === "ok") ? "OK" : "Ошибка");
-    setSystemCheckSummary("checkWriteSummary", items[4]?.status === "ok" ? "OK" : "Ошибка");
-    showToast(errCount ? `Проверка: ${okCount} OK, ${errCount} ошибок` : "Проверка системы: всё OK", errCount ? "warn" : "ok", 3500);
-    if(btn){ btn.disabled = false; btn.textContent = "Запустить проверку"; }
-  };
-  window.runSystemCheck = runSystemCheck;
-}catch(e){ console.warn("low traffic runSystemCheck override failed", e); }
-
-try{
-  createMonthlyBackup = async function createMonthlyBackupLowTraffic(force=false){
-    showToast?.("Backup всей history отключён, чтобы не расходовать Firebase Downloads. Используй экспорт выбранного периода в Истории.", "warn", 5000);
-    return false;
-  };
-}catch(e){ console.warn("low traffic backup override failed", e); }
-
-try{
-  const oldLoadHistorySmart = loadHistorySmart;
-  loadHistorySmart = async function loadHistorySmartHardLowTraffic(){
-    if(!selectedUid){ showToast?.("Пользователь не выбран", "warn"); return; }
-    const {from, to} = getSelectedHistoryRange();
-    const uid = selectedUid;
-    const rangeMs = Math.max(0, to - from);
-    updateHistoryTrafficInfo(null);
-    if(historyLoadMode === "full" && rangeMs > 24*60*60*1000){
-      const ok = confirm("Ты выбрал полный режим больше чем на 24 часа. Это может сильно увеличить Firebase Downloads. Продолжить?");
-      if(!ok) return;
-    }
-    const baseRef = ref(db, `history/${uid}`);
-    const constraints = [orderByChild("timestamp"), startAt(from), endAt(to)];
-    if(historyLoadMode === "light") constraints.push(limitToLast(HISTORY_LIGHT_LIMIT));
-    const snap = await get(query(baseRef, ...constraints));
-    const raw = snap.val() || {};
-    const points = Object.values(raw).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
-    historyByUid[uid] = points;
-    historyLoaded = true;
-    updateHistoryTrafficInfo(points.length, null, historyLoadMode === "light" && points.length >= HISTORY_LIGHT_LIMIT);
-    updateUsage?.();
-    updateTodaySummary?.();
-    await renderHistory?.();
-    showToast?.(`История загружена разовым запросом: ${points.length} точек`, "success");
-  };
-  window.loadHistory = () => loadHistorySmart();
-}catch(e){ console.warn("hard loadHistorySmart override failed", e); }
-
 </script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-import { getDatabase, ref, get, onValue, remove, update, push, set, query, limitToLast, orderByChild, startAt, endAt } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
+import { getDatabase, ref, get, onValue, remove, update, push, set, query, limitToLast } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
 
 const firebaseConfig = {
   apiKey:"AIzaSyCXNCY-IpkhAXb8jNPhN8gf2UdOfPBc5gM",
@@ -2850,7 +1647,8 @@ function trackedOnValue(...args){
 }
 
 const provider = new GoogleAuthProvider();
-function qs(id){ return document.getElementById(id); }
+const qs = (id) => document.getElementById(id);
+window.qs = qs;
 
 let historyByUid = {}, liveByUid = {}, allSessions = {}, selectedUid = "", allUsers = [];
 let currentFiltered = [], deletionsLog = [], actionLogs = [], appEventLogs = [], liveEventLogs = [];
@@ -4167,28 +2965,20 @@ async function runSystemCheck(){
     return `Найдено пользователей: ${count}`;
   }));
 
-  items.push(await safeCheck("history индекс/права", async () => {
-    const selected = getSelectedUid && getSelectedUid();
-    if(!selected) return "Проверка history пропущена: пользователь не выбран";
-    const snap = await get(query(ref(db, `history/${selected}`), orderByChild("timestamp"), limitToLast(1)));
-    const count = snap.exists() ? Object.keys(snap.val() || {}).length : 0;
-    return `history/${selected} читается · тестовых точек: ${count}`;
+  items.push(await safeCheck("history читается", async () => {
+    const snap = await get(ref(db, "history"));
+    const count = snap.exists() ? Object.keys(snap.val() || {}).filter(k => k !== "_init").length : 0;
+    return `UID в history: ${count}`;
   }));
 
   items.push(await safeCheck("journal читается", async () => {
-    const selected = getSelectedUid && getSelectedUid();
     const results = [];
-    const checks = selected ? [
-      [`events/${selected}`, query(ref(db, `events/${selected}`), limitToLast(1))],
-      [`eventJournal/${selected}`, query(ref(db, `eventJournal/${selected}`), limitToLast(1))],
-      ["adminLogs", query(ref(db, "adminLogs"), limitToLast(1))]
-    ] : [["adminLogs", query(ref(db, "adminLogs"), limitToLast(1))]];
-    for(const [label, q] of checks){
+    for(const path of ["events", "eventJournal", "adminLogs"]){
       try{
-        const snap = await get(q);
-        results.push(`${label}: ${snap.exists() ? "есть" : "пусто"}`);
+        const snap = await get(ref(db, path));
+        results.push(`${path}: ${snap.exists() ? "есть" : "пусто"}`);
       }catch(e){
-        results.push(`${label}: ошибка`);
+        results.push(`${path}: ошибка`);
       }
     }
     return results.join(" · ");
@@ -6243,110 +5033,24 @@ function getRecentSourcePoints(){
   return points.slice(-5);
 }
 
-async function findActiveLiveSessionFreshForUid(uid){
-  if(!uid) return null;
-  const now = Date.now();
-  const localEntry = Object.entries(allSessions || {}).find(([token, session]) => {
-    if(token === "_init") return false;
-    const root = getSessionRoot(session);
-    const meta = root.meta || {};
-    const raw = String(meta.status || meta.linkStatus || '').toLowerCase();
-    const stopped = meta.active === false || !!meta.endedAt || ['stopped','stop','ended','inactive','expired'].includes(raw);
-    const expired = !meta.paused && Number(meta.expiresAt || 0) > 0 && Number(meta.expiresAt || 0) <= now;
-    return meta.ownerUid === uid && !stopped && !expired && (meta.active === true || meta.paused === true) && (meta.paused || !meta.expiresAt || Number(meta.expiresAt || 0) > now);
-  });
-  if(localEntry) return localEntry;
-
-  try{
-    const ownerSnap = await get(ref(db, `liveOwners/${uid}/activeSessionId`));
-    const token = String(ownerSnap.val() || '').trim();
-    if(token){
-      const sessionSnap = await get(ref(db, `liveSessions/${token}`));
-      const session = sessionSnap.val();
-      const root = getSessionRoot(session || {});
-      const meta = root.meta || {};
-      const raw = String(meta.status || meta.linkStatus || '').toLowerCase();
-      const stopped = meta.active === false || !!meta.endedAt || ['stopped','stop','ended','inactive','expired'].includes(raw);
-      const expired = !meta.paused && Number(meta.expiresAt || 0) > 0 && Number(meta.expiresAt || 0) <= now;
-      if(session && !stopped && !expired && (meta.active === true || meta.paused === true) && (meta.paused || !meta.expiresAt || Number(meta.expiresAt || 0) > now)){
-        allSessions[token] = session;
-        return [token, session];
-      }
-    }
-  }catch(e){ recordError("findActiveLiveSessionFreshForUid.owner", e); }
-
-  try{
-    const liveSnap = await get(ref(db, `live/${uid}`));
-    const live = liveSnap.val() || {};
-    const token = String(live.sessionId || live.activeSessionId || live.liveSessionId || '').trim();
-    const raw = String(live.status || live.linkStatus || '').toLowerCase();
-    const stopped = live.active === false || !!live.endedAt || ['stopped','stop','ended','inactive','expired'].includes(raw);
-    const expired = !live.paused && Number(live.expiresAt || 0) > 0 && Number(live.expiresAt || 0) <= now;
-    if(token && !stopped && !expired && (live.active === true || live.paused === true) && (live.paused || !live.expiresAt || Number(live.expiresAt || 0) > now)){
-      const sessionSnap = await get(ref(db, `liveSessions/${token}`));
-      const session = sessionSnap.val() || { meta: { ...live, ownerUid: uid } };
-      allSessions[token] = session;
-      return [token, session];
-    }
-  }catch(e){ recordError("findActiveLiveSessionFreshForUid.live", e); }
-
-  return null;
-}
-
-function showExistingActiveLiveSession(token, session){
-  const root = getSessionRoot(session || {});
-  const meta = root.meta || {};
-  const url = meta.liveUrl || meta.link || meta.url || buildShareUrl(token);
-  createdShareUrl = url;
-  if(qs("shareLinkText")) qs("shareLinkText").textContent = url;
-  if(qs("shareExpiresText")) qs("shareExpiresText").textContent = fmtTime(meta.expiresAt);
-  if(qs("shareResultBox")) qs("shareResultBox").classList.remove("hidden");
-  updateActiveSessionNotice();
-  updateActiveSessionToast?.();
-  const createBtn = qs("createShareBtn");
-  if(createBtn){ createBtn.disabled = true; createBtn.textContent = meta.paused ? "Live на паузе" : "Есть активная ссылка"; }
-}
-
-
-function startAdminCreatedLiveTimerFix(token, meta, url){
-  try{
-    meta = meta || {};
-    const exp = Number(meta.expiresAt || 0);
-    const paused = meta.paused === true || String(meta.status || meta.linkStatus || '').toLowerCase() === 'paused';
-    const update = () => {
-      const now = Date.now();
-      const left = paused ? Math.max(0, Number(meta.remainingMs || 0)) : Math.max(0, exp - now);
-      const shareExpires = qs('shareExpiresText');
-      if(shareExpires){
-        shareExpires.textContent = paused
-          ? `Пауза, осталось ${typeof fmtRemainingCompact === 'function' ? fmtRemainingCompact(left) : formatRemainingMs(left)}`
-          : `${typeof fmtTime === 'function' ? fmtTime(exp) : '—'} · осталось ${typeof fmtRemainingCompact === 'function' ? fmtRemainingCompact(left) : formatRemainingMs(left)}`;
-      }
-      const box = qs('activeSessionNotice');
-      if(box){
-        box.classList.remove('hidden');
-        box.innerHTML = `<strong>Live-сессия ${paused ? 'на паузе' : 'активна'}</strong><div style="margin-top:6px">${paused ? 'Осталось после возобновления' : 'Осталось'}: <b>${typeof fmtRemainingCompact === 'function' ? fmtRemainingCompact(left) : formatRemainingMs(left)}</b></div><div style="margin-top:6px" class="mono">${url || (typeof buildShareUrl === 'function' ? buildShareUrl(token) : token)}</div>`;
-      }
-      if(!paused && left <= 0 && window.__adminCreateLiveTimerFix){
-        clearInterval(window.__adminCreateLiveTimerFix);
-        window.__adminCreateLiveTimerFix = null;
-      }
-    };
-    if(window.__adminCreateLiveTimerFix) clearInterval(window.__adminCreateLiveTimerFix);
-    update();
-    window.__adminCreateLiveTimerFix = setInterval(update, 1000);
-  }catch(e){ console.warn('startAdminCreatedLiveTimerFix', e); }
-}
-
 async function createLiveSession(){
   if(!selectedUid && allUsers.length===1){ selectedUid = allUsers[0]; qs("userSelect").value = selectedUid; }
   if(!selectedUid) return showToast("Нет пользователя. Сначала дождись появления данных GPS в Firebase или выбери пользователя.","warn");
 
-  const freshActive = await findActiveLiveSessionFreshForUid(selectedUid);
-  if(freshActive){
-    const [token, session] = freshActive;
-    showExistingActiveLiveSession(token, session);
-    return showToast("У пользователя уже есть активная live-ссылка", "warn");
+  const now=Date.now();
+  const activeExisting = Object.entries(allSessions||{}).find(([token,session])=>{
+    if(token==="_init") return false;
+    const root=getSessionRoot(session), meta=root.meta||{};
+    return meta.ownerUid===selectedUid && !!meta.active && Number(meta.expiresAt||0)>now;
+  });
+  if(activeExisting){
+    const [token, session] = activeExisting;
+    createdShareUrl = buildShareUrl(token);
+    qs("shareLinkText").textContent = createdShareUrl;
+    qs("shareExpiresText").textContent = fmtTime(getSessionRoot(session).meta?.expiresAt);
+    qs("shareResultBox").classList.remove("hidden");
+    updateActiveSessionNotice();
+    return showToast("У пользователя уже есть активная live-ссылка","warn");
   }
 
   const durationVal = qs("shareDurationPreset").value;
@@ -6361,63 +5065,21 @@ async function createLiveSession(){
   }
   if(!durationMinutes || durationMinutes <= 0) return showToast("Укажи корректное время","warn");
   const sourcePoints=getRecentSourcePoints();
+  if(!sourcePoints.length) return showToast("Нет данных выбранного пользователя для создания live-ссылки.","warn");
 
-  const now = Date.now();
-  const liveFallback = (liveByUid && selectedUid && liveByUid[selectedUid]) ? liveByUid[selectedUid] : null;
-  const lastPoint = sourcePoints.length ? sourcePoints[sourcePoints.length-1] : (liveFallback && (liveFallback.lastPoint || liveFallback.public?.lastPoint || liveFallback));
-  const token=generateSessionToken(), expiresAt=now+durationMinutes*60*1000, recentPointsObj={};
-  const liveUrl = buildShareUrl(token);
-  sourcePoints.forEach(p=>recentPointsObj[String(p.timestamp||p.ts||Date.now()+Math.random())]=p);
-  const payload={
-    meta:{
-      active:true, paused:false, status:"active", linkStatus:"active",
-      sessionId:token, liveSessionId:token, activeSessionId:token,
-      liveUrl, link:liveUrl, url:liveUrl,
-      createdAt:now, startedAt:now, expiresAt,
-      remainingMs:durationMinutes*60*1000,
-      ownerUid:selectedUid,
-      createdBy:auth.currentUser?.uid||null,
-      createdByEmail:auth.currentUser?.email||null,
-      durationMinutes
-    },
-    public:{...(lastPoint ? {lastPoint} : {}), recentPoints:recentPointsObj},
-    viewStats:{openCount:0,firstOpenAt:null,lastOpenAt:null}
-  };
+  const token=generateSessionToken(), expiresAt=now+durationMinutes*60*1000, lastPoint=sourcePoints[sourcePoints.length-1], recentPointsObj={};
+  sourcePoints.forEach(p=>recentPointsObj[String(p.timestamp||Date.now()+Math.random())]=p);
+  const payload={meta:{active:true,paused:false,createdAt:now,expiresAt,remainingMs:durationMinutes*60*1000,ownerUid:selectedUid,createdBy:auth.currentUser?.uid||null,createdByEmail:auth.currentUser?.email||null,durationMinutes},public:{lastPoint,recentPoints:recentPointsObj},viewStats:{openCount:0,firstOpenAt:null,lastOpenAt:null}};
   try{
     await set(ref(db,`liveSessions/${token}`), payload);
-    await update(ref(db), {
-      [`liveOwners/${selectedUid}/activeSessionId`]:token,
-      [`liveOwners/${selectedUid}/lastCreatedAt`]:now,
-      [`live/${selectedUid}/active`]:true,
-      [`live/${selectedUid}/paused`]:false,
-      [`live/${selectedUid}/status`]:"active",
-      [`live/${selectedUid}/linkStatus`]:"active",
-      [`live/${selectedUid}/sessionId`]:token,
-      [`live/${selectedUid}/liveSessionId`]:token,
-      [`live/${selectedUid}/activeSessionId`]:token,
-      [`live/${selectedUid}/liveUrl`]:liveUrl,
-      [`live/${selectedUid}/link`]:liveUrl,
-      [`live/${selectedUid}/startedAt`]:now,
-      [`live/${selectedUid}/createdAt`]:now,
-      [`live/${selectedUid}/expiresAt`]:expiresAt,
-      [`live/${selectedUid}/remainingMs`]:durationMinutes*60*1000,
-      [`live/${selectedUid}/updatedAt`]:now
-    });
-    allSessions[token] = payload;
-    window.allSessions = allSessions;
+    await update(ref(db), { [`liveOwners/${selectedUid}/activeSessionId`]:token, [`liveOwners/${selectedUid}/lastCreatedAt`]:now });
     await logAction("session_create",`Создана live-сессия ${token} для ${selectedUid}`);
-    createdShareUrl = liveUrl;
+    createdShareUrl = buildShareUrl(token);
     qs("shareLinkText").textContent = createdShareUrl;
-    qs("shareExpiresText").textContent = `${fmtTime(expiresAt)} · осталось ${fmtRemainingCompact(expiresAt - Date.now())}`;
+    qs("shareExpiresText").textContent = fmtTime(expiresAt);
     qs("shareResultBox").classList.remove("hidden");
-    if (typeof mergeLiveControlsIntoSessions === "function") mergeLiveControlsIntoSessions();
-    if (typeof renderSessions === "function") renderSessions();
-    updateActiveSessionNotice();
-    updateActiveSessionToast?.();
-    if (typeof startAdminCreatedLiveTimerFix === "function") startAdminCreatedLiveTimerFix(token, payload.meta, liveUrl);
     await loadSessions();
-    showExistingActiveLiveSession(token, payload);
-    if (typeof startAdminCreatedLiveTimerFix === "function") startAdminCreatedLiveTimerFix(token, payload.meta, liveUrl);
+    updateActiveSessionNotice();
     showToast("Live-ссылка создана","success");
   }catch(e){
     recordError("createLiveSession", e); showToast("Создание live-ссылки: "+errText(e),"error",3600);
@@ -7310,8 +5972,6 @@ async function exportPdfReport(){
     ${dataHtml}
     ${tableHtml}
   </div>
-
-<!-- MyGps admin economy final: no-cache headers; heavy system checks use limitToLast(1); history remains one-shot get() through smart loader. -->
 </body>
 </html>`);
   reportWin.document.close();
@@ -8074,8 +6734,30 @@ onAuthStateChanged(auth, async user => {
     renderJournal();
     updateNowFromAvailableSources();
   });
-  // History is intentionally NOT subscribed with onValue.
-  // It is loaded only once by button/date range to prevent Firebase Downloads growth.
+  trackedOnValue(ref(db, "history"), snap => {
+    const raw=snap.val()||{};
+    historyByUid={};
+    Object.entries(raw).forEach(([uid,pointsObj])=>{
+      historyByUid[uid]=Object.values(pointsObj||{}).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+    });
+
+    const ids = new Set([
+      ...(allUsers || []),
+      ...Object.keys(usersMeta || {}),
+      ...Object.keys(historyByUid || {}),
+      ...Object.keys(liveByUid || {}),
+      ...Object.keys(adminsMap || {})
+    ].filter(uid => uid && uid !== "_init"));
+
+    allUsers = [...ids].sort((a,b)=>getDisplayName(a).localeCompare(getDisplayName(b), "ru"));
+    if(!selectedUid && allUsers.length) selectedUid = allUsers[0];
+    renderUserSelect?.();
+
+    historyLoaded = true;
+    updateUsage();
+    renderHistory();
+    updateNowFromAvailableSources();
+  });
   trackedOnValue(query(ref(db, "liveSessions"), limitToLast(ADMIN_SESSIONS_LIMIT)), snap => { allSessions=snap.val()||{}; updateUsage(); renderSessions(); updateActiveSessionToast(); updateNowFromAvailableSources(); });
   trackedOnValue(ref(db, "adminLogs/deletions"), snap => { deletionsLog=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0)); renderJournal(); });
   trackedOnValue(ref(db, "adminLogs/actions"), snap => { actionLogs=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0)); renderJournal(); });
@@ -10863,727 +9545,349 @@ setInterval(() => {
 
 
 
-// === HARD LOW-TRAFFIC HISTORY FIX ===
-// No realtime listener and no full history reads on page open/refresh.
-try{
-  loadAllData = async function loadAllDataLowTraffic(){
-    const [liveSnap, usersSnap] = await Promise.all([
-      get(ref(db,"live")),
-      get(ref(db,"users"))
-    ]);
-
-    usersMeta = usersSnap.val() || {};
-    liveByUid = liveSnap.val() || {};
-
-    const ids = new Set([
-      ...(allUsers || []),
-      ...Object.keys(usersMeta || {}),
-      ...Object.keys(historyByUid || {}),
-      ...Object.keys(liveByUid || {}),
-      ...Object.keys(adminsMap || {})
-    ].filter(uid => uid && uid !== "_init"));
-
-    allUsers = [...ids].sort((a,b)=>getDisplayName(a).localeCompare(getDisplayName(b), "ru"));
-    if(!selectedUid && allUsers.length) selectedUid = allUsers[0];
-    renderUserSelect?.();
-
-    updateUsage?.();
-    updateTodaySummary?.();
-    await updateNowFromAvailableSources?.();
-  };
-}catch(e){ console.warn("low traffic loadAllData override failed", e); }
-
-try{
-  ensureHistoryLoaded = async function ensureHistoryLoadedLowTraffic(){
-    if(historyLoaded) return;
-    await loadHistorySmart();
-  };
-}catch(e){ console.warn("low traffic ensureHistoryLoaded override failed", e); }
-
-try{
-  runSystemCheck = async function runSystemCheckLowTraffic(){
-    const btn = qs("runSystemCheckBtn");
-    if(btn){ btn.disabled = true; btn.textContent = "Проверяю…"; }
-    setSystemCheckSummary("checkFirebaseSummary", "…");
-    setSystemCheckSummary("checkAdminSummary", "…");
-    setSystemCheckSummary("checkReadSummary", "…");
-    setSystemCheckSummary("checkWriteSummary", "…");
-    renderSystemCheckRows([{name:"Проверка запущена", status:"wait", details:"Идёт лёгкая проверка без чтения всей history."}]);
-
-    const uid = auth.currentUser?.uid || "";
-    const now = Date.now();
-    const testKey = `_system_check_${uid || "no_uid"}_${now}`;
-    const items = [];
-
-    items.push(await safeCheck("Firebase connected", async () => {
-      if(!auth.currentUser) throw new Error("Нет авторизованного пользователя");
-      const snap = await get(ref(db, "users"));
-      const count = snap.exists() && snap.val() ? Object.keys(snap.val()).length : 0;
-      return `Firebase OK · users читается · пользователей: ${count}`;
-    }));
-    items.push(await safeCheck("Admin права", async () => {
-      if(!uid) throw new Error("UID не найден");
-      const snap = await get(ref(db, `admins/${uid}`));
-      if(snap.val() !== true) throw new Error(`admins/${uid} не true`);
-      return `admins/${uid} = true`;
-    }));
-    items.push(await safeCheck("live читается", async () => {
-      const snap = await get(ref(db, "live"));
-      const count = snap.exists() ? Object.keys(snap.val() || {}).filter(k => k !== "_init").length : 0;
-      return `live UID: ${count}`;
-    }));
-    items.push(await safeCheck("history индекс timestamp", async () => {
-      if(!selectedUid) return "Пользователь не выбран, проверка пропущена";
-      const snap = await get(query(ref(db, `history/${selectedUid}`), orderByChild("timestamp"), limitToLast(1)));
-      const count = snap.exists() ? Object.keys(snap.val() || {}).length : 0;
-      return `Лёгкий запрос history/${selectedUid}: ${count} точек. Полная history не читалась.`;
-    }));
-    items.push(await safeCheck("live пишется", async () => {
-      if(!uid) throw new Error("UID не найден");
-      const testRef = ref(db, `liveSessions/${testKey}`);
-      await set(testRef, {meta:{active:false, createdAt:now, expiresAt:now, ownerUid:uid, systemCheck:true}});
-      await remove(testRef);
-      return "Тестовая запись/удаление в liveSessions выполнены";
-    }));
-
-    const okCount = items.filter(i => i.status === "ok").length;
-    const errCount = items.filter(i => i.status === "err").length;
-    renderSystemCheckRows(items);
-    setSystemCheckSummary("checkFirebaseSummary", items[0]?.status === "ok" ? "OK" : "Ошибка");
-    setSystemCheckSummary("checkAdminSummary", items[1]?.status === "ok" ? "OK" : "Ошибка");
-    setSystemCheckSummary("checkReadSummary", items.slice(2,4).every(i=>i.status === "ok") ? "OK" : "Ошибка");
-    setSystemCheckSummary("checkWriteSummary", items[4]?.status === "ok" ? "OK" : "Ошибка");
-    showToast(errCount ? `Проверка: ${okCount} OK, ${errCount} ошибок` : "Проверка системы: всё OK", errCount ? "warn" : "ok", 3500);
-    if(btn){ btn.disabled = false; btn.textContent = "Запустить проверку"; }
-  };
-  window.runSystemCheck = runSystemCheck;
-}catch(e){ console.warn("low traffic runSystemCheck override failed", e); }
-
-try{
-  createMonthlyBackup = async function createMonthlyBackupLowTraffic(force=false){
-    showToast?.("Backup всей history отключён, чтобы не расходовать Firebase Downloads. Используй экспорт выбранного периода в Истории.", "warn", 5000);
-    return false;
-  };
-}catch(e){ console.warn("low traffic backup override failed", e); }
-
-try{
-  const oldLoadHistorySmart = loadHistorySmart;
-  loadHistorySmart = async function loadHistorySmartHardLowTraffic(){
-    if(!selectedUid){ showToast?.("Пользователь не выбран", "warn"); return; }
-    const {from, to} = getSelectedHistoryRange();
-    const uid = selectedUid;
-    const rangeMs = Math.max(0, to - from);
-    updateHistoryTrafficInfo(null);
-    if(historyLoadMode === "full" && rangeMs > 24*60*60*1000){
-      const ok = confirm("Ты выбрал полный режим больше чем на 24 часа. Это может сильно увеличить Firebase Downloads. Продолжить?");
-      if(!ok) return;
-    }
-    const baseRef = ref(db, `history/${uid}`);
-    const constraints = [orderByChild("timestamp"), startAt(from), endAt(to)];
-    if(historyLoadMode === "light") constraints.push(limitToLast(HISTORY_LIGHT_LIMIT));
-    const snap = await get(query(baseRef, ...constraints));
-    const raw = snap.val() || {};
-    const points = Object.values(raw).filter(Boolean).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
-    historyByUid[uid] = points;
-    historyLoaded = true;
-    updateHistoryTrafficInfo(points.length, null, historyLoadMode === "light" && points.length >= HISTORY_LIGHT_LIMIT);
-    updateUsage?.();
-    updateTodaySummary?.();
-    await renderHistory?.();
-    showToast?.(`История загружена разовым запросом: ${points.length} точек`, "success");
-  };
-  window.loadHistory = () => loadHistorySmart();
-}catch(e){ console.warn("hard loadHistorySmart override failed", e); }
-
-
-/* === MYGPS FINAL PATCH 2026-05-05: stable active live notice + app/admin realtime sync === */
-try{
+// === FINAL STABLE PATCH 2026-05-05: selected live realtime sync + stable top-right notice ===
 (function(){
-  const PATCH = 'stableLiveSyncFinal';
-  if(window.__MYGPS_STABLE_LIVE_SYNC_FINAL__) return;
-  window.__MYGPS_STABLE_LIVE_SYNC_FINAL__ = true;
+  const PATCH = 'liveFinalSyncTopRight_20260505';
+  if(window[PATCH]) return;
+  window[PATCH] = true;
 
-  const byId = (id)=>document.getElementById(id);
-  const safe = (fn)=>{ try{return fn();}catch(e){ try{ console.warn(PATCH, e); recordError && recordError(PATCH, e); }catch(_){} } };
-  const asStr = (v)=>String(v == null ? '' : v).trim();
-  const asNum = (v,d=0)=>Number.isFinite(Number(v)) ? Number(v) : d;
-  const tokenFrom = (o)=>asStr(o && (o.sessionId || o.activeSessionId || o.liveSessionId || o.token || o.id));
-  const uidOf = (m)=>asStr(m && (m.ownerUid || m.uid || m.createdBy || m.userUid));
-  const getRoot = (s)=> s && s.meta ? s : { meta: (s || {}) };
-  const urlFor = (token, meta)=> asStr(meta && (meta.liveUrl || meta.url || meta.link)) || (typeof buildShareUrl === 'function' ? buildShareUrl(token) : ('live.html?session=' + encodeURIComponent(token)));
+  let watchedUid = '';
+  let watchedToken = '';
+  let unsubLive = null;
+  let unsubOwner = null;
+  let unsubMeta = null;
+  let tickTimer = null;
 
-  function metaState(meta){
+  function gid(id){ return document.getElementById(id); }
+  function safeCall(fn, name){ try{ return fn(); }catch(e){ try{ recordError && recordError(name || PATCH, e); }catch(_){} console.warn(name || PATCH, e); } }
+  function num(v, d=0){ const n = Number(v); return Number.isFinite(n) ? n : d; }
+  function uidNow(){ return String(selectedUid || gid('userSelect')?.value || '').trim(); }
+  function tokenOf(v){ return String(v?.sessionId || v?.activeSessionId || v?.liveSessionId || v?.token || '').trim(); }
+  function lower(v){ return String(v || '').toLowerCase(); }
+  function rootOf(s){ try{ return (typeof getSessionRoot === 'function' ? getSessionRoot(s) : s) || {}; }catch(e){ return s || {}; } }
+  function urlFor(token, meta){ return meta?.liveUrl || meta?.link || meta?.url || (typeof buildShareUrl === 'function' ? buildShareUrl(token) : `live.html?session=${encodeURIComponent(token)}`); }
+  function setTxt(id, value){ const el = gid(id); const v = String(value ?? ''); if(el && el.textContent !== v) el.textContent = v; }
+  function fmtLeft(ms){ try{ return formatRemainingMs(ms); }catch(e){ const sec=Math.max(0,Math.floor(num(ms)/1000)); const m=Math.floor(sec/60); const s=sec%60; return `${m}м ${String(s).padStart(2,'0')}с`; } }
+  function fmtCompact(ms){ try{ return fmtRemainingCompact(ms); }catch(e){ return fmtLeft(ms); } }
+
+  function status(meta){
     meta = meta || {};
-    const raw = asStr(meta.status || meta.linkStatus).toLowerCase();
-    const stopped = meta.active === false || !!meta.endedAt || raw === 'stopped' || raw === 'ended' || raw === 'expired' || raw === 'stop';
-    const paused = !stopped && (meta.paused === true || raw === 'paused' || raw === 'pause');
-    const exp = asNum(meta.expiresAt, 0);
-    const active = !stopped && (paused || meta.active === true || raw === 'active') && (!exp || paused || exp > Date.now());
-    const left = paused ? Math.max(0, asNum(meta.remainingMs, Math.max(0, exp - Date.now()))) : Math.max(0, exp - Date.now());
-    return {active, paused, stopped, expired: !active && !paused && !stopped, leftMs:left};
-  }
-
-  function sessionFromLive(uid, live){
-    if(!uid || !live || typeof live !== 'object') return null;
-    const token = tokenFrom(live);
-    if(!token) return null;
-    const meta = {
-      ownerUid: uid,
-      sessionId: token,
-      activeSessionId: token,
-      liveSessionId: token,
-      active: live.active !== undefined ? live.active : true,
-      paused: live.paused === true,
-      status: live.status || live.linkStatus || (live.paused ? 'paused' : (live.active === false ? 'stopped' : 'active')),
-      linkStatus: live.linkStatus || live.status || (live.paused ? 'paused' : (live.active === false ? 'stopped' : 'active')),
-      startedAt: asNum(live.startedAt || live.createdAt, 0),
-      createdAt: asNum(live.createdAt || live.startedAt, 0),
-      pausedAt: live.pausedAt || null,
-      resumedAt: live.resumedAt || null,
-      endedAt: live.endedAt || null,
-      expiresAt: asNum(live.expiresAt, 0),
-      remainingMs: asNum(live.remainingMs, 0),
-      liveUrl: asStr(live.liveUrl || live.link || live.url) || (typeof buildShareUrl === 'function' ? buildShareUrl(token) : ('live.html?session=' + encodeURIComponent(token))),
-      updatedAt: asNum(live.updatedAt || live.lastSyncedAt || Date.now(), Date.now())
-    };
-    return [token, {meta, public:{lastPoint: live.lastPoint || live.point || null}, viewStats:{}}];
-  }
-
-  function mergeLiveIntoSession(uid, live){
-    const pseudo = sessionFromLive(uid, live);
-    if(!pseudo) return null;
-    const [token, pseudoSession] = pseudo;
-    allSessions = allSessions || {};
-    const existing = allSessions[token] || {};
-    const root = getRoot(existing);
-    const merged = Object.assign({}, root, {
-      meta: Object.assign({}, root.meta || {}, pseudoSession.meta || {}),
-      public: Object.assign({}, root.public || {}, pseudoSession.public || {}),
-      viewStats: Object.assign({}, root.viewStats || {})
-    });
-    allSessions[token] = merged;
-    return [token, merged];
-  }
-
-  function ensureKnownUid(uid){
-    if(!uid) return;
-    allUsers = Array.isArray(allUsers) ? allUsers : [];
-    if(!allUsers.includes(uid)){
-      allUsers.push(uid);
-      allUsers.sort((a,b)=>String((typeof getDisplayName==='function'?getDisplayName(a):a)).localeCompare(String((typeof getDisplayName==='function'?getDisplayName(b):b)), 'ru'));
-      safe(()=>renderUserSelect && renderUserSelect());
-    }
-  }
-
-  function currentUid(){
-    return selectedUid || byId('userSelect')?.value || '';
-  }
-
-  function findActiveEntry(){
-    const uid = currentUid();
-    if(uid){
-      const live = liveByUid && liveByUid[uid];
-      const merged = mergeLiveIntoSession(uid, live);
-      if(merged && metaState(getRoot(merged[1]).meta).active) return merged;
-      const ownerToken = asStr((window.liveOwnersByUid && window.liveOwnersByUid[uid] && window.liveOwnersByUid[uid].activeSessionId) || '');
-      if(ownerToken && allSessions && allSessions[ownerToken]){
-        const s = allSessions[ownerToken];
-        const m = getRoot(s).meta || {};
-        if((!uidOf(m) || uidOf(m) === uid) && metaState(m).active) return [ownerToken, s];
-      }
-    }
-    const entries = Object.entries(allSessions || {}).filter(([token])=>token !== '_init');
-    const found = entries.find(([token, session])=>{
-      const m = getRoot(session).meta || {};
-      if(uid && uidOf(m) && uidOf(m) !== uid) return false;
-      return metaState(m).active;
-    });
-    return found || null;
-  }
-
-  getSelectedActiveSessionEntry = function(){ return findActiveEntry(); };
-  findActiveSessionEntryForSelectedUser = function(){ return findActiveEntry(); };
-
-  function updateButtonByEntry(entry){
-    const btn = byId('createShareBtn');
-    if(!btn) return;
-    if(entry){
-      const m = getRoot(entry[1]).meta || {};
-      const st = metaState(m);
-      btn.disabled = true;
-      btn.textContent = st.paused ? 'Live на паузе' : 'Есть активная ссылка';
-    }else{
-      btn.disabled = false;
-      btn.textContent = 'Создать live-ссылку';
-    }
-  }
-
-  updateActiveSessionNotice = function(){
-    const box = byId('activeSessionNotice');
-    if(!box) return;
-    const entry = findActiveEntry();
-    updateButtonByEntry(entry);
-    if(!entry){
-      box.classList.add('hidden');
-      if(box.dataset.token){ box.innerHTML = ''; box.dataset.token = ''; box.dataset.paused = ''; }
-      createdShareUrl = '';
-      return;
-    }
-    const [token, session] = entry;
-    const m = getRoot(session).meta || {};
-    const st = metaState(m);
-    if(!st.active){
-      box.classList.add('hidden');
-      if(box.dataset.token){ box.innerHTML = ''; box.dataset.token = ''; box.dataset.paused = ''; }
-      createdShareUrl = '';
-      updateButtonByEntry(null);
-      return;
-    }
-    const url = urlFor(token, m);
-    createdShareUrl = url;
-    const pausedMark = st.paused ? '1' : '0';
-    box.classList.remove('hidden');
-    if(box.dataset.token !== token || box.dataset.paused !== pausedMark || !byId('activeSessionNoticeTime')){
-      box.dataset.token = token;
-      box.dataset.paused = pausedMark;
-      box.innerHTML = '<strong id="activeSessionNoticeTitle"></strong><div style="margin-top:6px"><span id="activeSessionNoticeLabel"></span>: <b id="activeSessionNoticeTime"></b></div><div style="margin-top:6px" class="mono" id="activeSessionNoticeUrl"></div>';
-    }
-    const leftText = typeof fmtRemainingCompact === 'function' ? fmtRemainingCompact(st.leftMs) : (typeof formatRemainingMs === 'function' ? formatRemainingMs(st.leftMs) : Math.ceil(st.leftMs/1000)+'с');
-    const title = byId('activeSessionNoticeTitle');
-    const label = byId('activeSessionNoticeLabel');
-    const time = byId('activeSessionNoticeTime');
-    const urlEl = byId('activeSessionNoticeUrl');
-    if(title && title.textContent !== (st.paused ? 'Live-сессия на паузе' : 'Live-сессия активна')) title.textContent = st.paused ? 'Live-сессия на паузе' : 'Live-сессия активна';
-    if(label && label.textContent !== (st.paused ? 'Пауза' : 'Осталось')) label.textContent = st.paused ? 'Пауза' : 'Осталось';
-    if(time && time.textContent !== leftText) time.textContent = leftText;
-    if(urlEl && urlEl.textContent !== url) urlEl.textContent = url;
-    const linkEl = byId('shareLinkText');
-    const expEl = byId('shareExpiresText');
-    if(linkEl && linkEl.textContent !== url) linkEl.textContent = url;
-    if(expEl){
-      const expText = st.paused ? ('Пауза, осталось ' + leftText) : ((typeof fmtTime==='function'?fmtTime(m.expiresAt):'—') + ' · осталось ' + leftText);
-      if(expEl.textContent !== expText) expEl.textContent = expText;
-    }
-  };
-
-  updateActiveSessionToast = function(){
-    const entry = findActiveEntry();
-    updateButtonByEntry(entry);
-    let el = byId('activeSessionToast');
-    if(!entry){ if(el) el.remove(); updateActiveSessionNotice(); return; }
-    const [token, session] = entry;
-    const m = getRoot(session).meta || {};
-    const st = metaState(m);
-    if(!st.active){ if(el) el.remove(); updateButtonByEntry(null); updateActiveSessionNotice(); return; }
-    if(!el){
-      el = document.createElement('div');
-      el.id = 'activeSessionToast';
-      Object.assign(el.style,{position:'fixed',zIndex:'99999',right:'14px',bottom:'14px',maxWidth:'360px',padding:'12px 14px',borderRadius:'14px',color:'#fff',boxShadow:'0 10px 28px rgba(0,0,0,.28)',fontWeight:'600',lineHeight:'1.35',wordBreak:'break-word',cursor:'pointer'});
-      document.body.appendChild(el);
-    }
-    el.style.background = st.paused ? '#b45309' : '#2563eb';
-    if(el.dataset.token !== token || el.dataset.paused !== (st.paused?'1':'0') || !byId('activeSessionToastTime')){
-      el.dataset.token = token;
-      el.dataset.paused = st.paused ? '1' : '0';
-      el.innerHTML = '<div id="activeSessionToastTitle" style="font-weight:800"></div><div id="activeSessionToastTime" style="font-size:13px;opacity:.95"></div>';
-    }
-    const leftText = typeof formatRemainingMs === 'function' ? formatRemainingMs(st.leftMs) : Math.ceil(st.leftMs/1000)+'с';
-    const t = byId('activeSessionToastTitle');
-    const tm = byId('activeSessionToastTime');
-    if(t) t.textContent = st.paused ? 'Live-сессия на паузе' : 'Live-сессия активна';
-    if(tm) tm.textContent = (st.paused ? 'Пауза: ' : 'Осталось: ') + leftText;
-    updateActiveSessionNotice();
-  };
-
-  const oldRenderSessions = renderSessions;
-  renderSessions = function(){
-    safe(()=>{ Object.entries(liveByUid || {}).forEach(([uid, live])=>mergeLiveIntoSession(uid, live)); });
-    const result = oldRenderSessions.apply(this, arguments);
-    updateButtonByEntry(findActiveEntry());
-    return result;
-  };
-
-  const oldCreateLive = createLiveSession;
-  createLiveSession = async function(){
-    const active = findActiveEntry();
-    if(active){
-      const url = urlFor(active[0], getRoot(active[1]).meta || {});
-      createdShareUrl = url;
-      updateActiveSessionNotice();
-      updateActiveSessionToast();
-      showToast && showToast('Уже есть активная live-ссылка', 'warn');
-      return;
-    }
-    const r = await oldCreateLive.apply(this, arguments);
-    setTimeout(()=>{ safe(()=>loadSessions && loadSessions()); updateActiveSessionNotice(); updateActiveSessionToast(); }, 300);
-    return r;
-  };
-
-  safe(()=>trackedOnValue(ref(db, 'live'), snap=>{
-    liveByUid = snap.val() || {};
-    Object.keys(liveByUid || {}).forEach(ensureKnownUid);
-    Object.entries(liveByUid || {}).forEach(([uid, live])=>mergeLiveIntoSession(uid, live));
-    safe(()=>renderUserSelect && renderUserSelect());
-    safe(()=>renderSessions && renderSessions());
-    updateActiveSessionNotice();
-    updateActiveSessionToast();
-  }));
-
-  safe(()=>trackedOnValue(ref(db, 'liveOwners'), snap=>{
-    window.liveOwnersByUid = snap.val() || {};
-    Object.keys(window.liveOwnersByUid || {}).forEach(ensureKnownUid);
-    updateActiveSessionNotice();
-    updateActiveSessionToast();
-  }));
-
-  document.addEventListener('change', (ev)=>{ if(ev.target && ev.target.id === 'userSelect') setTimeout(()=>{ updateActiveSessionNotice(); updateActiveSessionToast(); }, 50); }, true);
-  setInterval(()=>{ updateActiveSessionNotice(); updateActiveSessionToast(); }, 1000);
-  setTimeout(()=>{ updateActiveSessionNotice(); updateActiveSessionToast(); }, 800);
-})();
-}catch(e){ try{ console.warn('stableLiveSyncFinal install failed', e); }catch(_){} }
-
-</script>
-
-
-
-
-
-<!-- MYGPS admin create live timer immediate fix -->
-<script>
-(function(){
-  function safe(fn){ try{ return fn(); }catch(e){} }
-  setInterval(function(){
-    safe(function(){
-      if(typeof findActiveSessionEntryForSelectedUser !== 'function') return;
-      const entry = findActiveSessionEntryForSelectedUser();
-      if(!entry) return;
-      const token = entry[0];
-      const root = (typeof getSessionRoot === 'function') ? getSessionRoot(entry[1]) : (entry[1] || {});
-      const meta = root.meta || {};
-      const paused = meta.paused === true || String(meta.status || meta.linkStatus || '').toLowerCase() === 'paused';
-      const exp = Number(meta.expiresAt || 0);
-      const left = paused ? Math.max(0, Number(meta.remainingMs || 0)) : Math.max(0, exp - Date.now());
-      const fmtLeft = (typeof fmtRemainingCompact === 'function') ? fmtRemainingCompact(left) : (typeof formatRemainingMs === 'function' ? formatRemainingMs(left) : Math.ceil(left/1000)+' сек');
-      const url = meta.liveUrl || meta.url || meta.link || (typeof buildShareUrl === 'function' ? buildShareUrl(token) : '');
-      const shareExpires = document.getElementById('shareExpiresText');
-      if(shareExpires){
-        shareExpires.textContent = paused ? ('Пауза, осталось ' + fmtLeft) : ((typeof fmtTime === 'function' ? fmtTime(exp) : '—') + ' · осталось ' + fmtLeft);
-      }
-      const shareLink = document.getElementById('shareLinkText');
-      if(shareLink && url) shareLink.textContent = url;
-    });
-  }, 1000);
-})();
-
-
-// === FINAL STABLE LIVE SYNC PATCH v80 ===
-// Keeps all previous admin features, but fixes app -> admin realtime sync and the jumping active-live badge.
-try{
-(function(){
-  const byId = (id) => document.getElementById(id);
-  const safe = (fn) => { try { return fn(); } catch(e) { try{ console.warn('stableLiveSync80', e); if(typeof recordError==='function') recordError('stableLiveSync80', e); }catch(_){} } };
-  const str = (v) => String(v ?? '').trim();
-  const num = (v, fb=0) => { const n = Number(v); return Number.isFinite(n) ? n : fb; };
-  const nowMs = () => Date.now();
-  const rootOf = (session) => (typeof getSessionRoot === 'function' ? getSessionRoot(session) : session) || {};
-  const uidOfMeta = (m) => str(m.ownerUid || m.uid || m.createdBy || m.userUid || '');
-  const tokenOfLive = (live) => str(live && (live.sessionId || live.activeSessionId || live.liveSessionId || live.token || ''));
-  const urlForToken = (token, meta={}) => str(meta.liveUrl || meta.link || meta.url || (typeof buildShareUrl === 'function' ? buildShareUrl(token) : `live.html?session=${encodeURIComponent(token)}`));
-  const currentUid = () => str(selectedUid || byId('userSelect')?.value || '');
-
-  window.liveOwnersByUid = window.liveOwnersByUid || {};
-
-  function stateFromMeta(meta={}){
-    const raw = str(meta.status || meta.linkStatus || '').toLowerCase();
-    const stopped = meta.active === false || !!meta.endedAt || ['stopped','ended','expired','inactive','stop'].includes(raw);
-    const paused = !stopped && (meta.paused === true || raw === 'paused');
+    const raw = lower(meta.status || meta.linkStatus);
     const exp = num(meta.expiresAt, 0);
-    const activeRaw = meta.active === true || raw === 'active' || paused;
-    const active = !stopped && activeRaw && (paused || !exp || exp > nowMs());
-    const expired = !stopped && !paused && !!exp && exp <= nowMs();
-    const leftMs = paused ? Math.max(0, num(meta.remainingMs, exp ? exp - nowMs() : 0)) : Math.max(0, exp ? exp - nowMs() : num(meta.remainingMs, 0));
-    return {active: active && !expired, paused, stopped: stopped || expired, expired, leftMs};
+    const remaining = num(meta.remainingMs, 0);
+    const stopped = meta.active === false || !!meta.endedAt || ['stopped','stop','ended','inactive','expired'].includes(raw);
+    const paused = meta.paused === true || raw === 'paused';
+    const expired = !paused && exp > 0 && exp <= Date.now();
+    const active = !stopped && !expired && (meta.active === true || paused || raw === 'active' || (tokenOf(meta) && exp > Date.now()));
+    const leftMs = active ? (paused ? Math.max(0, remaining || (exp ? exp - Date.now() : 0)) : Math.max(0, exp ? exp - Date.now() : remaining)) : 0;
+    return {active, paused: active && paused, stopped: stopped || expired, expiresAt: exp, leftMs};
   }
 
-  function sessionFromLive(uid, live){
-    if(!uid || !live || typeof live !== 'object') return null;
-    const token = tokenOfLive(live);
+  function ensureSession(token){
     if(!token) return null;
-    const raw = str(live.status || live.linkStatus || '').toLowerCase();
-    const paused = live.paused === true || raw === 'paused';
-    const stopped = live.active === false || !!live.endedAt || ['stopped','ended','expired','inactive','stop'].includes(raw);
-    const status = stopped ? 'stopped' : paused ? 'paused' : (raw || 'active');
-    const exp = num(live.expiresAt, 0);
-    const meta = {
-      ownerUid: uid,
-      sessionId: token,
-      activeSessionId: token,
-      liveSessionId: token,
-      active: !stopped && (live.active !== false),
-      paused,
-      status,
-      linkStatus: status,
-      startedAt: num(live.startedAt || live.createdAt, 0),
-      createdAt: num(live.createdAt || live.startedAt, 0),
-      pausedAt: live.pausedAt || null,
-      resumedAt: live.resumedAt || null,
-      endedAt: live.endedAt || null,
-      expiresAt: exp,
-      remainingMs: num(live.remainingMs, exp ? Math.max(0, exp - nowMs()) : 0),
-      liveUrl: str(live.liveUrl || live.link || live.url) || urlForToken(token),
-      updatedAt: num(live.updatedAt || live.lastSyncedAt || nowMs(), nowMs())
-    };
-    return [token, {meta, public:{lastPoint: live.lastPoint || live.point || null}, viewStats:{}}];
-  }
-
-  function mergeSession(token, session){
-    if(!token) return null;
-    allSessions = allSessions || {};
-    if(!session){ delete allSessions[token]; return null; }
-    const oldRoot = rootOf(allSessions[token] || {});
-    const newRoot = rootOf(session || {});
-    const merged = {
-      ...oldRoot,
-      ...newRoot,
-      meta: {...(oldRoot.meta || {}), ...(newRoot.meta || {})},
-      public: {...(oldRoot.public || {}), ...(newRoot.public || {})},
-      viewStats: {...(oldRoot.viewStats || {}), ...(newRoot.viewStats || {})}
-    };
-    allSessions[token] = merged;
-    return [token, merged];
+    if(!allSessions || typeof allSessions !== 'object') allSessions = {};
+    if(!allSessions[token]) allSessions[token] = {meta:{}, public:{}, viewStats:{}};
+    if(!allSessions[token].meta) allSessions[token].meta = {};
+    return allSessions[token];
   }
 
   function mergeLive(uid, live){
-    const pseudo = sessionFromLive(uid, live);
-    return pseudo ? mergeSession(pseudo[0], pseudo[1]) : null;
+    if(!uid || !live) return '';
+    const token = tokenOf(live);
+    if(!token) return '';
+    const sess = ensureSession(token);
+    const existing = rootOf(sess).meta || {};
+    const raw = lower(live.status || live.linkStatus);
+    const paused = live.paused === true || raw === 'paused';
+    const stopped = live.active === false || !!live.endedAt || ['stopped','stop','ended','inactive','expired'].includes(raw);
+    const merged = Object.assign({}, existing, {
+      ownerUid: existing.ownerUid || uid,
+      active: stopped ? false : (live.active === true || paused || raw === 'active'),
+      paused,
+      status: stopped ? (raw || 'stopped') : (paused ? 'paused' : 'active'),
+      linkStatus: stopped ? (raw || 'stopped') : (paused ? 'paused' : 'active'),
+      sessionId: token,
+      liveSessionId: token,
+      activeSessionId: token,
+      liveUrl: live.liveUrl || live.link || live.url || existing.liveUrl || urlFor(token, existing),
+      link: live.link || live.liveUrl || live.url || existing.link || urlFor(token, existing),
+      startedAt: num(live.startedAt || live.createdAt || existing.startedAt || existing.createdAt, 0),
+      createdAt: num(live.createdAt || live.startedAt || existing.createdAt || existing.startedAt, 0),
+      expiresAt: num(live.expiresAt || existing.expiresAt, 0),
+      remainingMs: num(live.remainingMs || existing.remainingMs, 0),
+      endedAt: live.endedAt || (stopped ? (existing.endedAt || Date.now()) : null),
+      updatedAt: num(live.updatedAt, Date.now())
+    });
+    allSessions[token] = Object.assign({}, sess, { meta: merged, public: Object.assign({}, sess.public || {}, live.lastPoint ? {lastPoint: live.lastPoint} : {}) });
+    if(!window.liveOwnersByUid) window.liveOwnersByUid = {};
+    window.liveOwnersByUid[uid] = Object.assign({}, window.liveOwnersByUid[uid] || {}, {activeSessionId: token});
+    return token;
   }
 
-  function ensureKnownUid80(uid){
-    if(!uid) return;
-    allUsers = Array.isArray(allUsers) ? allUsers : [];
-    if(!allUsers.includes(uid)){
-      allUsers.push(uid);
-      safe(()=> typeof renderUserSelect === 'function' && renderUserSelect());
+  function mergeMeta(token, meta){
+    if(!token || !meta) return;
+    const sess = ensureSession(token);
+    const old = rootOf(sess).meta || {};
+    allSessions[token] = Object.assign({}, sess, { meta: Object.assign({}, old, meta, {sessionId: token, liveSessionId: token, activeSessionId: token}) });
+  }
+
+  function selectedEntry(){
+    const uid = uidNow();
+    const live = uid && liveByUid ? liveByUid[uid] : null;
+    const liveToken = tokenOf(live);
+    if(live && liveToken){
+      mergeLive(uid, live);
+      const st = status(rootOf(allSessions[liveToken]).meta || {});
+      if(st.active) return [liveToken, allSessions[liveToken]];
+      if(st.stopped) return null;
     }
+    const ownerToken = String((window.liveOwnersByUid?.[uid]?.activeSessionId) || '').trim();
+    if(ownerToken && allSessions?.[ownerToken]){
+      const meta = rootOf(allSessions[ownerToken]).meta || {};
+      if((!uid || !meta.ownerUid || meta.ownerUid === uid) && status(meta).active) return [ownerToken, allSessions[ownerToken]];
+    }
+    const entries = Object.entries(allSessions || {}).filter(([token, sess]) => {
+      if(token === '_init') return false;
+      const meta = rootOf(sess).meta || {};
+      if(uid && meta.ownerUid && meta.ownerUid !== uid) return false;
+      return status(meta).active;
+    }).sort((a,b)=>num(rootOf(b[1]).meta?.updatedAt || rootOf(b[1]).meta?.createdAt || 0)-num(rootOf(a[1]).meta?.updatedAt || rootOf(a[1]).meta?.createdAt || 0));
+    return entries[0] || null;
   }
 
-  function syncLiveMirrors(){
-    safe(()=>{
-      Object.entries(liveByUid || {}).forEach(([uid, live])=>{ ensureKnownUid80(uid); mergeLive(uid, live); });
+  function renderStable(){
+    const entry = selectedEntry();
+    const createBtn = gid('createShareBtn');
+    const box = gid('activeSessionNotice');
+    let host = gid('activeSessionToastHost');
+    let toast = gid('activeSessionToast');
+
+    if(!entry){
+      if(box){ box.classList.add('hidden'); box.innerHTML = ''; box.dataset.liveToken = ''; }
+      if(toast) toast.remove();
+      if(createBtn){ createBtn.disabled = false; createBtn.textContent = 'Создать live-ссылку'; }
+      createdShareUrl = '';
+      return;
+    }
+
+    const [token, sess] = entry;
+    const meta = rootOf(sess).meta || {};
+    const st = status(meta);
+    if(!st.active){
+      if(box){ box.classList.add('hidden'); box.innerHTML = ''; box.dataset.liveToken = ''; }
+      if(toast) toast.remove();
+      if(createBtn){ createBtn.disabled = false; createBtn.textContent = 'Создать live-ссылку'; }
+      createdShareUrl = '';
+      return;
+    }
+
+    const url = urlFor(token, meta);
+    createdShareUrl = url;
+    if(createBtn){ createBtn.disabled = true; createBtn.textContent = st.paused ? 'Live на паузе' : 'Есть активная ссылка'; }
+
+    if(box){
+      box.classList.remove('hidden');
+      if(box.dataset.liveToken !== token){
+        box.dataset.liveToken = token;
+        box.innerHTML = '<strong id="activeSessionNoticeTitle"></strong><div style="margin-top:6px"><span id="activeSessionNoticeLabel"></span>: <b id="activeSessionNoticeTime"></b></div><div style="margin-top:6px" class="mono" id="activeSessionNoticeUrl"></div>';
+      }
+      setTxt('activeSessionNoticeTitle', st.paused ? 'Live-сессия на паузе' : 'Live-сессия активна');
+      setTxt('activeSessionNoticeLabel', st.paused ? 'Пауза' : 'Осталось');
+      setTxt('activeSessionNoticeTime', fmtCompact(st.leftMs));
+      setTxt('activeSessionNoticeUrl', url);
+    }
+
+    if(!host){
+      host = document.createElement('div');
+      host.id = 'activeSessionToastHost';
+      host.style.position = 'fixed';
+      host.style.top = '18px';
+      host.style.right = '18px';
+      host.style.zIndex = '99999';
+      host.style.width = 'min(360px, calc(100vw - 36px))';
+      host.style.pointerEvents = 'none';
+      document.body.appendChild(host);
+    }
+    if(!toast){
+      toast = document.createElement('div');
+      toast.id = 'activeSessionToast';
+      toast.style.pointerEvents = 'auto';
+      toast.style.display = 'flex';
+      toast.style.flexDirection = 'column';
+      toast.style.gap = '6px';
+      toast.style.padding = '12px 14px';
+      toast.style.borderRadius = '14px';
+      toast.style.color = '#fff';
+      toast.style.boxShadow = '0 10px 28px rgba(0,0,0,.28)';
+      toast.style.fontWeight = '700';
+      toast.style.lineHeight = '1.35';
+      toast.style.wordBreak = 'break-word';
+      host.appendChild(toast);
+    }
+    toast.style.background = st.paused ? '#b45309' : '#2563eb';
+    if(toast.dataset.liveToken !== token){
+      toast.dataset.liveToken = token;
+      toast.innerHTML = '<div id="activeSessionToastTitle" style="font-weight:900"></div><div id="activeSessionToastTime" style="font-size:13px;opacity:.95"></div>';
+    }
+    setTxt('activeSessionToastTitle', st.paused ? 'Live-сессия на паузе' : 'Live-сессия активна');
+    setTxt('activeSessionToastTime', (st.paused ? 'Пауза: ' : 'Осталось: ') + fmtLeft(st.leftMs));
+  }
+
+  async function fetchMeta(token){
+    if(!token) return;
+    try{
+      const snap = await get(ref(db, `liveSessions/${token}/meta`));
+      if(snap.exists()) mergeMeta(token, snap.val() || {});
+    }catch(e){ safeCall(()=>recordError('finalFetchSessionMeta', e)); }
+  }
+
+  function watchSession(token){
+    token = String(token || '').trim();
+    if(token === watchedToken) return;
+    watchedToken = token;
+    if(unsubMeta){ try{unsubMeta();}catch(e){} unsubMeta = null; }
+    if(!token) { renderStable(); return; }
+    fetchMeta(token).then(()=>{ renderStable(); try{ renderSessions?.(); }catch(e){} });
+    unsubMeta = onValue(ref(db, `liveSessions/${token}/meta`), snap => {
+      if(snap.exists()) mergeMeta(token, snap.val() || {});
+      renderStable();
+      try{ renderSessions?.(); }catch(e){}
     });
   }
 
-  function getActiveEntry80(){
-    syncLiveMirrors();
-    const uid = currentUid();
-    const sessions = allSessions || {};
-
-    if(uid){
-      const ownerToken = str(window.liveOwnersByUid?.[uid]?.activeSessionId || window.liveOwnersByUid?.[uid] || '');
-      if(ownerToken && sessions[ownerToken]){
-        const meta = rootOf(sessions[ownerToken]).meta || {};
-        if((!uidOfMeta(meta) || uidOfMeta(meta) === uid) && stateFromMeta(meta).active) return [ownerToken, sessions[ownerToken]];
-      }
-
-      const liveToken = tokenOfLive(liveByUid?.[uid]);
-      if(liveToken && sessions[liveToken]){
-        const meta = rootOf(sessions[liveToken]).meta || {};
-        if(stateFromMeta(meta).active) return [liveToken, sessions[liveToken]];
-      }
-    }
-
-    const found = Object.entries(sessions)
-      .filter(([token]) => token !== '_init')
-      .find(([token, session])=>{
-        const meta = rootOf(session).meta || {};
-        const owner = uidOfMeta(meta);
-        if(uid && owner && owner !== uid) return false;
-        return stateFromMeta(meta).active;
-      });
-    return found || null;
+  function watchSelected(){
+    const uid = uidNow();
+    if(uid === watchedUid) return;
+    watchedUid = uid;
+    if(unsubLive){ try{unsubLive();}catch(e){} unsubLive = null; }
+    if(unsubOwner){ try{unsubOwner();}catch(e){} unsubOwner = null; }
+    watchSession('');
+    if(!uid){ renderStable(); return; }
+    unsubLive = onValue(ref(db, `live/${uid}`), snap => {
+      const live = snap.val() || null;
+      if(!liveByUid || typeof liveByUid !== 'object') liveByUid = {};
+      if(live) liveByUid[uid] = live; else delete liveByUid[uid];
+      const token = live ? mergeLive(uid, live) : '';
+      if(token) watchSession(token);
+      renderStable();
+      try{ renderSessions?.(); }catch(e){}
+    });
+    unsubOwner = onValue(ref(db, `liveOwners/${uid}/activeSessionId`), snap => {
+      const token = String(snap.val() || '').trim();
+      if(!window.liveOwnersByUid) window.liveOwnersByUid = {};
+      window.liveOwnersByUid[uid] = Object.assign({}, window.liveOwnersByUid[uid] || {}, {activeSessionId: token});
+      if(token) watchSession(token);
+      renderStable();
+    });
   }
 
-  getSelectedActiveSessionEntry = function(){ return getActiveEntry80(); };
-  if(typeof findActiveSessionEntryForSelectedUser !== 'undefined') findActiveSessionEntryForSelectedUser = function(){ return getActiveEntry80(); };
+  getSelectedActiveSessionEntry = selectedEntry;
+  updateActiveSessionNotice = renderStable;
+  updateActiveSessionToast = renderStable;
 
-  function setCreateButton(entry){
-    const btn = byId('createShareBtn');
-    if(!btn) return;
-    if(entry){
-      const st = stateFromMeta(rootOf(entry[1]).meta || {});
-      btn.disabled = true;
-      btn.textContent = st.paused ? 'Live на паузе' : 'Есть активная ссылка';
-    }else{
-      btn.disabled = false;
-      btn.textContent = 'Создать live-ссылку';
-    }
-  }
-
-  function renderActiveNotice80(){
-    const box = byId('activeSessionNotice');
-    if(!box) return;
-    const entry = getActiveEntry80();
-    setCreateButton(entry);
-    if(!entry){
-      box.classList.add('hidden');
-      box.dataset.token = '';
-      box.dataset.paused = '';
-      box.innerHTML = '';
-      createdShareUrl = '';
+  const oldCreate = createLiveSession;
+  createLiveSession = async function(...args){
+    watchSelected();
+    if(selectedEntry()){
+      renderStable();
+      try{ showToast('Уже есть активная live-ссылка', 'warn', 2500); }catch(e){}
       return;
     }
-    const [token, session] = entry;
-    const meta = rootOf(session).meta || {};
-    const st = stateFromMeta(meta);
-    if(!st.active){
-      box.classList.add('hidden');
-      box.dataset.token = '';
-      box.dataset.paused = '';
-      box.innerHTML = '';
-      createdShareUrl = '';
-      setCreateButton(null);
-      return;
-    }
-    const pausedMark = st.paused ? '1' : '0';
-    const url = urlForToken(token, meta);
-    createdShareUrl = url;
-    box.classList.remove('hidden');
-    if(box.dataset.token !== token || box.dataset.paused !== pausedMark || !byId('activeSessionNoticeTime')){
-      box.dataset.token = token;
-      box.dataset.paused = pausedMark;
-      box.innerHTML = '<strong id="activeSessionNoticeTitle"></strong><div style="margin-top:6px"><span id="activeSessionNoticeLabel"></span>: <b id="activeSessionNoticeTime"></b></div><div style="margin-top:6px" class="mono" id="activeSessionNoticeUrl"></div>';
-    }
-    const leftText = typeof fmtRemainingCompact === 'function' ? fmtRemainingCompact(st.leftMs) : (typeof formatRemainingMs === 'function' ? formatRemainingMs(st.leftMs) : Math.ceil(st.leftMs/1000)+'с');
-    const title = byId('activeSessionNoticeTitle');
-    const label = byId('activeSessionNoticeLabel');
-    const time = byId('activeSessionNoticeTime');
-    const urlEl = byId('activeSessionNoticeUrl');
-    const titleText = st.paused ? 'Live-сессия на паузе' : 'Live-сессия активна';
-    const labelText = st.paused ? 'Пауза' : 'Осталось';
-    if(title && title.textContent !== titleText) title.textContent = titleText;
-    if(label && label.textContent !== labelText) label.textContent = labelText;
-    if(time && time.textContent !== leftText) time.textContent = leftText;
-    if(urlEl && urlEl.textContent !== url) urlEl.textContent = url;
+    const result = await oldCreate.apply(this, args);
+    watchSelected();
+    setTimeout(()=>{ watchSelected(); renderStable(); }, 250);
+    return result;
+  };
 
-    const linkEl = byId('shareLinkText');
-    const expEl = byId('shareExpiresText');
-    const resultBox = byId('shareResultBox');
-    if(linkEl && linkEl.textContent !== url) linkEl.textContent = url;
-    if(expEl){
-      const expText = st.paused ? ('Пауза, осталось ' + leftText) : ((typeof fmtTime === 'function' ? fmtTime(meta.expiresAt) : '—') + ' · осталось ' + leftText);
-      if(expEl.textContent !== expText) expEl.textContent = expText;
-    }
-    if(resultBox) resultBox.classList.remove('hidden');
+  const sel = gid('userSelect');
+  if(sel && !sel.dataset.finalLiveSync){
+    sel.dataset.finalLiveSync = '1';
+    sel.addEventListener('change', () => setTimeout(watchSelected, 0), true);
   }
 
-  function renderActiveToast80(){
-    const entry = getActiveEntry80();
-    setCreateButton(entry);
-    let el = byId('activeSessionToast');
-    if(!entry){ if(el) el.remove(); renderActiveNotice80(); return; }
-    const [token, session] = entry;
-    const meta = rootOf(session).meta || {};
-    const st = stateFromMeta(meta);
-    if(!st.active){ if(el) el.remove(); setCreateButton(null); renderActiveNotice80(); return; }
-    if(!el){
-      el = document.createElement('div');
-      el.id = 'activeSessionToast';
-      Object.assign(el.style, {
-        position:'fixed', zIndex:'99999', top:'14px', right:'14px', bottom:'auto', left:'auto',
-        maxWidth:'360px', padding:'12px 14px', borderRadius:'14px', color:'#fff',
-        boxShadow:'0 10px 28px rgba(0,0,0,.28)', fontWeight:'600', lineHeight:'1.35',
-        wordBreak:'break-word', cursor:'pointer', pointerEvents:'auto'
-      });
-      el.addEventListener('click', ()=>{ try{ byId('sessionsPanel')?.scrollIntoView({behavior:'smooth',block:'start'}); }catch(_){} });
-      document.body.appendChild(el);
-    }
-    el.style.top = '14px';
-    el.style.right = '14px';
-    el.style.bottom = 'auto';
-    el.style.background = st.paused ? '#b45309' : '#2563eb';
-    const pausedMark = st.paused ? '1' : '0';
-    if(el.dataset.token !== token || el.dataset.paused !== pausedMark || !byId('activeSessionToastTime')){
-      el.dataset.token = token;
-      el.dataset.paused = pausedMark;
-      el.innerHTML = '<div id="activeSessionToastTitle" style="font-weight:800"></div><div id="activeSessionToastTime" style="font-size:13px;opacity:.95"></div>';
-    }
-    const leftText = typeof formatRemainingMs === 'function' ? formatRemainingMs(st.leftMs) : (typeof fmtRemainingCompact === 'function' ? fmtRemainingCompact(st.leftMs) : Math.ceil(st.leftMs/1000)+'с');
-    const title = byId('activeSessionToastTitle');
-    const time = byId('activeSessionToastTime');
-    if(title) title.textContent = st.paused ? 'Live-сессия на паузе' : 'Live-сессия активна';
-    if(time) time.textContent = (st.paused ? 'Пауза: ' : 'Осталось: ') + leftText;
-    renderActiveNotice80();
-  }
-
-  updateActiveSessionNotice = renderActiveNotice80;
-  updateActiveSessionToast = renderActiveToast80;
-
-  const previousRenderSessions = typeof renderSessions === 'function' ? renderSessions : null;
-  if(previousRenderSessions && !previousRenderSessions.__stable80){
-    renderSessions = function(){
-      syncLiveMirrors();
-      const res = previousRenderSessions.apply(this, arguments);
-      renderActiveNotice80();
-      renderActiveToast80();
-      return res;
-    };
-    renderSessions.__stable80 = true;
-  }
-
-  const previousCreateLiveSession = typeof createLiveSession === 'function' ? createLiveSession : null;
-  if(previousCreateLiveSession && !previousCreateLiveSession.__stable80){
-    createLiveSession = async function(){
-      const active = getActiveEntry80();
-      if(active){
-        createdShareUrl = urlForToken(active[0], rootOf(active[1]).meta || {});
-        renderActiveNotice80();
-        renderActiveToast80();
-        if(typeof showToast === 'function') showToast('Уже есть активная live-ссылка', 'warn');
-        return;
-      }
-      const res = await previousCreateLiveSession.apply(this, arguments);
-      setTimeout(()=>{ safe(()=>typeof loadSessions === 'function' && loadSessions()); renderActiveNotice80(); renderActiveToast80(); }, 400);
-      return res;
-    };
-    createLiveSession.__stable80 = true;
-  }
-
-  function redrawFromData(){
-    syncLiveMirrors();
-    safe(()=> typeof renderSessions === 'function' && renderSessions());
-    renderActiveNotice80();
-    renderActiveToast80();
-    safe(()=> typeof updateNowFromAvailableSources === 'function' && updateNowFromAvailableSources());
-  }
-
-  if(!window.__stableLiveSync80Installed){
-    window.__stableLiveSync80Installed = true;
-    safe(()=>trackedOnValue(ref(db, 'live'), snap=>{
-      liveByUid = snap.val() || {};
-      Object.keys(liveByUid || {}).forEach(ensureKnownUid80);
-      redrawFromData();
-    }));
-    safe(()=>trackedOnValue(ref(db, 'liveOwners'), snap=>{
-      window.liveOwnersByUid = snap.val() || {};
-      Object.keys(window.liveOwnersByUid || {}).forEach(ensureKnownUid80);
-      redrawFromData();
-    }));
-    safe(()=>trackedOnValue(query(ref(db, 'liveSessions'), limitToLast(typeof ADMIN_SESSIONS_LIMIT !== 'undefined' ? ADMIN_SESSIONS_LIMIT : 100)), snap=>{
-      const incoming = snap.val() || {};
-      allSessions = {...(allSessions || {}), ...incoming};
-      redrawFromData();
-    }));
-    document.addEventListener('change', ev=>{
-      if(ev.target && ev.target.id === 'userSelect') setTimeout(()=>{ renderActiveNotice80(); renderActiveToast80(); }, 50);
-    }, true);
-    setInterval(()=>{ renderActiveNotice80(); renderActiveToast80(); }, 1000);
-    setTimeout(redrawFromData, 800);
-  }
+  clearInterval(tickTimer);
+  tickTimer = setInterval(() => { watchSelected(); renderStable(); }, 1000);
+  setTimeout(() => { watchSelected(); renderStable(); }, 400);
 })();
-}catch(e){ try{ console.warn('stableLiveSync80 install failed', e); }catch(_){} }
 
 </script>
 
 
-<!-- MyGps admin economy final: no-cache headers; heavy system checks use limitToLast(1); history remains one-shot get() through smart loader. -->
+<!-- === Fix 68: Leaflet maps stable resize / no blank map after admin open === -->
+<script type="module">
+// This script runs after the main module. Most map variables are module-scoped there,
+// so we use DOM + Leaflet container resize events through global events and safe retries.
+(function(){
+  const mapIds = ['liveMap','historyMap','sessionMap','geofenceMap'];
+  let resizeTimer = null;
+
+  function visible(el){
+    if(!el) return false;
+    const r = el.getBoundingClientRect();
+    return r.width > 40 && r.height > 40 && getComputedStyle(el).display !== 'none' && !el.closest('.hidden');
+  }
+
+  function fireMapResize(reason){
+    try{
+      // Leaflet listens to window resize and recalculates tile layout.
+      window.dispatchEvent(new Event('resize'));
+    }catch(e){}
+
+    // Retry several times because tabs/panels become visible after CSS/layout settles.
+    [60, 180, 420, 900].forEach(delay => {
+      setTimeout(() => {
+        try{ window.dispatchEvent(new Event('resize')); }catch(e){}
+        mapIds.forEach(id => {
+          const el = document.getElementById(id);
+          if(!visible(el)) return;
+          // Force browser layout recalculation for Leaflet tile containers.
+          el.style.minHeight = el.style.minHeight || '';
+          el.getBoundingClientRect();
+        });
+      }, delay);
+    });
+  }
+
+  function scheduleMapResize(reason=''){
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => fireMapResize(reason), 40);
+  }
+
+  // Tab switching: fixes white/half-loaded maps when a Leaflet map was initialized hidden.
+  document.addEventListener('click', (ev) => {
+    const btn = ev.target && ev.target.closest ? ev.target.closest('.tab-btn[data-tab]') : null;
+    if(btn) scheduleMapResize('tab');
+  }, true);
+
+  // Initial admin open/login and browser resize/orientation changes.
+  window.addEventListener('load', () => scheduleMapResize('load'));
+  window.addEventListener('resize', () => scheduleMapResize('resize'));
+  window.addEventListener('orientationchange', () => scheduleMapResize('orientation'));
+
+  // When hidden panels become visible after login/tab restore, resize maps automatically.
+  const observer = new MutationObserver((mutations) => {
+    for(const m of mutations){
+      if(m.type === 'attributes' && (m.attributeName === 'class' || m.attributeName === 'style')){
+        const t = m.target;
+        if(t && (t.id === 'adminPanel' || /Panel$/.test(t.id || '') || mapIds.includes(t.id || ''))){
+          scheduleMapResize('mutation');
+          return;
+        }
+      }
+    }
+  });
+
+  window.addEventListener('DOMContentLoaded', () => {
+    try{
+      document.querySelectorAll('#adminPanel,#nowPanel,#historyPanel,#sessionsPanel,#geofencesPanel,#liveMap,#historyMap,#sessionMap,#geofenceMap')
+        .forEach(el => observer.observe(el, {attributes:true, attributeFilter:['class','style']}));
+    }catch(e){}
+    scheduleMapResize('dom');
+  });
+
+  // Expose manual helper for existing code if needed.
+  window.fixAdminMapsLayout = scheduleMapResize;
+})();
+</script>
+
 </body></html>
