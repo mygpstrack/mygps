@@ -3,10 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>MyGps Live</title>
+<title>MyGpsLive</title>
 <link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/x-icon" href="icons/mygpslive.ico">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/mygpslive-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/mygpslive-192.png">
+<link rel="apple-touch-icon" href="icons/mygpslive-180.png">
 <meta name="theme-color" content="#0b1220">
-<link rel="apple-touch-icon" href="icons/mygps-live-192.png">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
 <style>
 :root{
@@ -163,9 +166,38 @@ button{
   .bottom{left:8px;right:8px;bottom:8px}
   .top{left:8px;right:8px;top:8px}
 }
+
+/* MyGpsLive PWA launch splash */
+#mygpsliveLaunchSplash{
+  position:fixed;
+  inset:0;
+  z-index:999999;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:#fff;
+  opacity:1;
+  transition:opacity .45s ease, visibility .45s ease;
+}
+#mygpsliveLaunchSplash.hide{
+  opacity:0;
+  visibility:hidden;
+  pointer-events:none;
+}
+#mygpsliveLaunchSplash img{
+  width:min(82vw,720px);
+  height:auto;
+  display:block;
+  object-fit:contain;
+}
+@media (max-width:768px){
+  #mygpsliveLaunchSplash img{width:min(86vw,430px)}
+}
+
 </style>
 </head>
 <body>
+<div id="mygpsliveLaunchSplash" aria-label="MyGpsLive"><img src="icons/mygpslive-splash.png" alt="MyGpsLive"></div>
 <div id="map"></div>
 
 <div class="top" id="topInfoGrid">
@@ -233,6 +265,16 @@ const db=getDatabase(app);
 const qs=id=>document.getElementById(id);
 const params=new URLSearchParams(location.search);
 const sessionId=params.get("session");
+
+function hideMyGpsLiveLaunchSplash(){
+  const splash=document.getElementById('mygpsliveLaunchSplash');
+  if(!splash) return;
+  splash.classList.add('hide');
+  setTimeout(()=>{ try{ splash.remove(); }catch(e){} }, 700);
+}
+window.addEventListener('load',()=>{ setTimeout(hideMyGpsLiveLaunchSplash, 2400); });
+setTimeout(hideMyGpsLiveLaunchSplash, 4200);
+
 
 const map=L.map('map').setView([56.95,24.1],13);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{crossOrigin:true}).addTo(map);
