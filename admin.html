@@ -11000,6 +11000,8 @@ try{
 
 <!-- === Fix 68: Leaflet maps stable resize / no blank map after admin open === -->
 <script type="module">
+const qs = (id) => document.getElementById(id);
+const qsa = (sel) => document.querySelectorAll(sel);
 // This script runs after the main module. Most map variables are module-scoped there,
 // so we use DOM + Leaflet container resize events through global events and safe retries.
 
@@ -11808,10 +11810,23 @@ try{
     if(!e){ box.classList.add('hidden'); box.innerHTML=''; return; }
     const [token,s]=e, m=rootOf(s).meta||{}, st=statusOf(m), left=leftMs(m), url=liveUrl(token,m);
     if(typeof createdShareUrl !== 'undefined') createdShareUrl=url;
-    if(qs('shareLinkText')) qs('shareLinkText').textContent=url;
-    if(qs('shareExpiresText')) qs('shareExpiresText').textContent=st==='paused' ? `Пауза, осталось ${typeof fmtRemainingCompact==='function'?fmtRemainingCompact(left):formatRemainingMs(left)}` : `${typeof fmtTime==='function'?fmtTime(m.expiresAt):String(m.expiresAt||'—')} · осталось ${typeof fmtRemainingCompact==='function'?fmtRemainingCompact(left):formatRemainingMs(left)}`;
+    const shareLink = qs('shareLinkText');
+    const shareExpires = qs('shareExpiresText');
+    const leftText = typeof fmtRemainingCompact==='function' ? fmtRemainingCompact(left) : formatRemainingMs(left);
+    if(shareLink) shareLink.textContent=url;
+    if(shareExpires) shareExpires.textContent=st==='paused' ? `Пауза, осталось ${leftText}` : `${typeof fmtTime==='function'?fmtTime(m.expiresAt):String(m.expiresAt||'—')} · осталось ${leftText}`;
     box.classList.remove('hidden');
-    box.innerHTML=`<strong>Live-сессия ${st==='paused'?'на паузе':'активна'}</strong><div style="margin-top:6px">${st==='paused'?'Осталось после возобновления':'Осталось'}: <b>${typeof fmtRemainingCompact==='function'?fmtRemainingCompact(left):formatRemainingMs(left)}</b></div><div style="margin-top:6px" class="mono">${url}</div>`;
+    if(!qs('activeSessionNoticeTitle') || !qs('activeSessionNoticeTime') || !qs('activeSessionNoticeUrl')){
+      box.innerHTML='<strong id="activeSessionNoticeTitle"></strong><div style="margin-top:6px"><span id="activeSessionNoticeLabel"></span>: <b id="activeSessionNoticeTime"></b></div><div style="margin-top:6px" class="mono" id="activeSessionNoticeUrl"></div>';
+    }
+    const titleEl = qs('activeSessionNoticeTitle');
+    const labelEl = qs('activeSessionNoticeLabel');
+    const timeEl = qs('activeSessionNoticeTime');
+    const urlEl = qs('activeSessionNoticeUrl');
+    if(titleEl) titleEl.textContent = `Live-сессия ${st==='paused'?'на паузе':'активна'}`;
+    if(labelEl) labelEl.textContent = st==='paused'?'Осталось после возобновления':'Осталось';
+    if(timeEl) timeEl.textContent = leftText;
+    if(urlEl) urlEl.textContent = url;
   };
 
   window.updateActiveSessionToast = updateActiveSessionToast = function(){
@@ -11832,7 +11847,13 @@ try{
       document.body.appendChild(el);
     }
     el.style.background=st==='paused'?'#b45309':'#2563eb';
-    el.innerHTML=`<div style="font-weight:800">Live-сессия ${st==='paused'?'на паузе':'активна'}</div><div style="font-size:13px;opacity:.95">${st==='paused'?'Пауза, осталось':'Осталось'}: ${formatRemainingMs(left)}</div>`;
+    if(!document.getElementById('activeSessionToastTitle') || !document.getElementById('activeSessionToastTime')){
+      el.innerHTML='<div id="activeSessionToastTitle" style="font-weight:800"></div><div id="activeSessionToastTime" style="font-size:13px;opacity:.95"></div>';
+    }
+    const toastTitle = document.getElementById('activeSessionToastTitle');
+    const toastTime = document.getElementById('activeSessionToastTime');
+    if(toastTitle) toastTitle.textContent = `Live-сессия ${st==='paused'?'на паузе':'активна'}`;
+    if(toastTime) toastTime.textContent = `${st==='paused'?'Пауза, осталось':'Осталось'}: ${formatRemainingMs(left)}`;
   };
 
   window.renderSessions = renderSessions = function(){
