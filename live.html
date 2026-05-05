@@ -3,15 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>MyGPS Live</title>
+<title>MyGps Live</title>
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#0b1220">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="MyGpsLive">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="apple-touch-icon" href="icons/icon-192.png">
-
 <meta name="theme-color" content="#0b1220">
 <link rel="apple-touch-icon" href="icons/mygps-live-192.png">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
@@ -170,27 +163,9 @@ button{
   .bottom{left:8px;right:8px;bottom:8px}
   .top{left:8px;right:8px;top:8px}
 }
-
-/* MyGpsLive PWA install + splash */
-.pwaSplash{position:fixed;inset:0;z-index:5000;background:#fff;display:flex;align-items:center;justify-content:center;transition:opacity .32s ease,visibility .32s ease}
-.pwaSplash.hide{opacity:0;visibility:hidden;pointer-events:none}
-.pwaSplash img{width:min(72vw,520px);height:auto;display:block}
-.installPwaBtn{position:fixed;left:14px;right:14px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:2200;display:none;align-items:center;justify-content:center;gap:10px;padding:14px 16px;border:0;border-radius:18px;background:linear-gradient(135deg,#ff6a00,#ec008c);color:#fff;font-weight:900;font-size:15px;box-shadow:0 16px 34px rgba(236,0,140,.28),0 8px 22px rgba(0,0,0,.28)}
-.installPwaBtn.show{display:flex}
-.installPwaBtn .installIcon{width:26px;height:26px;border-radius:8px;object-fit:cover}
-.iosInstallHint{position:fixed;left:12px;right:12px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:2200;display:none;padding:12px 14px;border-radius:18px;background:rgba(15,23,42,.94);color:#fff;border:1px solid rgba(255,255,255,.12);box-shadow:0 12px 30px rgba(0,0,0,.35);font-size:13px;line-height:1.4}
-.iosInstallHint.show{display:block}
-.iosInstallHint b{display:block;font-size:15px;margin-bottom:3px}
-.iosInstallHint button{position:absolute;right:8px;top:8px;width:auto;padding:4px 8px;border-radius:10px;background:rgba(255,255,255,.12)}
-@media (display-mode: standalone){.installPwaBtn,.iosInstallHint{display:none!important}}
-
 </style>
 </head>
 <body>
-<div id="pwaSplash" class="pwaSplash"><img src="icons/splash-logo.png" alt="MyGPS Live"></div>
-<button id="installPwaBtn" class="installPwaBtn" type="button"><img class="installIcon" src="icons/icon-192.png" alt=""> Установить MyGpsLive</button>
-<div id="iosInstallHint" class="iosInstallHint"><button type="button" onclick="this.parentElement.classList.remove('show')">×</button><b>Установить MyGpsLive</b>На iPhone нажми “Поделиться” → “На экран Домой”.</div>
-
 <div id="map"></div>
 
 <div class="top" id="topInfoGrid">
@@ -1104,54 +1079,12 @@ setInterval(() => {
   }catch(e){}
 }, 1500);
 
-
-// PWA install and splash for MyGpsLive
-(function(){
-  const splash = document.getElementById('pwaSplash');
-  window.addEventListener('load', () => {
-    setTimeout(() => { if(splash) splash.classList.add('hide'); }, 850);
+// PWA registration for MyGpsLive
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js").catch(err => console.warn("Service worker registration failed", err));
   });
-
-  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
-  const installBtn = document.getElementById('installPwaBtn');
-  const iosHint = document.getElementById('iosInstallHint');
-  let deferredPrompt = null;
-
-  window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    deferredPrompt = e;
-    if(!isStandalone && installBtn) installBtn.classList.add('show');
-  });
-
-  if(installBtn){
-    installBtn.addEventListener('click', async () => {
-      if(!deferredPrompt) return;
-      installBtn.classList.remove('show');
-      deferredPrompt.prompt();
-      try{ await deferredPrompt.userChoice; }catch(e){}
-      deferredPrompt = null;
-    });
-  }
-
-  const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent || '');
-  const iosHintHidden = localStorage.getItem('mygpslive_ios_hint_hidden') === '1';
-  if(isIos && !isStandalone && !iosHintHidden && iosHint){
-    setTimeout(() => iosHint.classList.add('show'), 1400);
-    iosHint.addEventListener('click', (e) => {
-      if(e.target && e.target.tagName === 'BUTTON') localStorage.setItem('mygpslive_ios_hint_hidden','1');
-    });
-  }
-
-  window.addEventListener('appinstalled', () => {
-    if(installBtn) installBtn.classList.remove('show');
-  });
-
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw.js').catch(err => console.warn('Service worker registration failed', err));
-    });
-  }
-})();
+}
 
 </script>
 </body>
