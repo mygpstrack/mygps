@@ -6296,37 +6296,6 @@ function showExistingActiveLiveSession(token, session){
   if(createBtn){ createBtn.disabled = true; createBtn.textContent = meta.paused ? "Live на паузе" : "Есть активная ссылка"; }
 }
 
-
-function startAdminCreatedLiveTimerFix(token, meta, url){
-  try{
-    meta = meta || {};
-    const exp = Number(meta.expiresAt || 0);
-    const paused = meta.paused === true || String(meta.status || meta.linkStatus || '').toLowerCase() === 'paused';
-    const update = () => {
-      const now = Date.now();
-      const left = paused ? Math.max(0, Number(meta.remainingMs || 0)) : Math.max(0, exp - now);
-      const shareExpires = qs('shareExpiresText');
-      if(shareExpires){
-        shareExpires.textContent = paused
-          ? `Пауза, осталось ${typeof fmtRemainingCompact === 'function' ? fmtRemainingCompact(left) : formatRemainingMs(left)}`
-          : `${typeof fmtTime === 'function' ? fmtTime(exp) : '—'} · осталось ${typeof fmtRemainingCompact === 'function' ? fmtRemainingCompact(left) : formatRemainingMs(left)}`;
-      }
-      const box = qs('activeSessionNotice');
-      if(box){
-        box.classList.remove('hidden');
-        box.innerHTML = `<strong>Live-сессия ${paused ? 'на паузе' : 'активна'}</strong><div style="margin-top:6px">${paused ? 'Осталось после возобновления' : 'Осталось'}: <b>${typeof fmtRemainingCompact === 'function' ? fmtRemainingCompact(left) : formatRemainingMs(left)}</b></div><div style="margin-top:6px" class="mono">${url || (typeof buildShareUrl === 'function' ? buildShareUrl(token) : token)}</div>`;
-      }
-      if(!paused && left <= 0 && window.__adminCreateLiveTimerFix){
-        clearInterval(window.__adminCreateLiveTimerFix);
-        window.__adminCreateLiveTimerFix = null;
-      }
-    };
-    if(window.__adminCreateLiveTimerFix) clearInterval(window.__adminCreateLiveTimerFix);
-    update();
-    window.__adminCreateLiveTimerFix = setInterval(update, 1000);
-  }catch(e){ console.warn('startAdminCreatedLiveTimerFix', e); }
-}
-
 async function createLiveSession(){
   if(!selectedUid && allUsers.length===1){ selectedUid = allUsers[0]; qs("userSelect").value = selectedUid; }
   if(!selectedUid) return showToast("Нет пользователя. Сначала дождись появления данных GPS в Firebase или выбери пользователя.","warn");
@@ -6393,20 +6362,15 @@ async function createLiveSession(){
       [`live/${selectedUid}/updatedAt`]:now
     });
     allSessions[token] = payload;
-    window.allSessions = allSessions;
     await logAction("session_create",`Создана live-сессия ${token} для ${selectedUid}`);
     createdShareUrl = liveUrl;
     qs("shareLinkText").textContent = createdShareUrl;
-    qs("shareExpiresText").textContent = `${fmtTime(expiresAt)} · осталось ${fmtRemainingCompact(expiresAt - Date.now())}`;
+    qs("shareExpiresText").textContent = fmtTime(expiresAt);
     qs("shareResultBox").classList.remove("hidden");
-    if (typeof mergeLiveControlsIntoSessions === "function") mergeLiveControlsIntoSessions();
-    if (typeof renderSessions === "function") renderSessions();
     updateActiveSessionNotice();
     updateActiveSessionToast?.();
-    if (typeof startAdminCreatedLiveTimerFix === "function") startAdminCreatedLiveTimerFix(token, payload.meta, liveUrl);
     await loadSessions();
     showExistingActiveLiveSession(token, payload);
-    if (typeof startAdminCreatedLiveTimerFix === "function") startAdminCreatedLiveTimerFix(token, payload.meta, liveUrl);
     showToast("Live-ссылка создана","success");
   }catch(e){
     recordError("createLiveSession", e); showToast("Создание live-ссылки: "+errText(e),"error",3600);
@@ -11538,7 +11502,7 @@ try{
     const url = meta.liveUrl || meta.url || meta.link || buildShareUrl(token);
     createdShareUrl = url;
     if(qs('shareLinkText')) qs('shareLinkText').textContent = url;
-    if(qs('shareExpiresText')) qs('shareExpiresText').textContent = paused ? `Пауза, осталось ${fmtRemainingCompact(left)}` : `${fmtTime(meta.expiresAt)} · осталось ${fmtRemainingCompact(left)}`;
+    if(qs('shareExpiresText')) qs('shareExpiresText').textContent = paused ? `Пауза, осталось ${fmtRemainingCompact(left)}` : fmtTime(meta.expiresAt);
     box.classList.remove('hidden');
     box.innerHTML = `<strong>Live-сессия ${paused ? 'на паузе' : 'активна'}</strong><div style="margin-top:6px">${paused ? 'Осталось после возобновления' : 'Осталось'}: <b>${fmtRemainingCompact(left)}</b></div><div style="margin-top:6px" class="mono">${url}</div>`;
   };
@@ -11796,7 +11760,7 @@ try{
     const [token,s]=e, m=rootOf(s).meta||{}, st=statusOf(m), left=leftMs(m), url=liveUrl(token,m);
     if(typeof createdShareUrl !== 'undefined') createdShareUrl=url;
     if(qs('shareLinkText')) qs('shareLinkText').textContent=url;
-    if(qs('shareExpiresText')) qs('shareExpiresText').textContent=st==='paused' ? `Пауза, осталось ${typeof fmtRemainingCompact==='function'?fmtRemainingCompact(left):formatRemainingMs(left)}` : `${typeof fmtTime==='function'?fmtTime(m.expiresAt):String(m.expiresAt||'—')} · осталось ${typeof fmtRemainingCompact==='function'?fmtRemainingCompact(left):formatRemainingMs(left)}`;
+    if(qs('shareExpiresText')) qs('shareExpiresText').textContent=st==='paused' ? `Пауза, осталось ${typeof fmtRemainingCompact==='function'?fmtRemainingCompact(left):formatRemainingMs(left)}` : (typeof fmtTime==='function'?fmtTime(m.expiresAt):String(m.expiresAt||'—'));
     box.classList.remove('hidden');
     box.innerHTML=`<strong>Live-сессия ${st==='paused'?'на паузе':'активна'}</strong><div style="margin-top:6px">${st==='paused'?'Осталось после возобновления':'Осталось'}: <b>${typeof fmtRemainingCompact==='function'?fmtRemainingCompact(left):formatRemainingMs(left)}</b></div><div style="margin-top:6px" class="mono">${url}</div>`;
   };
@@ -11874,35 +11838,6 @@ try{
 })();
 }catch(e){ console.warn('MYGPS FIX 76 install failed', e); }
 
-</script>
-
-
-<!-- MYGPS admin create live timer immediate fix -->
-<script>
-(function(){
-  function safe(fn){ try{ return fn(); }catch(e){} }
-  setInterval(function(){
-    safe(function(){
-      if(typeof findActiveSessionEntryForSelectedUser !== 'function') return;
-      const entry = findActiveSessionEntryForSelectedUser();
-      if(!entry) return;
-      const token = entry[0];
-      const root = (typeof getSessionRoot === 'function') ? getSessionRoot(entry[1]) : (entry[1] || {});
-      const meta = root.meta || {};
-      const paused = meta.paused === true || String(meta.status || meta.linkStatus || '').toLowerCase() === 'paused';
-      const exp = Number(meta.expiresAt || 0);
-      const left = paused ? Math.max(0, Number(meta.remainingMs || 0)) : Math.max(0, exp - Date.now());
-      const fmtLeft = (typeof fmtRemainingCompact === 'function') ? fmtRemainingCompact(left) : (typeof formatRemainingMs === 'function' ? formatRemainingMs(left) : Math.ceil(left/1000)+' сек');
-      const url = meta.liveUrl || meta.url || meta.link || (typeof buildShareUrl === 'function' ? buildShareUrl(token) : '');
-      const shareExpires = document.getElementById('shareExpiresText');
-      if(shareExpires){
-        shareExpires.textContent = paused ? ('Пауза, осталось ' + fmtLeft) : ((typeof fmtTime === 'function' ? fmtTime(exp) : '—') + ' · осталось ' + fmtLeft);
-      }
-      const shareLink = document.getElementById('shareLinkText');
-      if(shareLink && url) shareLink.textContent = url;
-    });
-  }, 1000);
-})();
 </script>
 
 </body></html>
