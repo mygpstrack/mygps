@@ -11274,6 +11274,314 @@ try{
     });
   }, 1000);
 })();
+
+
+// === FINAL STABLE LIVE SYNC PATCH v80 ===
+// Keeps all previous admin features, but fixes app -> admin realtime sync and the jumping active-live badge.
+try{
+(function(){
+  const byId = (id) => document.getElementById(id);
+  const safe = (fn) => { try { return fn(); } catch(e) { try{ console.warn('stableLiveSync80', e); if(typeof recordError==='function') recordError('stableLiveSync80', e); }catch(_){} } };
+  const str = (v) => String(v ?? '').trim();
+  const num = (v, fb=0) => { const n = Number(v); return Number.isFinite(n) ? n : fb; };
+  const nowMs = () => Date.now();
+  const rootOf = (session) => (typeof getSessionRoot === 'function' ? getSessionRoot(session) : session) || {};
+  const uidOfMeta = (m) => str(m.ownerUid || m.uid || m.createdBy || m.userUid || '');
+  const tokenOfLive = (live) => str(live && (live.sessionId || live.activeSessionId || live.liveSessionId || live.token || ''));
+  const urlForToken = (token, meta={}) => str(meta.liveUrl || meta.link || meta.url || (typeof buildShareUrl === 'function' ? buildShareUrl(token) : `live.html?session=${encodeURIComponent(token)}`));
+  const currentUid = () => str(selectedUid || byId('userSelect')?.value || '');
+
+  window.liveOwnersByUid = window.liveOwnersByUid || {};
+
+  function stateFromMeta(meta={}){
+    const raw = str(meta.status || meta.linkStatus || '').toLowerCase();
+    const stopped = meta.active === false || !!meta.endedAt || ['stopped','ended','expired','inactive','stop'].includes(raw);
+    const paused = !stopped && (meta.paused === true || raw === 'paused');
+    const exp = num(meta.expiresAt, 0);
+    const activeRaw = meta.active === true || raw === 'active' || paused;
+    const active = !stopped && activeRaw && (paused || !exp || exp > nowMs());
+    const expired = !stopped && !paused && !!exp && exp <= nowMs();
+    const leftMs = paused ? Math.max(0, num(meta.remainingMs, exp ? exp - nowMs() : 0)) : Math.max(0, exp ? exp - nowMs() : num(meta.remainingMs, 0));
+    return {active: active && !expired, paused, stopped: stopped || expired, expired, leftMs};
+  }
+
+  function sessionFromLive(uid, live){
+    if(!uid || !live || typeof live !== 'object') return null;
+    const token = tokenOfLive(live);
+    if(!token) return null;
+    const raw = str(live.status || live.linkStatus || '').toLowerCase();
+    const paused = live.paused === true || raw === 'paused';
+    const stopped = live.active === false || !!live.endedAt || ['stopped','ended','expired','inactive','stop'].includes(raw);
+    const status = stopped ? 'stopped' : paused ? 'paused' : (raw || 'active');
+    const exp = num(live.expiresAt, 0);
+    const meta = {
+      ownerUid: uid,
+      sessionId: token,
+      activeSessionId: token,
+      liveSessionId: token,
+      active: !stopped && (live.active !== false),
+      paused,
+      status,
+      linkStatus: status,
+      startedAt: num(live.startedAt || live.createdAt, 0),
+      createdAt: num(live.createdAt || live.startedAt, 0),
+      pausedAt: live.pausedAt || null,
+      resumedAt: live.resumedAt || null,
+      endedAt: live.endedAt || null,
+      expiresAt: exp,
+      remainingMs: num(live.remainingMs, exp ? Math.max(0, exp - nowMs()) : 0),
+      liveUrl: str(live.liveUrl || live.link || live.url) || urlForToken(token),
+      updatedAt: num(live.updatedAt || live.lastSyncedAt || nowMs(), nowMs())
+    };
+    return [token, {meta, public:{lastPoint: live.lastPoint || live.point || null}, viewStats:{}}];
+  }
+
+  function mergeSession(token, session){
+    if(!token) return null;
+    allSessions = allSessions || {};
+    if(!session){ delete allSessions[token]; return null; }
+    const oldRoot = rootOf(allSessions[token] || {});
+    const newRoot = rootOf(session || {});
+    const merged = {
+      ...oldRoot,
+      ...newRoot,
+      meta: {...(oldRoot.meta || {}), ...(newRoot.meta || {})},
+      public: {...(oldRoot.public || {}), ...(newRoot.public || {})},
+      viewStats: {...(oldRoot.viewStats || {}), ...(newRoot.viewStats || {})}
+    };
+    allSessions[token] = merged;
+    return [token, merged];
+  }
+
+  function mergeLive(uid, live){
+    const pseudo = sessionFromLive(uid, live);
+    return pseudo ? mergeSession(pseudo[0], pseudo[1]) : null;
+  }
+
+  function ensureKnownUid80(uid){
+    if(!uid) return;
+    allUsers = Array.isArray(allUsers) ? allUsers : [];
+    if(!allUsers.includes(uid)){
+      allUsers.push(uid);
+      safe(()=> typeof renderUserSelect === 'function' && renderUserSelect());
+    }
+  }
+
+  function syncLiveMirrors(){
+    safe(()=>{
+      Object.entries(liveByUid || {}).forEach(([uid, live])=>{ ensureKnownUid80(uid); mergeLive(uid, live); });
+    });
+  }
+
+  function getActiveEntry80(){
+    syncLiveMirrors();
+    const uid = currentUid();
+    const sessions = allSessions || {};
+
+    if(uid){
+      const ownerToken = str(window.liveOwnersByUid?.[uid]?.activeSessionId || window.liveOwnersByUid?.[uid] || '');
+      if(ownerToken && sessions[ownerToken]){
+        const meta = rootOf(sessions[ownerToken]).meta || {};
+        if((!uidOfMeta(meta) || uidOfMeta(meta) === uid) && stateFromMeta(meta).active) return [ownerToken, sessions[ownerToken]];
+      }
+
+      const liveToken = tokenOfLive(liveByUid?.[uid]);
+      if(liveToken && sessions[liveToken]){
+        const meta = rootOf(sessions[liveToken]).meta || {};
+        if(stateFromMeta(meta).active) return [liveToken, sessions[liveToken]];
+      }
+    }
+
+    const found = Object.entries(sessions)
+      .filter(([token]) => token !== '_init')
+      .find(([token, session])=>{
+        const meta = rootOf(session).meta || {};
+        const owner = uidOfMeta(meta);
+        if(uid && owner && owner !== uid) return false;
+        return stateFromMeta(meta).active;
+      });
+    return found || null;
+  }
+
+  getSelectedActiveSessionEntry = function(){ return getActiveEntry80(); };
+  if(typeof findActiveSessionEntryForSelectedUser !== 'undefined') findActiveSessionEntryForSelectedUser = function(){ return getActiveEntry80(); };
+
+  function setCreateButton(entry){
+    const btn = byId('createShareBtn');
+    if(!btn) return;
+    if(entry){
+      const st = stateFromMeta(rootOf(entry[1]).meta || {});
+      btn.disabled = true;
+      btn.textContent = st.paused ? 'Live на паузе' : 'Есть активная ссылка';
+    }else{
+      btn.disabled = false;
+      btn.textContent = 'Создать live-ссылку';
+    }
+  }
+
+  function renderActiveNotice80(){
+    const box = byId('activeSessionNotice');
+    if(!box) return;
+    const entry = getActiveEntry80();
+    setCreateButton(entry);
+    if(!entry){
+      box.classList.add('hidden');
+      box.dataset.token = '';
+      box.dataset.paused = '';
+      box.innerHTML = '';
+      createdShareUrl = '';
+      return;
+    }
+    const [token, session] = entry;
+    const meta = rootOf(session).meta || {};
+    const st = stateFromMeta(meta);
+    if(!st.active){
+      box.classList.add('hidden');
+      box.dataset.token = '';
+      box.dataset.paused = '';
+      box.innerHTML = '';
+      createdShareUrl = '';
+      setCreateButton(null);
+      return;
+    }
+    const pausedMark = st.paused ? '1' : '0';
+    const url = urlForToken(token, meta);
+    createdShareUrl = url;
+    box.classList.remove('hidden');
+    if(box.dataset.token !== token || box.dataset.paused !== pausedMark || !byId('activeSessionNoticeTime')){
+      box.dataset.token = token;
+      box.dataset.paused = pausedMark;
+      box.innerHTML = '<strong id="activeSessionNoticeTitle"></strong><div style="margin-top:6px"><span id="activeSessionNoticeLabel"></span>: <b id="activeSessionNoticeTime"></b></div><div style="margin-top:6px" class="mono" id="activeSessionNoticeUrl"></div>';
+    }
+    const leftText = typeof fmtRemainingCompact === 'function' ? fmtRemainingCompact(st.leftMs) : (typeof formatRemainingMs === 'function' ? formatRemainingMs(st.leftMs) : Math.ceil(st.leftMs/1000)+'с');
+    const title = byId('activeSessionNoticeTitle');
+    const label = byId('activeSessionNoticeLabel');
+    const time = byId('activeSessionNoticeTime');
+    const urlEl = byId('activeSessionNoticeUrl');
+    const titleText = st.paused ? 'Live-сессия на паузе' : 'Live-сессия активна';
+    const labelText = st.paused ? 'Пауза' : 'Осталось';
+    if(title && title.textContent !== titleText) title.textContent = titleText;
+    if(label && label.textContent !== labelText) label.textContent = labelText;
+    if(time && time.textContent !== leftText) time.textContent = leftText;
+    if(urlEl && urlEl.textContent !== url) urlEl.textContent = url;
+
+    const linkEl = byId('shareLinkText');
+    const expEl = byId('shareExpiresText');
+    const resultBox = byId('shareResultBox');
+    if(linkEl && linkEl.textContent !== url) linkEl.textContent = url;
+    if(expEl){
+      const expText = st.paused ? ('Пауза, осталось ' + leftText) : ((typeof fmtTime === 'function' ? fmtTime(meta.expiresAt) : '—') + ' · осталось ' + leftText);
+      if(expEl.textContent !== expText) expEl.textContent = expText;
+    }
+    if(resultBox) resultBox.classList.remove('hidden');
+  }
+
+  function renderActiveToast80(){
+    const entry = getActiveEntry80();
+    setCreateButton(entry);
+    let el = byId('activeSessionToast');
+    if(!entry){ if(el) el.remove(); renderActiveNotice80(); return; }
+    const [token, session] = entry;
+    const meta = rootOf(session).meta || {};
+    const st = stateFromMeta(meta);
+    if(!st.active){ if(el) el.remove(); setCreateButton(null); renderActiveNotice80(); return; }
+    if(!el){
+      el = document.createElement('div');
+      el.id = 'activeSessionToast';
+      Object.assign(el.style, {
+        position:'fixed', zIndex:'99999', top:'14px', right:'14px', bottom:'auto', left:'auto',
+        maxWidth:'360px', padding:'12px 14px', borderRadius:'14px', color:'#fff',
+        boxShadow:'0 10px 28px rgba(0,0,0,.28)', fontWeight:'600', lineHeight:'1.35',
+        wordBreak:'break-word', cursor:'pointer', pointerEvents:'auto'
+      });
+      el.addEventListener('click', ()=>{ try{ byId('sessionsPanel')?.scrollIntoView({behavior:'smooth',block:'start'}); }catch(_){} });
+      document.body.appendChild(el);
+    }
+    el.style.top = '14px';
+    el.style.right = '14px';
+    el.style.bottom = 'auto';
+    el.style.background = st.paused ? '#b45309' : '#2563eb';
+    const pausedMark = st.paused ? '1' : '0';
+    if(el.dataset.token !== token || el.dataset.paused !== pausedMark || !byId('activeSessionToastTime')){
+      el.dataset.token = token;
+      el.dataset.paused = pausedMark;
+      el.innerHTML = '<div id="activeSessionToastTitle" style="font-weight:800"></div><div id="activeSessionToastTime" style="font-size:13px;opacity:.95"></div>';
+    }
+    const leftText = typeof formatRemainingMs === 'function' ? formatRemainingMs(st.leftMs) : (typeof fmtRemainingCompact === 'function' ? fmtRemainingCompact(st.leftMs) : Math.ceil(st.leftMs/1000)+'с');
+    const title = byId('activeSessionToastTitle');
+    const time = byId('activeSessionToastTime');
+    if(title) title.textContent = st.paused ? 'Live-сессия на паузе' : 'Live-сессия активна';
+    if(time) time.textContent = (st.paused ? 'Пауза: ' : 'Осталось: ') + leftText;
+    renderActiveNotice80();
+  }
+
+  updateActiveSessionNotice = renderActiveNotice80;
+  updateActiveSessionToast = renderActiveToast80;
+
+  const previousRenderSessions = typeof renderSessions === 'function' ? renderSessions : null;
+  if(previousRenderSessions && !previousRenderSessions.__stable80){
+    renderSessions = function(){
+      syncLiveMirrors();
+      const res = previousRenderSessions.apply(this, arguments);
+      renderActiveNotice80();
+      renderActiveToast80();
+      return res;
+    };
+    renderSessions.__stable80 = true;
+  }
+
+  const previousCreateLiveSession = typeof createLiveSession === 'function' ? createLiveSession : null;
+  if(previousCreateLiveSession && !previousCreateLiveSession.__stable80){
+    createLiveSession = async function(){
+      const active = getActiveEntry80();
+      if(active){
+        createdShareUrl = urlForToken(active[0], rootOf(active[1]).meta || {});
+        renderActiveNotice80();
+        renderActiveToast80();
+        if(typeof showToast === 'function') showToast('Уже есть активная live-ссылка', 'warn');
+        return;
+      }
+      const res = await previousCreateLiveSession.apply(this, arguments);
+      setTimeout(()=>{ safe(()=>typeof loadSessions === 'function' && loadSessions()); renderActiveNotice80(); renderActiveToast80(); }, 400);
+      return res;
+    };
+    createLiveSession.__stable80 = true;
+  }
+
+  function redrawFromData(){
+    syncLiveMirrors();
+    safe(()=> typeof renderSessions === 'function' && renderSessions());
+    renderActiveNotice80();
+    renderActiveToast80();
+    safe(()=> typeof updateNowFromAvailableSources === 'function' && updateNowFromAvailableSources());
+  }
+
+  if(!window.__stableLiveSync80Installed){
+    window.__stableLiveSync80Installed = true;
+    safe(()=>trackedOnValue(ref(db, 'live'), snap=>{
+      liveByUid = snap.val() || {};
+      Object.keys(liveByUid || {}).forEach(ensureKnownUid80);
+      redrawFromData();
+    }));
+    safe(()=>trackedOnValue(ref(db, 'liveOwners'), snap=>{
+      window.liveOwnersByUid = snap.val() || {};
+      Object.keys(window.liveOwnersByUid || {}).forEach(ensureKnownUid80);
+      redrawFromData();
+    }));
+    safe(()=>trackedOnValue(query(ref(db, 'liveSessions'), limitToLast(typeof ADMIN_SESSIONS_LIMIT !== 'undefined' ? ADMIN_SESSIONS_LIMIT : 100)), snap=>{
+      const incoming = snap.val() || {};
+      allSessions = {...(allSessions || {}), ...incoming};
+      redrawFromData();
+    }));
+    document.addEventListener('change', ev=>{
+      if(ev.target && ev.target.id === 'userSelect') setTimeout(()=>{ renderActiveNotice80(); renderActiveToast80(); }, 50);
+    }, true);
+    setInterval(()=>{ renderActiveNotice80(); renderActiveToast80(); }, 1000);
+    setTimeout(redrawFromData, 800);
+  }
+})();
+}catch(e){ try{ console.warn('stableLiveSync80 install failed', e); }catch(_){} }
+
 </script>
 
 
