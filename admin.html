@@ -427,6 +427,14 @@
     .riskBadge.danger{background:rgba(185,28,28,.25);border-color:#7f1d1d;color:#fecaca}
     @media(max-width:900px){.trafficRiskGrid{grid-template-columns:1fr}}
 
+
+
+    /* GPS service log panel */
+    .gpsLogTypeBadge{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:999px;border:1px solid #166534;background:rgba(22,163,74,.22);color:#bbf7d0;font-weight:900;font-size:12px}
+    .gpsLogRowStop{background:rgba(185,28,28,.10)}
+    .gpsLogRowSleep{background:rgba(180,83,9,.09)}
+    .gpsLogRowGood{background:rgba(22,163,74,.07)}
+
 </style>
 </head>
 <body>
@@ -537,6 +545,7 @@
         <button class="tab-btn" data-tab="visibilityPanel">Видимость</button>
         <button class="tab-btn" data-tab="geofencesPanel">Геозоны</button>
         <button class="tab-btn" data-tab="journalPanel">Журнал</button>
+        <button class="tab-btn" data-tab="gpsLogPanel">GPS лог</button>
         <button class="tab-btn" data-tab="errorsPanel">Ошибки</button>
         <button class="tab-btn" data-tab="systemCheckPanel">Проверка</button>
         <button class="tab-btn" data-tab="adminLogsPanel">Логи админа</button>
@@ -1037,6 +1046,47 @@
           <table>
             <thead><tr><th>Время</th><th>Тип</th><th>Описание</th><th>Кто</th><th>Геозона</th><th>Данные</th></tr></thead>
             <tbody id="journalTbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+
+
+    <div id="gpsLogPanel" class="hidden">
+      <div class="card">
+        <h2>GPS лог</h2>
+        <p class="sub">Такой же служебный журнал, как в MyGps: service/GPS, live stop/expire, Smart GPS sleep, профили и фильтр плохих точек. Новые записи появляются после обновления MyGps до fix_64.</p>
+        <div class="grid4">
+          <div>
+            <div class="label">Пользователь</div>
+            <select id="gpsLogUserFilter">
+              <option value="">Все пользователи</option>
+            </select>
+          </div>
+          <div>
+            <div class="label">Тип</div>
+            <select id="gpsLogTypeFilter">
+              <option value="">Все записи</option>
+              <option value="service">Service</option>
+              <option value="gps">GPS</option>
+              <option value="live">Live</option>
+              <option value="sleep">Smart sleep</option>
+              <option value="filter">Фильтр точек</option>
+            </select>
+          </div>
+          <div class="stat"><div class="label">Записей</div><div class="value" id="gpsLogCount">0</div></div>
+          <div class="stat"><div class="label">Источник</div><div class="value">gpsServiceLogs</div></div>
+        </div>
+        <div class="toolbar">
+          <button id="refreshGpsLogBtn" class="secondary">Обновить GPS лог</button>
+          <button id="clearSelectedGpsLogBtn" class="warn">Очистить выбранного</button>
+        </div>
+        <div class="notice smallMuted">Лог не управляет GPS и не трогает live/history. Это только диагностика.</div>
+        <div style="overflow:auto">
+          <table>
+            <thead><tr><th>Время</th><th>Тип</th><th>Событие</th><th>Сообщение</th><th>Кто</th><th>Источник</th></tr></thead>
+            <tbody id="gpsLogTbody"><tr><td colspan="6">Нажми “Обновить GPS лог”.</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -5957,6 +6007,14 @@ async function exportPdfReport(){
     .actions{display:none}
     .block,.head{box-shadow:none;border:1px solid #e5e7eb}
   }
+
+
+    /* GPS service log panel */
+    .gpsLogTypeBadge{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:999px;border:1px solid #166534;background:rgba(22,163,74,.22);color:#bbf7d0;font-weight:900;font-size:12px}
+    .gpsLogRowStop{background:rgba(185,28,28,.10)}
+    .gpsLogRowSleep{background:rgba(180,83,9,.09)}
+    .gpsLogRowGood{background:rgba(22,163,74,.07)}
+
 </style>
 </head>
 <body>
@@ -9545,6 +9603,150 @@ setInterval(() => {
   requireDeleteWord = function(){ return true; };
 })();
 
+/* === GPS service log panel fix_64 === */
+let gpsServiceLogs = [];
+
+function gpsLogEscape(v){
+  return String(v ?? "").replace(/[&<>'"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[ch]));
+}
+function gpsLogKind(item){
+  const text = `${item.title || ""} ${item.message || ""} ${item.type || ""}`.toLowerCase();
+  if(text.includes("sleep") || text.includes("сон") || text.includes("smart")) return "sleep";
+  if(text.includes("live")) return "live";
+  if(text.includes("фильтр") || text.includes("плох") || text.includes("отклон")) return "filter";
+  if(text.includes("gps")) return "gps";
+  return "service";
+}
+function gpsLogKindLabel(kind){
+  return ({service:"Service", gps:"GPS", live:"Live", sleep:"Smart sleep", filter:"Фильтр"})[kind] || kind || "Service";
+}
+function gpsLogRowClass(item){
+  const text = `${item.title || ""} ${item.message || ""}`.toLowerCase();
+  if(text.includes("выключ") || text.includes("stop") || text.includes("останов")) return "gpsLogRowStop";
+  if(text.includes("sleep") || text.includes("сон") || text.includes("smart")) return "gpsLogRowSleep";
+  if(text.includes("запущ") || text.includes("включ") || text.includes("актив")) return "gpsLogRowGood";
+  return "";
+}
+function gpsLogCurrentFilterUid(){
+  const explicit = qs("gpsLogUserFilter")?.value || "";
+  if(explicit) return explicit;
+  return selectedUid || "";
+}
+function gpsLogPopulateUsers(){
+  const sel = qs("gpsLogUserFilter");
+  if(!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = `<option value="">Все пользователи</option>`;
+  (allUsers || []).forEach(uid => {
+    const opt = document.createElement("option");
+    opt.value = uid;
+    opt.textContent = getDisplayName(uid) || uid;
+    sel.appendChild(opt);
+  });
+  if(prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
+  else if(selectedUid && [...sel.options].some(o => o.value === selectedUid)) sel.value = selectedUid;
+}
+async function loadGpsServiceLogs(){
+  gpsLogPopulateUsers();
+  const filterUid = gpsLogCurrentFilterUid();
+  const rows = [];
+  try{
+    if(filterUid){
+      const snap = await get(query(ref(db, `gpsServiceLogs/${filterUid}`), limitToLast(250)));
+      Object.entries(snap.val() || {}).forEach(([id, item]) => rows.push({...item, id, uid: item?.uid || filterUid}));
+    }else{
+      const snap = await get(ref(db, "gpsServiceLogs"));
+      Object.entries(snap.val() || {}).forEach(([uid, items]) => {
+        Object.entries(items || {}).forEach(([id, item]) => rows.push({...item, id, uid: item?.uid || uid}));
+      });
+    }
+  }catch(e){
+    recordError("loadGpsServiceLogs", e);
+    throw e;
+  }
+  gpsServiceLogs = rows.sort((a,b)=>Number(b.ts || b.timestamp || 0)-Number(a.ts || a.timestamp || 0)).slice(0,500);
+  renderGpsServiceLogs();
+}
+function renderGpsServiceLogs(){
+  const tbody = qs("gpsLogTbody");
+  if(!tbody) return;
+  const typeFilter = qs("gpsLogTypeFilter")?.value || "";
+  const uidFilter = qs("gpsLogUserFilter")?.value || "";
+  let rows = gpsServiceLogs.slice();
+  if(uidFilter) rows = rows.filter(x => x.uid === uidFilter);
+  if(typeFilter) rows = rows.filter(x => gpsLogKind(x) === typeFilter);
+  if(qs("gpsLogCount")) qs("gpsLogCount").textContent = String(rows.length);
+  tbody.innerHTML = "";
+  if(!rows.length){
+    tbody.innerHTML = `<tr><td colspan="6">GPS лог пока пуст. После установки MyGps fix_64 новые service/GPS события начнут появляться здесь.</td></tr>`;
+    return;
+  }
+  rows.forEach(item => {
+    const kind = gpsLogKind(item);
+    const tr = document.createElement("tr");
+    const ts = Number(item.ts || item.timestamp || 0);
+    tr.className = gpsLogRowClass(item);
+    tr.innerHTML = `<td>${fmtTime(ts)}</td><td><span class="gpsLogTypeBadge">${gpsLogKindLabel(kind)}</span></td><td>${gpsLogEscape(item.title || item.type || "—")}</td><td>${gpsLogEscape(item.message || "—")}</td><td>${gpsLogEscape(getDisplayName(item.uid) || item.uid || "—")}</td><td>${gpsLogEscape(item.source || "android_service")}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+async function clearSelectedGpsLog(){
+  const uid = qs("gpsLogUserFilter")?.value || selectedUid || "";
+  if(!uid) return showToast("Выбери пользователя для очистки GPS лога", "warn");
+  if(!confirm(`Очистить GPS лог пользователя ${getDisplayName(uid) || uid}?`)) return;
+  try{
+    await remove(ref(db, `gpsServiceLogs/${uid}`));
+    gpsServiceLogs = gpsServiceLogs.filter(x => x.uid !== uid);
+    renderGpsServiceLogs();
+    showToast("GPS лог очищен", "success");
+  }catch(e){
+    recordError("clearSelectedGpsLog", e);
+    showToast("Ошибка очистки GPS лога: " + errText(e), "error", 4200);
+  }
+}
+function installGpsLogPanel(){
+  gpsLogPopulateUsers();
+  const refreshBtn = qs("refreshGpsLogBtn");
+  if(refreshBtn && !refreshBtn.dataset.bound){
+    refreshBtn.dataset.bound = "1";
+    refreshBtn.onclick = async () => {
+      try{ await loadGpsServiceLogs(); showToast("GPS лог обновлён", "success"); }
+      catch(e){ showToast("Ошибка GPS лога: " + errText(e), "error", 4200); }
+    };
+  }
+  const clearBtn = qs("clearSelectedGpsLogBtn");
+  if(clearBtn && !clearBtn.dataset.bound){
+    clearBtn.dataset.bound = "1";
+    clearBtn.onclick = clearSelectedGpsLog;
+  }
+  ["gpsLogUserFilter","gpsLogTypeFilter"].forEach(id => {
+    const el = qs(id);
+    if(el && !el.dataset.bound){
+      el.dataset.bound = "1";
+      el.addEventListener("change", () => {
+        if(id === "gpsLogUserFilter") loadGpsServiceLogs().catch(e=>recordError("gpsLogFilterLoad", e));
+        else renderGpsServiceLogs();
+      });
+    }
+  });
+}
+function gpsLogStrictShowPanel(selectedId){
+  const ids = ["nowPanel","historyPanel","reportsPanel","usagePanel","trafficPanel","sessionsPanel","usersPanel","visibilityPanel","geofencesPanel","journalPanel","gpsLogPanel","errorsPanel","systemCheckPanel","adminLogsPanel","settingsPanel"];
+  ids.forEach(id => { const el = qs(id); if(el) el.classList.toggle("hidden", id !== selectedId); });
+  document.querySelectorAll(".tab-btn[data-tab]").forEach(btn => btn.classList.toggle("active", btn.dataset.tab === selectedId));
+  if(selectedId === "gpsLogPanel") setTimeout(()=>loadGpsServiceLogs().catch(e=>recordError("loadGpsServiceLogs", e)), 0);
+}
+document.addEventListener("click", (ev) => {
+  const btn = ev.target && ev.target.closest ? ev.target.closest(".tab-btn[data-tab]") : null;
+  if(!btn) return;
+  setTimeout(()=>gpsLogStrictShowPanel(btn.dataset.tab), 20);
+}, true);
+window.addEventListener("load", () => {
+  installGpsLogPanel();
+  setTimeout(installGpsLogPanel, 1200);
+});
+/* === /GPS service log panel fix_64 === */
+
 </script>
 
 
@@ -9822,6 +10024,10 @@ function startLiveSessionsRealtimeSync(){
   }catch(e){ recordError('startLiveSessionsRealtimeSync', e); }
 }
 window.addEventListener('load', ()=>{ mygpsLivePatchInstallUi(); setTimeout(()=>{ try{ startLiveSessionsRealtimeSync(); }catch(e){} }, 1800); });
+
+
+
+
 /* === /MyGps live view details + realtime sync final patch === */
 </script>
 
