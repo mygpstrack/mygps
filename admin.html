@@ -3108,28 +3108,127 @@ async function reverseGeocode(lat, lon){
 
 function distanceMeters(a,b){
   const toRad=v=>v*Math.PI/180, R=6371000;
-  const dLat=toRad(b.latitude-a.latitude), dLon=toRad(b.longitude-a.longitude);
-  const lat1=toRad(a.latitude), lat2=toRad(b.latitude);
+  const dLat=toRad(Number(b.latitude)-Number(a.latitude)), dLon=toRad(Number(b.longitude)-Number(a.longitude));
+  const lat1=toRad(Number(a.latitude)), lat2=toRad(Number(b.latitude));
   const x=Math.sin(dLat/2)**2+Math.sin(dLon/2)**2*Math.cos(lat1)*Math.cos(lat2);
   return R*(2*Math.atan2(Math.sqrt(x), Math.sqrt(1-x)));
 }
+
+function normalizeRoutePoint(p){
+  if(!p) return null;
+  const latitude = Number(p.latitude ?? p.lat);
+  const longitude = Number(p.longitude ?? p.lng ?? p.lon);
+  const timestamp = Number(p.timestamp ?? p.ts ?? p.time ?? 0);
+  if(!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+  if(Math.abs(latitude) > 90 || Math.abs(longitude) > 180) return null;
+  return { ...p, latitude, longitude, timestamp };
+}
+
+function routeSpeedKmh(p){
+  const v = Number(p?.speedKmh ?? p?.speed ?? p?.speedRawKmh ?? 0);
+  return Number.isFinite(v) ? Math.max(0, v) : 0;
+}
+
+function routeAccuracyM(p){
+  const v = Number(p?.accuracy ?? 0);
+  return Number.isFinite(v) ? Math.max(0, v) : 0;
+}
+
+function getDistanceAccuracyLimit(){
+  const configured = Number(adminSettings.junkAccuracyMeters || adminSettings.gpsAccuracyMax || 100);
+  return Number.isFinite(configured) && configured > 0 ? Math.min(100, Math.max(25, configured)) : 80;
+}
+
+function isPlausibleRouteSegment(prev, cur){
+  if(!prev || !cur) return false;
+  const ts1 = Number(prev.timestamp || 0);
+  const ts2 = Number(cur.timestamp || 0);
+  const dt = (ts2 - ts1) / 1000;
+  if(!Number.isFinite(dt) || dt <= 0) return false;
+  // Большой разрыв почти всегда даёт прямую линию и завышает путь.
+  if(dt > 30 * 60) return false;
+
+  const acc1 = routeAccuracyM(prev);
+  const acc2 = routeAccuracyM(cur);
+  const accLimit = getDistanceAccuracyLimit();
+  if((acc1 > 0 && acc1 > accLimit) || (acc2 > 0 && acc2 > accLimit)) return false;
+
+  const dist = distanceMeters(prev, cur);
+  if(!Number.isFinite(dist) || dist <= 0) return false;
+
+  const calcSpeed = (dist / dt) * 3.6;
+  const impossible = Number(adminSettings.impossibleSpeedKmh || adminSettings.gpsImpossibleSpeed || 250);
+  if(calcSpeed > (Number.isFinite(impossible) && impossible > 0 ? impossible : 250)) return false;
+
+  const sp1 = routeSpeedKmh(prev);
+  const sp2 = routeSpeedKmh(cur);
+  const speedEvidence = Math.max(sp1, sp2, calcSpeed);
+  const noiseRadius = Math.max(18, Math.min(75, Math.max(acc1 || 0, acc2 || 0) * 1.4));
+
+  // Стоянка с плавающими координатами не должна превращаться в километры.
+  if(sp1 < 1.2 && sp2 < 1.2 && calcSpeed < 2.5) return false;
+  if(sp1 < 2 && sp2 < 2 && dist <= noiseRadius) return false;
+
+  // Очень маленькие сегменты без признаков движения считаем GPS-шумом.
+  if(dist < 3 && speedEvidence < 3) return false;
+
+  return true;
+}
+
+function cleanRoutePointsForDistance(points){
+  return (points || [])
+    .map(normalizeRoutePoint)
+    .filter(Boolean)
+    .sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+}
+
+function routeDistanceMeters(points){
+  const ordered = cleanRoutePointsForDistance(points);
+  let meters = 0;
+  let countedSegments = 0;
+  let skippedSegments = 0;
+  for(let i=1;i<ordered.length;i++){
+    if(isPlausibleRouteSegment(ordered[i-1], ordered[i])){
+      meters += distanceMeters(ordered[i-1], ordered[i]);
+      countedSegments++;
+    }else{
+      skippedSegments++;
+    }
+  }
+  return { meters, countedSegments, skippedSegments, points: ordered };
+}
+
 function looksJunk(prev,cur){
-  const acc=Number(cur.accuracy||0), sp=Number(cur.speed||0);
-  const maxAcc = Number(adminSettings.junkAccuracyMeters || adminSettings.gpsAccuracyMax || 100);
+  cur = normalizeRoutePoint(cur);
+  prev = normalizeRoutePoint(prev);
+  if(!cur) return true;
+  const acc=routeAccuracyM(cur), sp=routeSpeedKmh(cur);
+  const maxAcc = getDistanceAccuracyLimit();
   const impossible = Number(adminSettings.impossibleSpeedKmh || adminSettings.gpsImpossibleSpeed || 250);
   if(acc>maxAcc) return true;
   if(prev){
     const dist=distanceMeters(prev,cur), dt=Math.max(1,(Number(cur.timestamp||0)-Number(prev.timestamp||0))/1000), calcSpeed=dist/dt*3.6;
     if(sp<=.5 && calcSpeed>30) return true;
-    if(calcSpeed>impossible) return true;
+    if(calcSpeed>(Number.isFinite(impossible) && impossible > 0 ? impossible : 250)) return true;
   }
   return false;
 }
 function computeSummary(points){
-  if(!points.length) return {count:0,km:0,avgSpeed:0,maxSpeed:0};
-  let meters=0; for(let i=1;i<points.length;i++) meters += distanceMeters(points[i-1],points[i]);
-  const speeds=points.map(p=>Number(p.speed||0)).filter(v=>Number.isFinite(v)&&v>0);
-  return { count:points.length, km:meters/1000, avgSpeed:speeds.length ? speeds.reduce((a,b)=>a+b,0)/speeds.length : 0, maxSpeed:speeds.length ? Math.max(...speeds) : 0 };
+  const route = routeDistanceMeters(points || []);
+  if(!route.points.length) return {count:0,km:0,avgSpeed:0,maxSpeed:0,skippedSegments:0,countedSegments:0};
+  const speeds=route.points.map(routeSpeedKmh).filter(v=>Number.isFinite(v)&&v>0);
+  const startTs = Number(route.points[0]?.timestamp || 0);
+  const endTs = Number(route.points[route.points.length-1]?.timestamp || 0);
+  const hours = endTs > startTs ? (endTs - startTs) / 3600000 : 0;
+  const avgSpeed = speeds.length ? speeds.reduce((a,b)=>a+b,0)/speeds.length : (hours > 0 ? (route.meters/1000)/hours : 0);
+  return {
+    count:route.points.length,
+    km:route.meters/1000,
+    avgSpeed,
+    maxSpeed:speeds.length ? Math.max(...speeds) : 0,
+    skippedSegments:route.skippedSegments,
+    countedSegments:route.countedSegments
+  };
 }
 function detectStops(points){
   const stops=[]; let startIdx=null;
@@ -3516,17 +3615,15 @@ function updateTodaySummary(){
       .filter(p => p && Number(p.timestamp || 0) >= todayStart)
       .sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
 
-    let meters = 0;
-    for(let i=1;i<points.length;i++){
-      try{ meters += distanceMeters(points[i-1], points[i]); }catch(e){}
-    }
+    const route = routeDistanceMeters(points);
+    const meters = route.meters;
 
     let moveMs = 0;
-    for(let i=1;i<points.length;i++){
-      const prev = points[i-1];
-      const cur = points[i];
+    for(let i=1;i<route.points.length;i++){
+      const prev = route.points[i-1];
+      const cur = route.points[i];
       const dt = Math.max(0, Number(cur.timestamp||0) - Number(prev.timestamp||0));
-      if(dt <= 5 * 60 * 1000 && pointSpeedKmhFix41(cur) > 1) moveMs += dt;
+      if(dt <= 5 * 60 * 1000 && isPlausibleRouteSegment(prev, cur)) moveMs += dt;
     }
 
     const lastTs = points.length ? Number(points[points.length - 1].timestamp || 0) : 0;
