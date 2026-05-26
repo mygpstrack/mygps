@@ -5416,12 +5416,39 @@ async function deleteSession(token){
     showToast("Live-сессия удалена","success");
   }catch(e){ recordError("deleteSession", e); showToast("Удаление live-сессии: "+errText(e),"error",3600); }
 }
+function markSessionEndedLocally(token, endedAt = Date.now()){
+  if(!token) return;
+  if(!allSessions || typeof allSessions !== "object") allSessions = {};
+  const current = allSessions[token];
+  const root = getSessionRoot(current);
+  if(!current || typeof current !== "object" || (!root.meta && !root.public && !root.viewStats)){
+    allSessions[token] = { meta:{ active:false, status:"ended", endedAt, remainingMs:0 } };
+  }else{
+    if(!root.meta) root.meta = {};
+    root.meta.active = false;
+    root.meta.status = "ended";
+    root.meta.endedAt = endedAt;
+    root.meta.remainingMs = 0;
+    root.meta.paused = false;
+  }
+}
+function refreshSessionsUiAfterLocalChange(){
+  try{ renderSessions(); }catch(e){}
+  try{ updateActiveSessionNotice(); }catch(e){}
+  try{ updateActiveSessionToast(); }catch(e){}
+  try{ updateNowFromAvailableSources(); }catch(e){}
+  try{ adminFix66LiveHealth(); }catch(e){}
+  try{ fix68BuildAlerts(); }catch(e){}
+}
 async function endSession(token){
   if(!confirm(`Завершить live-сессию ${token}?`)) return;
+  const endedAt = Date.now();
   try{
-    await update(ref(db, `liveSessions/${token}/meta`), { active:false, endedAt:Date.now() });
+    await update(ref(db, `liveSessions/${token}/meta`), { active:false, status:"ended", endedAt, remainingMs:0, paused:false });
+    markSessionEndedLocally(token, endedAt);
+    refreshSessionsUiAfterLocalChange();
     await logAction("session_end", `Завершена live-сессия ${token}`);
-    await loadSessions();
+    loadSessions().catch(e=>recordError("loadSessionsAfterEndSession", e));
     showToast("Сессия завершена","success");
   }catch(e){ recordError("endSession", e); showToast("Завершение live-сессии: "+errText(e),"error",3600); }
 }
@@ -5444,9 +5471,14 @@ async function endAllActiveSessions(){
   if(!activeTokens.length) return showToast("Активных live-сессий нет.","warn");
   if(!confirm(`Остановить ${activeTokens.length} активных сессий?`)) return;
   try{
-    for(const token of activeTokens) await update(ref(db,`liveSessions/${token}/meta`),{active:false,endedAt:Date.now()});
+    const endedAt = Date.now();
+    for(const token of activeTokens){
+      await update(ref(db,`liveSessions/${token}/meta`),{active:false,status:"ended",endedAt,remainingMs:0,paused:false});
+      markSessionEndedLocally(token, endedAt);
+    }
+    refreshSessionsUiAfterLocalChange();
     await logAction("session_end_all", `Остановлено активных сессий: ${activeTokens.length}`);
-    await loadSessions();
+    loadSessions().catch(e=>recordError("loadSessionsAfterEndAllSessions", e));
     showToast("Активные сессии остановлены","success");
   }catch(e){ recordError("endAllActiveSessions", e); showToast("Остановка всех активных: "+errText(e),"error",3600); }
 }
