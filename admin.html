@@ -3346,7 +3346,7 @@ function updateReplaySeek(){
   seek.value = String(Math.min(replayState.index, Math.max(0, total - 1)));
 }
 
-function renderReplayPoint(centerMap = true){
+function renderReplayPoint(centerMap = false){
   ensureReplayLayers();
   const point = replayState.points[replayState.index] || null;
   setReplayInfo(point);
@@ -3367,12 +3367,10 @@ function renderReplayPoint(centerMap = true){
   if(replayTrail?.bringToFront) replayTrail.bringToFront();
   if(replayMarker?.bringToFront) replayMarker.bringToFront();
 
-  if(centerMap){
-    suppressHistoryMapInteraction = true;
-    historyMap.setView(latlng, Math.max(historyMap.getZoom(), 15));
-    setTimeout(()=>{ suppressHistoryMapInteraction = false; }, 250);
-  }
+  // Replay no longer auto-centers the map on every point.
+  // This keeps the map freely draggable while the route is playing.
 }
+
 
 function replayStopInternal(resetIndex = false){
   clearReplayTimer();
@@ -3392,7 +3390,7 @@ function replayTick(){
     return;
   }
   replayState.index += 1;
-  renderReplayPoint(true);
+  renderReplayPoint(false);
   replayState.timer = setTimeout(replayTick, replayState.stepMs);
 }
 
@@ -3420,7 +3418,7 @@ function replayStart(){
   }
   clearReplayTimer();
   replayState.playing = true;
-  renderReplayPoint(true);
+  renderReplayPoint(false);
   replayState.timer = setTimeout(replayTick, replayState.stepMs);
 }
 
@@ -3435,7 +3433,7 @@ function replayReset(){
   flashReplayButton("replayResetBtn");
   replayStopInternal(true);
   if(replayTrail) replayTrail.setLatLngs([]);
-  renderReplayPoint(true);
+  renderReplayPoint(false);
 }
 
 function replayFaster(){
@@ -6781,7 +6779,7 @@ if (qs("replaySeekRange")) {
   seek.onchange = () => {
     if(!replayState.points.length) replayLoad(false);
     replayState.index = Number(seek.value || 0);
-    renderReplayPoint(true);
+    renderReplayPoint(false);
   };
 }
 setReplayActiveButton("");
