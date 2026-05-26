@@ -494,6 +494,22 @@ tr.gpsLogRowStop,tr.gpsLogRowError{background:rgba(185,28,28,.13)}
 @media(max-width:900px){.alertCenterGrid,.userHealthGrid,.rulesCheckGrid{grid-template-columns:1fr}}
 /* === /Admin alert center + health + rules + timeline fix_68 === */
 
+
+
+/* === Admin fix_70: update check, route filter, diagnostics, replay events, cleanup === */
+.postUpdateGrid,.routeFilterGrid,.cleanupSettingsGrid,.diagGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:12px}
+.postUpdateCard,.routeFilterCard,.cleanupSettingCard,.replayEventCard{padding:12px 14px;border-radius:16px;border:1px solid var(--border);background:rgba(255,255,255,.035);line-height:1.45}
+.postUpdateCard b,.routeFilterCard b,.cleanupSettingCard b,.replayEventCard b{display:block;margin-bottom:5px;color:#fff}
+.postUpdateBadge{display:inline-flex;align-items:center;padding:5px 9px;border-radius:999px;border:1px solid var(--border);font-weight:900;font-size:12px}
+.postUpdateBadge.ok{background:rgba(22,163,74,.22);border-color:#166534;color:#bbf7d0}
+.postUpdateBadge.warn{background:rgba(180,83,9,.22);border-color:#92400e;color:#fde68a}
+.postUpdateBadge.err{background:rgba(185,28,28,.25);border-color:#7f1d1d;color:#fecaca}
+#replayNearbyEventsTbody tr{cursor:pointer}
+#replayNearbyEventsTbody tr:hover{background:rgba(96,165,250,.10)}
+.replayEventNow{background:rgba(245,158,11,.12)!important}
+@media(max-width:900px){.postUpdateGrid,.routeFilterGrid,.cleanupSettingsGrid,.diagGrid{grid-template-columns:1fr}}
+/* === /Admin fix_70 === */
+
 </style>
 </head>
 <body>
@@ -608,6 +624,7 @@ tr.gpsLogRowStop,tr.gpsLogRowError{background:rgba(185,28,28,.13)}
         <button class="tab-btn" data-tab="gpsLogPanel">GPS лог</button>
         <button class="tab-btn" data-tab="errorsPanel">Ошибки</button>
         <button class="tab-btn" data-tab="systemCheckPanel">Проверка</button>
+        <button class="tab-btn" data-tab="postUpdatePanel">После обновления</button>
         <button class="tab-btn" data-tab="adminLogsPanel">Логи админа</button>
         <button class="tab-btn" data-tab="settingsPanel">Настройки</button>
       </div>
@@ -688,6 +705,7 @@ tr.gpsLogRowStop,tr.gpsLogRowError{background:rgba(185,28,28,.13)}
           <button id="refreshNowBtn" class="secondary">Обновить сейчас</button>
           <button id="refreshLiveBtn" class="secondary">Обновить live</button>
           <button id="btnDiag" class="secondary">Диаг</button>
+          <button id="downloadDiagBtn" class="secondary">Скачать диагностику</button>
           <button id="copyNowCoordsBtn" class="secondary">Копировать координаты</button>
           <button id="openNowMapsBtn" class="secondary">Google Maps</button>
         </div>
@@ -810,6 +828,20 @@ tr.gpsLogRowStop,tr.gpsLogRowError{background:rgba(185,28,28,.13)}
           <div class="stat"><div class="label">Шаг</div><div class="value" id="replayStepMsText">700 мс</div></div>
           <div class="stat"><div class="label">Источник</div><div class="value" id="replaySourceText">Отфильтрованная история</div></div>
         </div>
+        <div class="card" style="margin-top:12px">
+          <h3>Replay + события</h3>
+          <p class="sub">Во время проигрывания здесь показываются события рядом с текущей точкой: GPS, sleep, live, geofence и проблемные логи.</p>
+          <div class="toolbar">
+            <label class="pill"><input id="replayEventsEnabledToggle" type="checkbox" checked style="width:auto;min-width:auto"/> Показывать события рядом</label>
+            <button id="replayBuildTimelineBtn" class="secondary">Обновить события</button>
+          </div>
+          <div style="overflow:auto;margin-top:12px">
+            <table>
+              <thead><tr><th>Разница</th><th>Время</th><th>Тип</th><th>Событие</th><th>Действие</th></tr></thead>
+              <tbody id="replayNearbyEventsTbody"><tr><td colspan="5">Запусти replay или нажми “Обновить события”.</td></tr></tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       <div class="card">
@@ -891,6 +923,22 @@ tr.gpsLogRowStop,tr.gpsLogRowError{background:rgba(185,28,28,.13)}
             <button id="safeCleanupBtn" class="warn" type="button">Запустить безопасную очистку</button>
           </div>
           <div id="safeCleanupResult" class="cleanupResult hidden">—</div>
+          <div class="card" style="margin-top:12px">
+            <h3>Автоочистка логов</h3>
+            <p class="sub">Настройки хранения. История маршрутов не удаляется.</p>
+            <div class="cleanupSettingsGrid">
+              <div class="cleanupSettingCard"><b>GPS лог, дней</b><input id="gpsLogsRetentionDaysInput" type="number" min="1" step="1" value="14"></div>
+              <div class="cleanupSettingCard"><b>Журнал events, дней</b><input id="eventsRetentionDaysInput" type="number" min="1" step="1" value="30"></div>
+              <div class="cleanupSettingCard"><b>Admin logs, дней</b><input id="adminLogsRetentionDaysInput" type="number" min="1" step="1" value="30"></div>
+              <div class="cleanupSettingCard"><b>Режим</b><span id="autoCleanupStatusText">Ручной запуск</span></div>
+            </div>
+            <div class="toolbar">
+              <button id="saveCleanupSettingsBtn" class="success" type="button">Сохранить сроки</button>
+              <button id="previewLogCleanupBtn" class="secondary" type="button">Проверить логи</button>
+              <button id="runLogCleanupBtn" class="warn" type="button">Очистить старые логи</button>
+            </div>
+            <div id="logCleanupResult" class="cleanupResult hidden">—</div>
+          </div>
         </div>
       </div>
     </div>
@@ -1292,6 +1340,34 @@ tr.gpsLogRowStop,tr.gpsLogRowError{background:rgba(185,28,28,.13)}
 
 
 
+
+    <div id="postUpdatePanel" class="hidden">
+      <div class="card">
+        <h2>После обновления</h2>
+        <p class="sub">Быстрая проверка, что новая версия админки установлена правильно и основные узлы Firebase доступны.</p>
+        <div class="toolbar">
+          <button id="runPostUpdateCheckBtn" class="success">Запустить проверку</button>
+          <button id="downloadPostUpdateDiagBtn" class="secondary">Скачать диагностику</button>
+        </div>
+        <div class="postUpdateGrid">
+          <div class="postUpdateCard"><b>Admin version</b><span id="postAdminVersion">fix_70</span></div>
+          <div class="postUpdateCard"><b>Auth</b><span id="postAuthStatus">—</span></div>
+          <div class="postUpdateCard"><b>Выбранный пользователь</b><span id="postSelectedUser">—</span></div>
+          <div class="postUpdateCard"><b>GPS лог</b><span id="postGpsLogStatus">—</span></div>
+          <div class="postUpdateCard"><b>LiveSessions</b><span id="postLiveStatus">—</span></div>
+          <div class="postUpdateCard"><b>Rules check</b><span id="postRulesStatus">—</span></div>
+          <div class="postUpdateCard"><b>Background GPS</b><span id="postBackgroundGpsStatus">по логам</span></div>
+          <div class="postUpdateCard"><b>Итог</b><span id="postUpdateSummary">Не запускалось</span></div>
+        </div>
+        <div style="overflow:auto;margin-top:12px">
+          <table>
+            <thead><tr><th>Проверка</th><th>Статус</th><th>Детали</th></tr></thead>
+            <tbody id="postUpdateTbody"><tr><td colspan="3">Нажми “Запустить проверку”.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <div id="adminLogsPanel" class="hidden">
       <div class="card">
         <h2>Логи админа</h2>
@@ -1388,6 +1464,20 @@ tr.gpsLogRowStop,tr.gpsLogRowError{background:rgba(185,28,28,.13)}
           </div>
         </div>
 
+
+        <div class="card" style="margin-top:12px">
+          <h3>Настройки фильтра пробега</h3>
+          <p class="sub">Эти параметры управляют “чистым пробегом”, PDF/CSV отчётами и графиком пробега.</p>
+          <div class="routeFilterGrid">
+            <div class="routeFilterCard"><b>Макс. accuracy, м</b><input id="routeMaxAccuracyInput" type="number" min="1" step="1" value="100"></div>
+            <div class="routeFilterCard"><b>Макс. скорость сегмента, км/ч</b><input id="routeMaxSpeedInput" type="number" min="20" step="1" value="250"></div>
+            <div class="routeFilterCard"><b>Макс. разрыв, мин</b><input id="routeMaxGapMinInput" type="number" min="1" step="1" value="5"></div>
+            <div class="routeFilterCard"><b>Мин. сегмент, м</b><input id="routeMinSegmentInput" type="number" min="0" step="1" value="8"></div>
+            <div class="routeFilterCard"><b>Дрейф стоянки</b><label class="pill"><input id="routeIgnoreStopDriftInput" type="checkbox" checked style="width:auto;min-width:auto"/> Игнорировать</label></div>
+            <div class="routeFilterCard"><b>Сейчас</b><span id="routeFilterSummaryText">—</span></div>
+          </div>
+          <div class="toolbar"><button id="saveRouteFilterBtn" class="success">Сохранить фильтр пробега</button><button id="resetRouteFilterBtn" class="secondary">Баланс по умолчанию</button></div>
+        </div>
         <div class="settings-tools-layout">
           <div class="card gpsCardClean">
             <h3>Частота GPS</h3>
@@ -10590,6 +10680,174 @@ function startLiveSessionsRealtimeSync(){
   }catch(e){ recordError('startLiveSessionsRealtimeSync', e); }
 }
 window.addEventListener('load', ()=>{ mygpsLivePatchInstallUi(); setTimeout(()=>{ try{ startLiveSessionsRealtimeSync(); }catch(e){} }, 1800); });
+
+
+/* === Admin fix_70: update check, route filter, diagnostics, replay events, cleanup === */
+const ADMIN_FIX70_VERSION = "fix_70";
+function fix70Qs(id){ return document.getElementById(id); }
+function fix70Esc(v){ return String(v ?? "").replace(/[&<>'"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c])); }
+function fix70Badge(text, kind="ok"){ return `<span class="postUpdateBadge ${kind}">${fix70Esc(text)}</span>`; }
+function fix70Ts(v){ const n=Number(v||0); return Number.isFinite(n)?n:0; }
+function fix70RouteFilter(){
+  const rf = adminSettings.routeFilter || {};
+  return {
+    maxAccuracyM: Number(rf.maxAccuracyM ?? adminSettings.junkAccuracyMeters ?? adminSettings.gpsAccuracyMax ?? 100),
+    maxSpeedKmh: Number(rf.maxSpeedKmh ?? adminSettings.impossibleSpeedKmh ?? adminSettings.gpsImpossibleSpeed ?? 250),
+    maxGapMinutes: Number(rf.maxGapMinutes ?? 5),
+    minSegmentM: Number(rf.minSegmentM ?? 8),
+    ignoreStopDrift: rf.ignoreStopDrift !== false
+  };
+}
+function fix70ApplyRouteFilterUi(){
+  const rf=fix70RouteFilter();
+  if(fix70Qs('routeMaxAccuracyInput')) fix70Qs('routeMaxAccuracyInput').value=String(rf.maxAccuracyM);
+  if(fix70Qs('routeMaxSpeedInput')) fix70Qs('routeMaxSpeedInput').value=String(rf.maxSpeedKmh);
+  if(fix70Qs('routeMaxGapMinInput')) fix70Qs('routeMaxGapMinInput').value=String(rf.maxGapMinutes);
+  if(fix70Qs('routeMinSegmentInput')) fix70Qs('routeMinSegmentInput').value=String(rf.minSegmentM);
+  if(fix70Qs('routeIgnoreStopDriftInput')) fix70Qs('routeIgnoreStopDriftInput').checked=!!rf.ignoreStopDrift;
+  if(fix70Qs('routeFilterSummaryText')) fix70Qs('routeFilterSummaryText').textContent=`accuracy ≤ ${rf.maxAccuracyM}м · speed ≤ ${rf.maxSpeedKmh}км/ч · gap ≤ ${rf.maxGapMinutes}мин · min ${rf.minSegmentM}м`;
+}
+function fix70ReadRouteFilterUi(){
+  return {
+    maxAccuracyM: Number(fix70Qs('routeMaxAccuracyInput')?.value || 100),
+    maxSpeedKmh: Number(fix70Qs('routeMaxSpeedInput')?.value || 250),
+    maxGapMinutes: Number(fix70Qs('routeMaxGapMinInput')?.value || 5),
+    minSegmentM: Number(fix70Qs('routeMinSegmentInput')?.value || 8),
+    ignoreStopDrift: !!fix70Qs('routeIgnoreStopDriftInput')?.checked
+  };
+}
+const fix70OldSegmentDecision = typeof adminFix66SegmentDecision === 'function' ? adminFix66SegmentDecision : null;
+if(typeof adminFix66SegmentDecision === 'function'){
+  adminFix66SegmentDecision = function(prev, cur){
+    const rf=fix70RouteFilter();
+    if(!prev || !cur) return {ok:false, reason:'нет точки'};
+    if(!adminFix66IsValidPoint(prev) || !adminFix66IsValidPoint(cur)) return {ok:false, reason:'invalid coordinates'};
+    const accA=adminFix66Accuracy(prev), accB=adminFix66Accuracy(cur);
+    if((accA && accA>rf.maxAccuracyM) || (accB && accB>rf.maxAccuracyM)) return {ok:false, reason:`плохая точность > ${rf.maxAccuracyM}м`};
+    const tA=adminFix66PointTs(prev), tB=adminFix66PointTs(cur);
+    const dt=Math.max(0,(tB-tA)/1000);
+    if(!dt || dt>rf.maxGapMinutes*60) return {ok:false, reason:`разрыв > ${rf.maxGapMinutes} мин`};
+    const meters=distanceMeters(prev,cur);
+    const calcKmh=meters/Math.max(1,dt)*3.6;
+    if(calcKmh>rf.maxSpeedKmh) return {ok:false, reason:`скачок ${calcKmh.toFixed(0)} км/ч`};
+    const spA=adminFix66Speed(prev), spB=adminFix66Speed(cur);
+    if(rf.ignoreStopDrift && meters<rf.minSegmentM && Math.max(spA,spB)<3) return {ok:false, reason:'дрейф на стоянке'};
+    if(rf.ignoreStopDrift && Math.max(spA,spB)<1.2 && calcKmh>12) return {ok:false, reason:'дрейф без движения'};
+    return {ok:true, meters, calcKmh, reason:'ok'};
+  };
+}
+async function fix70SaveRouteFilter(defaults=false){
+  const routeFilter = defaults ? {maxAccuracyM:100,maxSpeedKmh:250,maxGapMinutes:5,minSegmentM:8,ignoreStopDrift:true} : fix70ReadRouteFilterUi();
+  adminSettings.routeFilter = routeFilter;
+  await update(ref(db,'adminSettings/config'), {routeFilter});
+  fix70ApplyRouteFilterUi();
+  try{ await renderHistory(); }catch(e){}
+  showToast?.('Фильтр пробега сохранён','success');
+}
+function fix70Retention(){ const r=adminSettings.logRetention||{}; return {gpsDays:Number(r.gpsDays??14),eventsDays:Number(r.eventsDays??30),adminLogsDays:Number(r.adminLogsDays??30)}; }
+function fix70ApplyRetentionUi(){ const r=fix70Retention(); if(fix70Qs('gpsLogsRetentionDaysInput')) fix70Qs('gpsLogsRetentionDaysInput').value=r.gpsDays; if(fix70Qs('eventsRetentionDaysInput')) fix70Qs('eventsRetentionDaysInput').value=r.eventsDays; if(fix70Qs('adminLogsRetentionDaysInput')) fix70Qs('adminLogsRetentionDaysInput').value=r.adminLogsDays; if(fix70Qs('autoCleanupStatusText')) fix70Qs('autoCleanupStatusText').textContent=`GPS ${r.gpsDays}д · events ${r.eventsDays}д · admin ${r.adminLogsDays}д`; }
+function fix70ReadRetentionUi(){ return {gpsDays:Number(fix70Qs('gpsLogsRetentionDaysInput')?.value||14), eventsDays:Number(fix70Qs('eventsRetentionDaysInput')?.value||30), adminLogsDays:Number(fix70Qs('adminLogsRetentionDaysInput')?.value||30)}; }
+function fix70CountOldGpsLogs(rootVal, cutoff){ let count=0; Object.entries(rootVal||{}).forEach(([uid,logs])=>Object.entries(logs||{}).forEach(([id,item])=>{ if(fix70Ts(item?.ts||item?.timestamp)<cutoff) count++; })); return count; }
+function fix70CountOldEvents(rootVal, cutoff){ let count=0; Object.entries(rootVal||{}).forEach(([uid,logs])=>Object.entries(logs||{}).forEach(([id,item])=>{ if(fix70Ts(item?.timestamp||item?.ts)<cutoff) count++; })); return count; }
+function fix70CountOldFlat(rootVal, cutoff){ let count=0; Object.entries(rootVal||{}).forEach(([id,item])=>{ if(fix70Ts(item?.timestamp||item?.ts||item?.createdAt)<cutoff) count++; }); return count; }
+async function fix70PreviewOrRunLogCleanup(run=false){
+  const r=fix70ReadRetentionUi(); const now=Date.now();
+  const [gpsSnap,eventsSnap,adminSnap]=await Promise.all([get(ref(db,'gpsServiceLogs')).catch(()=>({val:()=>({})})), get(ref(db,'events')).catch(()=>({val:()=>({})})), get(ref(db,'adminLogs')).catch(()=>({val:()=>({})}))]);
+  const gpsVal=gpsSnap.val()||{}, eventsVal=eventsSnap.val()||{}, adminVal=adminSnap.val()||{};
+  const gpsCut=now-r.gpsDays*86400000, evCut=now-r.eventsDays*86400000, admCut=now-r.adminLogsDays*86400000;
+  const updates={}; let gps=0, ev=0, adm=0;
+  Object.entries(gpsVal).forEach(([uid,logs])=>Object.entries(logs||{}).forEach(([id,item])=>{ if(fix70Ts(item?.ts||item?.timestamp)<gpsCut){ gps++; if(run) updates[`gpsServiceLogs/${uid}/${id}`]=null; }}));
+  Object.entries(eventsVal).forEach(([uid,logs])=>Object.entries(logs||{}).forEach(([id,item])=>{ if(fix70Ts(item?.timestamp||item?.ts)<evCut){ ev++; if(run) updates[`events/${uid}/${id}`]=null; }}));
+  Object.entries(adminVal).forEach(([id,item])=>{ if(fix70Ts(item?.timestamp||item?.ts||item?.createdAt)<admCut){ adm++; if(run) updates[`adminLogs/${id}`]=null; }});
+  if(run && Object.keys(updates).length){ await update(ref(db), updates); try{ await logAction('log_cleanup', `Удалено логов: GPS ${gps}, events ${ev}, admin ${adm}`); }catch(e){} }
+  const res=`${run?'Удалено':'Будет удалено'}:\nGPS logs: ${gps}\nevents: ${ev}\nadminLogs: ${adm}`;
+  const box=fix70Qs('logCleanupResult'); if(box){ box.classList.remove('hidden'); box.textContent=res; }
+  showToast?.(run?'Старые логи очищены':'Проверка логов готова', run?'success':'info');
+}
+async function fix70SaveRetention(){ const logRetention=fix70ReadRetentionUi(); adminSettings.logRetention=logRetention; await update(ref(db,'adminSettings/config'), {logRetention}); fix70ApplyRetentionUi(); showToast?.('Сроки хранения сохранены','success'); }
+async function fix70CollectDiagnostics(){
+  const uid=selectedUid||fix70Qs('userSelect')?.value||'';
+  const out={version:ADMIN_FIX70_VERSION, exportedAt:new Date().toISOString(), selectedUid:uid, selectedUser:uid?{uid,name:getDisplayName(uid),meta:usersMeta?.[uid]||null}:null, adminSettings};
+  const safe=async(path, lim=0)=>{ try{ const r=lim?query(ref(db,path),limitToLast(lim)):ref(db,path); const s=await get(r); return s.val()||null; }catch(e){ return {error:errText?.(e)||String(e)}; } };
+  out.live = uid ? await safe(`live/${uid}`) : await safe('live');
+  out.liveOwner = uid ? await safe(`liveOwners/${uid}`) : null;
+  out.liveSessions = await safe('liveSessions',80);
+  out.gpsServiceLogs = uid ? await safe(`gpsServiceLogs/${uid}`,120) : await safe('gpsServiceLogs');
+  out.events = uid ? await safe(`events/${uid}`,120) : await safe('events');
+  out.eventJournal = uid ? await safe(`eventJournal/${uid}`,80) : null;
+  out.adminLogs = await safe('adminLogs',120);
+  out.errors = (errorLogs||[]).slice(-80);
+  out.lastHistoryPoints = uid ? await safe(`history/${uid}`,80) : null;
+  return out;
+}
+function fix70DownloadJson(obj, name){ const blob=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(url); a.remove();},1000); }
+async function fix70DownloadDiagnostics(){ const data=await fix70CollectDiagnostics(); fix70DownloadJson(data, `mygps_diagnostics_${selectedUid||'all'}_${new Date().toISOString().replace(/[:.]/g,'-')}.json`); showToast?.('Диагностика скачана','success'); }
+function fix70SetPost(id, html){ const el=fix70Qs(id); if(el) el.innerHTML=html; }
+async function fix70RunPostUpdateCheck(){
+  const tbody=fix70Qs('postUpdateTbody'); if(tbody) tbody.innerHTML='';
+  const rows=[]; const add=(name,ok,details)=>rows.push({name,ok,details});
+  const user=auth?.currentUser||null; add('Auth',!!user,user?user.email||user.uid:'нет входа');
+  add('Выбранный пользователь',!!selectedUid,selectedUid?`${getDisplayName(selectedUid)} · ${selectedUid}`:'не выбран');
+  let gpsOk=false, liveOk=false, rulesOk=true;
+  try{ const s=selectedUid?await get(query(ref(db,`gpsServiceLogs/${selectedUid}`),limitToLast(1))):await get(ref(db,'gpsServiceLogs')); gpsOk=s.exists(); add('gpsServiceLogs read',true,gpsOk?'доступ есть, записи найдены':'доступ есть, записей пока нет'); }catch(e){ add('gpsServiceLogs read',false,errText?.(e)||e); rulesOk=false; }
+  try{ const s=await get(query(ref(db,'liveSessions'),limitToLast(1))); liveOk=true; add('liveSessions read',true,s.exists()?'доступ есть':'доступ есть, сессий нет'); }catch(e){ add('liveSessions read',false,errText?.(e)||e); rulesOk=false; }
+  try{ await get(ref(db,'adminSettings/config')); add('adminSettings read',true,'OK'); }catch(e){ add('adminSettings read',false,errText?.(e)||e); rulesOk=false; }
+  const latestLog=(gpsServiceLogs||[]).filter(x=>!selectedUid||x.uid===selectedUid).sort((a,b)=>fix70Ts(b.ts||b.timestamp)-fix70Ts(a.ts||a.timestamp))[0];
+  add('Background GPS по последнему логу',!!latestLog, latestLog?`${fmtTime(latestLog.ts||latestLog.timestamp)} · ${latestLog.title||latestLog.type||''} · ${latestLog.message||''}`:'нет GPS логов');
+  if(tbody){ tbody.innerHTML=rows.map(r=>`<tr><td>${fix70Esc(r.name)}</td><td>${fix70Badge(r.ok?'OK':'Проблема',r.ok?'ok':'err')}</td><td>${fix70Esc(r.details)}</td></tr>`).join(''); }
+  fix70SetPost('postAuthStatus',fix70Badge(user?'OK':'Нет входа',user?'ok':'err'));
+  fix70SetPost('postSelectedUser',selectedUid?fix70Esc(getDisplayName(selectedUid)||selectedUid):fix70Badge('не выбран','warn'));
+  fix70SetPost('postGpsLogStatus',fix70Badge(gpsOk?'OK':'пусто/нет',gpsOk?'ok':'warn'));
+  fix70SetPost('postLiveStatus',fix70Badge(liveOk?'OK':'ошибка',liveOk?'ok':'err'));
+  fix70SetPost('postRulesStatus',fix70Badge(rulesOk?'OK':'есть ошибки',rulesOk?'ok':'err'));
+  fix70SetPost('postBackgroundGpsStatus',latestLog?fix70Esc(gpsLogStopReasonText?.(latestLog)||latestLog.message||'есть лог'):fix70Badge('нет логов','warn'));
+  fix70SetPost('postUpdateSummary',fix70Badge(rows.every(r=>r.ok)?'OK':'Проверь строки',rows.every(r=>r.ok)?'ok':'warn'));
+  showToast?.('Проверка после обновления готова', rows.every(r=>r.ok)?'success':'warn');
+}
+function fix70EnsurePostUpdateTab(){
+  document.querySelectorAll('.tab-btn[data-tab="postUpdatePanel"]').forEach(btn=>{
+    if(btn.dataset.fix70) return; btn.dataset.fix70='1';
+    btn.addEventListener('click',()=>{
+      document.querySelectorAll('.tab-btn[data-tab]').forEach(b=>b.classList.toggle('active',b===btn));
+      document.querySelectorAll('#adminPanel > div[id$="Panel"], #nowPanel, #historyPanel, #reportsPanel, #usagePanel, #trafficPanel, #sessionsPanel, #usersPanel, #visibilityPanel, #geofencesPanel, #journalPanel, #gpsLogPanel, #alertsPanel, #errorsPanel, #systemCheckPanel, #postUpdatePanel, #adminLogsPanel, #settingsPanel').forEach(p=>p.classList.add('hidden'));
+      fix70Qs('postUpdatePanel')?.classList.remove('hidden');
+    }, true);
+  });
+}
+function fix70NearestReplayEvents(point){
+  if(!point || !fix70Qs('replayEventsEnabledToggle')?.checked) return [];
+  const ts=fix70Ts(point.timestamp||point.ts); if(!ts) return [];
+  const events=(typeof adminFix68TimelineEvents!=='undefined' && Array.isArray(adminFix68TimelineEvents)) ? adminFix68TimelineEvents : [];
+  return events.map((ev,i)=>({...ev,_idx:i,_diff:Math.abs(fix70Ts(ev.ts)-ts)})).filter(ev=>ev._diff<=2*60*1000).sort((a,b)=>a._diff-b._diff).slice(0,8);
+}
+function fix70RenderReplayNearbyEvents(point){
+  const tbody=fix70Qs('replayNearbyEventsTbody'); if(!tbody) return;
+  const events=fix70NearestReplayEvents(point);
+  if(!point){ tbody.innerHTML='<tr><td colspan="5">Нет текущей точки replay.</td></tr>'; return; }
+  if(!events.length){ tbody.innerHTML='<tr><td colspan="5">Рядом с текущей точкой событий нет. Нажми “Обновить события”, если timeline ещё не построен.</td></tr>'; return; }
+  tbody.innerHTML=events.map(ev=>{ const diff=Math.round(ev._diff/1000); const kind=fix68TimelineKind?.(ev)||ev.kind||'event'; return `<tr class="${diff<=20?'replayEventNow':''}"><td>${diff} сек</td><td>${fmtTime(ev.ts)}</td><td><span class="timelineBadge ${fix70Esc(kind)}">${fix70Esc(kind)}</span></td><td>${fix70Esc(ev.title||'event')}<div class="smallMuted">${fix70Esc(ev.message||'')}</div></td><td><button class="secondary small" data-replay-event="${ev._idx}">К событию</button></td></tr>`; }).join('');
+  tbody.querySelectorAll('[data-replay-event]').forEach(btn=>btn.onclick=()=>{ const ev=adminFix68TimelineEvents[Number(btn.dataset.replayEvent)]; if(ev?._latlng) historyMap.setView(ev._latlng,Math.max(historyMap.getZoom(),15)); });
+}
+const fix70OldSetReplayInfo = typeof setReplayInfo === 'function' ? setReplayInfo : null;
+if(fix70OldSetReplayInfo){ setReplayInfo = function(point){ fix70OldSetReplayInfo.apply(this,arguments); try{ fix70RenderReplayNearbyEvents(point); }catch(e){} }; }
+function fix70Install(){
+  fix70EnsurePostUpdateTab();
+  fix70ApplyRouteFilterUi(); fix70ApplyRetentionUi();
+  const saveRf=fix70Qs('saveRouteFilterBtn'); if(saveRf&&!saveRf.dataset.fix70){ saveRf.dataset.fix70='1'; saveRf.onclick=()=>fix70SaveRouteFilter(false).catch(e=>showToast?.('Ошибка фильтра: '+(errText?.(e)||e),'error')); }
+  const resetRf=fix70Qs('resetRouteFilterBtn'); if(resetRf&&!resetRf.dataset.fix70){ resetRf.dataset.fix70='1'; resetRf.onclick=()=>fix70SaveRouteFilter(true).catch(e=>showToast?.('Ошибка фильтра: '+(errText?.(e)||e),'error')); }
+  const saveRet=fix70Qs('saveCleanupSettingsBtn'); if(saveRet&&!saveRet.dataset.fix70){ saveRet.dataset.fix70='1'; saveRet.onclick=()=>fix70SaveRetention().catch(e=>showToast?.('Ошибка хранения: '+(errText?.(e)||e),'error')); }
+  const prev=fix70Qs('previewLogCleanupBtn'); if(prev&&!prev.dataset.fix70){ prev.dataset.fix70='1'; prev.onclick=()=>fix70PreviewOrRunLogCleanup(false).catch(e=>showToast?.('Ошибка проверки логов: '+(errText?.(e)||e),'error')); }
+  const run=fix70Qs('runLogCleanupBtn'); if(run&&!run.dataset.fix70){ run.dataset.fix70='1'; run.onclick=()=>{ if(confirm('Очистить старые GPS/events/admin логи по настройкам хранения? История маршрутов не трогается.')) fix70PreviewOrRunLogCleanup(true).catch(e=>showToast?.('Ошибка очистки логов: '+(errText?.(e)||e),'error')); }; }
+  ['downloadDiagBtn','downloadPostUpdateDiagBtn'].forEach(id=>{ const b=fix70Qs(id); if(b&&!b.dataset.fix70){ b.dataset.fix70='1'; b.onclick=()=>fix70DownloadDiagnostics().catch(e=>showToast?.('Ошибка диагностики: '+(errText?.(e)||e),'error')); }});
+  const post=fix70Qs('runPostUpdateCheckBtn'); if(post&&!post.dataset.fix70){ post.dataset.fix70='1'; post.onclick=()=>fix70RunPostUpdateCheck().catch(e=>showToast?.('Ошибка проверки: '+(errText?.(e)||e),'error')); }
+  const rb=fix70Qs('replayBuildTimelineBtn'); if(rb&&!rb.dataset.fix70){ rb.dataset.fix70='1'; rb.onclick=()=>{ if(typeof fix68BuildRouteTimeline==='function') fix68BuildRouteTimeline().then(()=>{ fix70RenderReplayNearbyEvents(replayState?.points?.[replayState?.index]); showToast?.('События для replay обновлены','success'); }).catch(e=>showToast?.('Ошибка событий: '+(errText?.(e)||e),'error')); }; }
+  const rt=fix70Qs('replayEventsEnabledToggle'); if(rt&&!rt.dataset.fix70){ rt.dataset.fix70='1'; rt.onchange=()=>fix70RenderReplayNearbyEvents(replayState?.points?.[replayState?.index]); }
+}
+const fix70OldLoadAdminSettings = typeof loadAdminSettings === 'function' ? loadAdminSettings : null;
+if(fix70OldLoadAdminSettings){ loadAdminSettings = async function(){ await fix70OldLoadAdminSettings.apply(this,arguments); try{ fix70ApplyRouteFilterUi(); fix70ApplyRetentionUi(); }catch(e){} }; }
+window.addEventListener('load',()=>setTimeout(fix70Install,1200));
+setTimeout(fix70Install,2500);
+/* === /Admin fix_70 === */
 
 
 
