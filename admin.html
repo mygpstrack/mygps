@@ -435,6 +435,37 @@
     .gpsLogRowSleep{background:rgba(180,83,9,.09)}
     .gpsLogRowGood{background:rgba(22,163,74,.07)}
 
+
+
+/* === Admin diagnostics upgrade fix_66 === */
+.gpsDiagGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:12px}
+.gpsDiagCard{padding:12px 14px;border-radius:16px;border:1px solid var(--border);background:rgba(255,255,255,.035);line-height:1.45}
+.gpsDiagCard b{display:block;margin-bottom:4px;color:#fff}
+.gpsLogProblemToggle{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;border:1px solid var(--border);background:rgba(255,255,255,.04)}
+.gpsLogTypeBadge{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:999px;border:1px solid var(--border);font-size:12px;font-weight:900}
+.gpsLogTypeBadge.service{background:rgba(100,116,139,.18);border-color:#475569;color:#cbd5e1}
+.gpsLogTypeBadge.gps{background:rgba(22,163,74,.20);border-color:#166534;color:#bbf7d0}
+.gpsLogTypeBadge.live{background:rgba(37,99,235,.20);border-color:#1d4ed8;color:#bfdbfe}
+.gpsLogTypeBadge.sleep{background:rgba(234,179,8,.18);border-color:#a16207;color:#fde68a}
+.gpsLogTypeBadge.filter{background:rgba(180,83,9,.20);border-color:#92400e;color:#fed7aa}
+tr.gpsLogRowGood{background:rgba(22,163,74,.07)}
+tr.gpsLogRowSleep,tr.gpsLogRowWarn{background:rgba(234,179,8,.08)}
+tr.gpsLogRowStop,tr.gpsLogRowError{background:rgba(185,28,28,.13)}
+.historyModeBox{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px}
+.historyModeBox .active{background:#16a34a!important}
+.cleanDistanceHint{border-color:rgba(34,197,94,.25);background:rgba(22,163,74,.08)}
+.geofenceMiniBadge{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:999px;border:1px solid var(--border);font-size:12px;font-weight:800;margin-right:4px}
+.geofenceMiniBadge.on{background:rgba(22,163,74,.18);border-color:#166534;color:#bbf7d0}
+.geofenceMiniBadge.off{background:rgba(100,116,139,.18);border-color:#475569;color:#cbd5e1}
+.liveHealthGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:12px}
+.liveHealthBox{padding:12px 14px;border-radius:14px;border:1px solid var(--border);background:rgba(255,255,255,.035);line-height:1.45}
+.visibilityTools{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+.visibilityTools input{max-width:260px}
+.onlineDot{display:inline-block;width:9px;height:9px;border-radius:999px;margin-right:6px;background:#64748b}
+.onlineDot.online{background:#22c55e}
+@media(max-width:900px){.gpsDiagGrid,.liveHealthGrid{grid-template-columns:1fr}.visibilityTools input{max-width:none}}
+/* === /Admin diagnostics upgrade fix_66 === */
+
 </style>
 </head>
 <body>
@@ -556,6 +587,12 @@
     <div id="nowPanel">
       <div class="card">
         <h2>Сейчас</h2>
+        <div class="gpsDiagGrid" id="nowGpsDiagGrid">
+          <div class="gpsDiagCard"><b>GPS</b><span id="nowGpsDiagState">—</span></div>
+          <div class="gpsDiagCard"><b>Service</b><span id="nowGpsDiagService">—</span></div>
+          <div class="gpsDiagCard"><b>Smart GPS</b><span id="nowGpsDiagSmart">—</span></div>
+          <div class="gpsDiagCard"><b>Последний лог</b><span id="nowGpsDiagLast">—</span></div>
+        </div>
         <div class="grid4">
           <div class="stat"><div class="label">Статус</div><div class="value" id="nowStatus">Нет данных</div></div>
           <div class="stat"><div class="label">Источник</div><div class="value" id="nowSource">—</div></div>
@@ -616,6 +653,13 @@
           <button id="applyFiltersBtn" class="secondary">Применить</button>
           <button id="resetFiltersBtn" class="secondary">Сбросить</button>
         </div>
+        <div class="historyModeBox">
+          <span class="smallMuted">Расчёт пробега:</span>
+          <button id="distanceModeCleanBtn" class="small active" type="button">Чистый пробег</button>
+          <button id="distanceModeRawBtn" class="small secondary" type="button">Сырой пробег</button>
+          <label class="pill"><input id="showRejectedSegmentsToggle" type="checkbox" style="width:auto;min-width:auto"/> Показывать отброшенные сегменты</label>
+        </div>
+        <div id="cleanDistanceNotice" class="notice cleanDistanceHint smallMuted">Чистый пробег не считает GPS-дрейф на стоянке, плохую точность и невозможные скачки.</div>
         <div class="toolbar">
           <button id="fitRouteBtn" class="secondary">Центрировать маршрут</button>
           <button id="lastRouteBtn" class="secondary">Последний маршрут</button>
@@ -847,6 +891,13 @@
 
       <div class="card">
         <h2>Управление live-сессиями</h2>
+        <div class="liveHealthGrid" id="liveHealthGrid">
+          <div class="liveHealthBox"><b>Активные</b><div id="liveHealthActive">—</div></div>
+          <div class="liveHealthBox"><b>LastPoint</b><div id="liveHealthLastPoint">—</div></div>
+          <div class="liveHealthBox"><b>Meta</b><div id="liveHealthMeta">—</div></div>
+          <div class="liveHealthBox"><b>Проблема</b><div id="liveHealthProblem">—</div></div>
+        </div>
+        <div class="toolbar"><button id="checkLiveHealthBtn" class="secondary" type="button">Проверить live</button></div>
         <div class="grid4">
           <div><div class="label">Поиск token</div><input id="sessionSearchInput" placeholder="Поиск"/></div>
           <div><div class="label">Статус</div><select id="sessionStatusFilter"><option value="all">Все</option><option value="active">Активные</option><option value="expired">Истёкшие</option><option value="ended">Завершённые</option></select></div>
@@ -922,6 +973,12 @@
           <div class="card" style="margin:0">
             <h3 id="visibilitySelectedTitle">Кого видит пользователь</h3>
             <div class="smallMuted">Отметь пользователей, которые будут видны на карте в приложении.</div>
+            <div class="visibilityTools">
+              <input id="visibilitySearchInput" placeholder="Поиск пользователя"/>
+              <button id="visibilityTemplateAllBtn" class="secondary small" type="button">Шаблон: все видят всех</button>
+              <button id="visibilityTemplateNoneBtn" class="secondary small" type="button">Шаблон: никто никого</button>
+              <button id="visibilityTemplatePairBtn" class="secondary small" type="button">Шаблон: только выбранные пары</button>
+            </div>
             <div class="toolbar">
               <button id="visibilitySelectAllBtn" class="secondary">Выбрать всех</button>
               <button id="visibilityClearAllBtn" class="secondary">Очистить</button>
@@ -941,6 +998,12 @@
           <div><div class="label">Широта</div><input id="geofenceLatInput" type="number" step="0.000001" placeholder="56.9496"></div>
           <div><div class="label">Долгота</div><input id="geofenceLonInput" type="number" step="0.000001" placeholder="24.1052"></div>
           <div><div class="label">Радиус, м</div><input id="geofenceRadiusInput" type="number" min="10" step="1" value="100"></div>
+        </div>
+        <div class="grid4" style="margin-top:12px">
+          <div class="stat"><div class="label">Состояние зоны</div><label class="pill"><input id="geofenceActiveInput" type="checkbox" checked style="width:auto;min-width:auto"/> Активна</label></div>
+          <div><div class="label">Цвет</div><input id="geofenceColorInput" type="color" value="#22c55e" style="min-width:80px;width:120px;height:46px"></div>
+          <div><div class="label">Антиспам, мин</div><input id="geofenceCooldownInput" type="number" min="0" step="1" value="5"></div>
+          <div><div class="label">Пользователи зоны</div><select id="geofenceUsersInput" multiple size="3"></select><div class="smallMuted">Пусто = все пользователи</div></div>
         </div>
         <div class="toolbar" style="margin-top:12px">
           <button id="useNowPointForGeofenceBtn" class="secondary">Взять текущую точку</button>
@@ -1078,7 +1141,9 @@
           <div class="stat"><div class="label">Записей</div><div class="value" id="gpsLogCount">0</div></div>
           <div class="stat"><div class="label">Источник</div><div class="value">gpsServiceLogs</div></div>
         </div>
+        <div class="notice" id="gpsLogStopReasonBox"><strong>Почему GPS выключился:</strong> <span id="gpsLogStopReason">—</span></div>
         <div class="toolbar">
+          <label class="gpsLogProblemToggle"><input id="gpsLogProblemsOnly" type="checkbox" style="width:auto;min-width:auto"/> Только проблемы</label>
           <button id="refreshGpsLogBtn" class="secondary">Обновить GPS лог</button>
           <button id="clearSelectedGpsLogBtn" class="warn">Очистить выбранного</button>
         </div>
@@ -3108,127 +3173,28 @@ async function reverseGeocode(lat, lon){
 
 function distanceMeters(a,b){
   const toRad=v=>v*Math.PI/180, R=6371000;
-  const dLat=toRad(Number(b.latitude)-Number(a.latitude)), dLon=toRad(Number(b.longitude)-Number(a.longitude));
-  const lat1=toRad(Number(a.latitude)), lat2=toRad(Number(b.latitude));
+  const dLat=toRad(b.latitude-a.latitude), dLon=toRad(b.longitude-a.longitude);
+  const lat1=toRad(a.latitude), lat2=toRad(b.latitude);
   const x=Math.sin(dLat/2)**2+Math.sin(dLon/2)**2*Math.cos(lat1)*Math.cos(lat2);
   return R*(2*Math.atan2(Math.sqrt(x), Math.sqrt(1-x)));
 }
-
-function normalizeRoutePoint(p){
-  if(!p) return null;
-  const latitude = Number(p.latitude ?? p.lat);
-  const longitude = Number(p.longitude ?? p.lng ?? p.lon);
-  const timestamp = Number(p.timestamp ?? p.ts ?? p.time ?? 0);
-  if(!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
-  if(Math.abs(latitude) > 90 || Math.abs(longitude) > 180) return null;
-  return { ...p, latitude, longitude, timestamp };
-}
-
-function routeSpeedKmh(p){
-  const v = Number(p?.speedKmh ?? p?.speed ?? p?.speedRawKmh ?? 0);
-  return Number.isFinite(v) ? Math.max(0, v) : 0;
-}
-
-function routeAccuracyM(p){
-  const v = Number(p?.accuracy ?? 0);
-  return Number.isFinite(v) ? Math.max(0, v) : 0;
-}
-
-function getDistanceAccuracyLimit(){
-  const configured = Number(adminSettings.junkAccuracyMeters || adminSettings.gpsAccuracyMax || 100);
-  return Number.isFinite(configured) && configured > 0 ? Math.min(100, Math.max(25, configured)) : 80;
-}
-
-function isPlausibleRouteSegment(prev, cur){
-  if(!prev || !cur) return false;
-  const ts1 = Number(prev.timestamp || 0);
-  const ts2 = Number(cur.timestamp || 0);
-  const dt = (ts2 - ts1) / 1000;
-  if(!Number.isFinite(dt) || dt <= 0) return false;
-  // Большой разрыв почти всегда даёт прямую линию и завышает путь.
-  if(dt > 30 * 60) return false;
-
-  const acc1 = routeAccuracyM(prev);
-  const acc2 = routeAccuracyM(cur);
-  const accLimit = getDistanceAccuracyLimit();
-  if((acc1 > 0 && acc1 > accLimit) || (acc2 > 0 && acc2 > accLimit)) return false;
-
-  const dist = distanceMeters(prev, cur);
-  if(!Number.isFinite(dist) || dist <= 0) return false;
-
-  const calcSpeed = (dist / dt) * 3.6;
-  const impossible = Number(adminSettings.impossibleSpeedKmh || adminSettings.gpsImpossibleSpeed || 250);
-  if(calcSpeed > (Number.isFinite(impossible) && impossible > 0 ? impossible : 250)) return false;
-
-  const sp1 = routeSpeedKmh(prev);
-  const sp2 = routeSpeedKmh(cur);
-  const speedEvidence = Math.max(sp1, sp2, calcSpeed);
-  const noiseRadius = Math.max(18, Math.min(75, Math.max(acc1 || 0, acc2 || 0) * 1.4));
-
-  // Стоянка с плавающими координатами не должна превращаться в километры.
-  if(sp1 < 1.2 && sp2 < 1.2 && calcSpeed < 2.5) return false;
-  if(sp1 < 2 && sp2 < 2 && dist <= noiseRadius) return false;
-
-  // Очень маленькие сегменты без признаков движения считаем GPS-шумом.
-  if(dist < 3 && speedEvidence < 3) return false;
-
-  return true;
-}
-
-function cleanRoutePointsForDistance(points){
-  return (points || [])
-    .map(normalizeRoutePoint)
-    .filter(Boolean)
-    .sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
-}
-
-function routeDistanceMeters(points){
-  const ordered = cleanRoutePointsForDistance(points);
-  let meters = 0;
-  let countedSegments = 0;
-  let skippedSegments = 0;
-  for(let i=1;i<ordered.length;i++){
-    if(isPlausibleRouteSegment(ordered[i-1], ordered[i])){
-      meters += distanceMeters(ordered[i-1], ordered[i]);
-      countedSegments++;
-    }else{
-      skippedSegments++;
-    }
-  }
-  return { meters, countedSegments, skippedSegments, points: ordered };
-}
-
 function looksJunk(prev,cur){
-  cur = normalizeRoutePoint(cur);
-  prev = normalizeRoutePoint(prev);
-  if(!cur) return true;
-  const acc=routeAccuracyM(cur), sp=routeSpeedKmh(cur);
-  const maxAcc = getDistanceAccuracyLimit();
+  const acc=Number(cur.accuracy||0), sp=Number(cur.speed||0);
+  const maxAcc = Number(adminSettings.junkAccuracyMeters || adminSettings.gpsAccuracyMax || 100);
   const impossible = Number(adminSettings.impossibleSpeedKmh || adminSettings.gpsImpossibleSpeed || 250);
   if(acc>maxAcc) return true;
   if(prev){
     const dist=distanceMeters(prev,cur), dt=Math.max(1,(Number(cur.timestamp||0)-Number(prev.timestamp||0))/1000), calcSpeed=dist/dt*3.6;
     if(sp<=.5 && calcSpeed>30) return true;
-    if(calcSpeed>(Number.isFinite(impossible) && impossible > 0 ? impossible : 250)) return true;
+    if(calcSpeed>impossible) return true;
   }
   return false;
 }
 function computeSummary(points){
-  const route = routeDistanceMeters(points || []);
-  if(!route.points.length) return {count:0,km:0,avgSpeed:0,maxSpeed:0,skippedSegments:0,countedSegments:0};
-  const speeds=route.points.map(routeSpeedKmh).filter(v=>Number.isFinite(v)&&v>0);
-  const startTs = Number(route.points[0]?.timestamp || 0);
-  const endTs = Number(route.points[route.points.length-1]?.timestamp || 0);
-  const hours = endTs > startTs ? (endTs - startTs) / 3600000 : 0;
-  const avgSpeed = speeds.length ? speeds.reduce((a,b)=>a+b,0)/speeds.length : (hours > 0 ? (route.meters/1000)/hours : 0);
-  return {
-    count:route.points.length,
-    km:route.meters/1000,
-    avgSpeed,
-    maxSpeed:speeds.length ? Math.max(...speeds) : 0,
-    skippedSegments:route.skippedSegments,
-    countedSegments:route.countedSegments
-  };
+  if(!points.length) return {count:0,km:0,avgSpeed:0,maxSpeed:0};
+  let meters=0; for(let i=1;i<points.length;i++) meters += distanceMeters(points[i-1],points[i]);
+  const speeds=points.map(p=>Number(p.speed||0)).filter(v=>Number.isFinite(v)&&v>0);
+  return { count:points.length, km:meters/1000, avgSpeed:speeds.length ? speeds.reduce((a,b)=>a+b,0)/speeds.length : 0, maxSpeed:speeds.length ? Math.max(...speeds) : 0 };
 }
 function detectStops(points){
   const stops=[]; let startIdx=null;
@@ -3615,15 +3581,17 @@ function updateTodaySummary(){
       .filter(p => p && Number(p.timestamp || 0) >= todayStart)
       .sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
 
-    const route = routeDistanceMeters(points);
-    const meters = route.meters;
+    let meters = 0;
+    for(let i=1;i<points.length;i++){
+      try{ meters += distanceMeters(points[i-1], points[i]); }catch(e){}
+    }
 
     let moveMs = 0;
-    for(let i=1;i<route.points.length;i++){
-      const prev = route.points[i-1];
-      const cur = route.points[i];
+    for(let i=1;i<points.length;i++){
+      const prev = points[i-1];
+      const cur = points[i];
       const dt = Math.max(0, Number(cur.timestamp||0) - Number(prev.timestamp||0));
-      if(dt <= 5 * 60 * 1000 && isPlausibleRouteSegment(prev, cur)) moveMs += dt;
+      if(dt <= 5 * 60 * 1000 && pointSpeedKmhFix41(cur) > 1) moveMs += dt;
     }
 
     const lastTs = points.length ? Number(points[points.length - 1].timestamp || 0) : 0;
@@ -9842,6 +9810,341 @@ window.addEventListener("load", () => {
   installGpsLogPanel();
   setTimeout(installGpsLogPanel, 1200);
 });
+
+
+/* === Admin diagnostics upgrade fix_66 === */
+const ADMIN_FIX66_MAX_CLEAN_ACCURACY_M = 75;
+const ADMIN_FIX66_MAX_SEGMENT_SPEED_KMH = 180;
+const ADMIN_FIX66_MAX_SEGMENT_SECONDS = 20 * 60;
+let adminDistanceMode = localStorage.getItem("mygps_admin_distance_mode") || "clean";
+let adminShowRejectedSegments = localStorage.getItem("mygps_admin_show_rejected") === "1";
+let rejectedSegmentLayer = null;
+
+function adminFix66SetText(id, value){ const el = qs(id); if(el) el.textContent = value; }
+function adminFix66Escape(v){ return String(v ?? "").replace(/[&<>'"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[ch])); }
+function adminFix66PointTs(p){ return Number(p?.timestamp ?? p?.ts ?? p?.time ?? 0); }
+function adminFix66IsValidPoint(p){
+  const lat = Number(p?.latitude ?? p?.lat), lon = Number(p?.longitude ?? p?.lon);
+  return Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180 && !(Math.abs(lat) < 0.000001 && Math.abs(lon) < 0.000001);
+}
+function adminFix66Accuracy(p){ return Number(p?.accuracy ?? p?.accuracyM ?? 0); }
+function adminFix66Speed(p){ return Number(p?.speed ?? p?.speedKmh ?? 0); }
+function adminFix66NormalizePoint(p){ return {...p, latitude:Number(p?.latitude ?? p?.lat), longitude:Number(p?.longitude ?? p?.lon), timestamp:adminFix66PointTs(p)}; }
+function adminFix66Sorted(points){ return (points||[]).filter(adminFix66IsValidPoint).map(adminFix66NormalizePoint).sort((a,b)=>adminFix66PointTs(a)-adminFix66PointTs(b)); }
+function adminFix66SegmentDecision(prev, cur){
+  if(!prev || !cur) return {ok:false, reason:"нет точки"};
+  if(!adminFix66IsValidPoint(prev) || !adminFix66IsValidPoint(cur)) return {ok:false, reason:"invalid coordinates"};
+  const accA = adminFix66Accuracy(prev), accB = adminFix66Accuracy(cur);
+  const maxAcc = Number(adminSettings?.junkAccuracyMeters || adminSettings?.gpsAccuracyMax || ADMIN_FIX66_MAX_CLEAN_ACCURACY_M);
+  if((accA && accA > maxAcc) || (accB && accB > maxAcc)) return {ok:false, reason:`плохая точность > ${maxAcc}м`};
+  const tA = adminFix66PointTs(prev), tB = adminFix66PointTs(cur);
+  const dt = Math.max(0, (tB-tA)/1000);
+  if(!dt || dt > ADMIN_FIX66_MAX_SEGMENT_SECONDS) return {ok:false, reason:"большой разрыв времени"};
+  const meters = distanceMeters(prev, cur);
+  const calcKmh = meters / Math.max(1, dt) * 3.6;
+  const impossible = Number(adminSettings?.impossibleSpeedKmh || adminSettings?.gpsImpossibleSpeed || ADMIN_FIX66_MAX_SEGMENT_SPEED_KMH);
+  if(calcKmh > impossible) return {ok:false, reason:`невозможный скачок ${calcKmh.toFixed(0)} км/ч`};
+  const spA = adminFix66Speed(prev), spB = adminFix66Speed(cur);
+  if(meters < 8 && Math.max(spA, spB) < 3) return {ok:false, reason:"дрейф на стоянке"};
+  if(Math.max(spA, spB) < 1.2 && calcKmh > 12) return {ok:false, reason:"дрейф без движения"};
+  return {ok:true, meters, calcKmh, reason:"ok"};
+}
+function adminFix66CleanDistance(points){
+  const pts = adminFix66Sorted(points);
+  let meters = 0, rejected = [];
+  for(let i=1;i<pts.length;i++){
+    const d = adminFix66SegmentDecision(pts[i-1], pts[i]);
+    if(d.ok) meters += d.meters;
+    else rejected.push({from:pts[i-1], to:pts[i], reason:d.reason});
+  }
+  return {meters, km:meters/1000, rejected, sorted:pts};
+}
+const adminFix66OriginalComputeSummary = computeSummary;
+computeSummary = function(points){
+  const pts = adminFix66Sorted(points);
+  if(!pts.length) return {count:0,km:0,avgSpeed:0,maxSpeed:0,rejected:0,mode:adminDistanceMode};
+  let km = 0, rejected = 0;
+  if(adminDistanceMode === "raw"){
+    let meters = 0;
+    for(let i=1;i<pts.length;i++) meters += distanceMeters(pts[i-1], pts[i]);
+    km = meters/1000;
+  }else{
+    const clean = adminFix66CleanDistance(pts);
+    km = clean.km; rejected = clean.rejected.length;
+  }
+  const speeds = pts.map(p=>adminFix66Speed(p)).filter(v=>Number.isFinite(v)&&v>0);
+  return { count:pts.length, km, avgSpeed:speeds.length ? speeds.reduce((a,b)=>a+b,0)/speeds.length : 0, maxSpeed:speeds.length ? Math.max(...speeds) : 0, rejected, mode:adminDistanceMode };
+};
+
+const adminFix66OriginalUpdateCharts = updateCharts;
+updateCharts = function(points){
+  const pts = adminFix66Sorted(points);
+  const speedLabels=pts.slice(-100).map(p=>new Date(Number(p.timestamp||0)).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"}));
+  const speedData=pts.slice(-100).map(p=>Number(p.speed||0));
+  if(speedChart) speedChart.destroy();
+  speedChart = new Chart(qs("speedChart"), { type:"line", data:{ labels:speedLabels, datasets:[{ data:speedData, tension:.25 }] }, options:{ responsive:true, plugins:{ legend:{display:false}}, scales:{ y:{beginAtZero:true}} }});
+  const byDay={};
+  pts.forEach(p=>{ const day=new Date(Number(p.timestamp||0)).toLocaleDateString("ru-RU"); byDay[day]=byDay[day]||{points:[],dist:0,count:0,max:0,sum:0}; byDay[day].points.push(p); const sp=Number(p.speed||0); byDay[day].count++; byDay[day].sum+=sp; byDay[day].max=Math.max(byDay[day].max, sp); });
+  Object.keys(byDay).forEach(day=>{ byDay[day].dist = (adminDistanceMode === "raw" ? adminFix66OriginalComputeSummary(byDay[day].points).km : adminFix66CleanDistance(byDay[day].points).km); });
+  const labels=Object.keys(byDay), vals=labels.map(d=>Number(byDay[d].dist.toFixed(2)));
+  if(distanceChart) distanceChart.destroy();
+  distanceChart = new Chart(qs("distanceChart"), { type:"bar", data:{ labels, datasets:[{ data:vals }] }, options:{ responsive:true, plugins:{ legend:{display:false}}, scales:{ y:{beginAtZero:true}} }});
+  const tbody=qs("dailyStatsTbody"); if(!tbody) return; tbody.innerHTML="";
+  labels.forEach(d=>{ const item=byDay[d], tr=document.createElement("tr"); tr.innerHTML=`<td>${d}</td><td>${item.dist.toFixed(2)} км</td><td>${(item.sum/Math.max(1,item.count)).toFixed(1)} км/ч</td><td>${item.max.toFixed(1)} км/ч</td><td>${item.count}</td>`; tbody.appendChild(tr); });
+};
+
+function adminFix66UpdateDistanceModeUi(){
+  const clean = qs("distanceModeCleanBtn"), raw = qs("distanceModeRawBtn"), rejected = qs("showRejectedSegmentsToggle");
+  if(clean) clean.classList.toggle("active", adminDistanceMode === "clean");
+  if(raw) raw.classList.toggle("active", adminDistanceMode === "raw");
+  if(rejected) rejected.checked = adminShowRejectedSegments;
+  const n = qs("cleanDistanceNotice");
+  if(n) n.textContent = adminDistanceMode === "clean" ? "Чистый пробег: стоянка, плохая точность и невозможные скачки не добавляют лишние километры." : "Сырой пробег: складываются все соседние точки. Может завышать путь из-за GPS-дрейфа.";
+}
+function adminFix66RenderRejectedSegments(){
+  try{
+    if(!historyMap) return;
+    if(!rejectedSegmentLayer) rejectedSegmentLayer = L.layerGroup().addTo(historyMap);
+    rejectedSegmentLayer.clearLayers();
+    if(!adminShowRejectedSegments || adminDistanceMode !== "clean") return;
+    const clean = adminFix66CleanDistance(currentFiltered || filteredHistory?.() || []);
+    clean.rejected.slice(0,300).forEach(seg=>{
+      if(!seg.from || !seg.to) return;
+      L.polyline([[seg.from.latitude,seg.from.longitude],[seg.to.latitude,seg.to.longitude]], {color:'#ef4444',weight:3,opacity:.55,dashArray:'6,8'}).bindTooltip(seg.reason || 'отброшено').addTo(rejectedSegmentLayer);
+    });
+  }catch(e){ recordError("adminFix66RenderRejectedSegments", e); }
+}
+const adminFix66OriginalRenderHistory = renderHistory;
+renderHistory = async function(){
+  await adminFix66OriginalRenderHistory.apply(this, arguments);
+  adminFix66UpdateDistanceModeUi();
+  adminFix66RenderRejectedSegments();
+};
+function adminFix66InstallHistoryMode(){
+  adminFix66UpdateDistanceModeUi();
+  const clean = qs("distanceModeCleanBtn"), raw = qs("distanceModeRawBtn"), rejected = qs("showRejectedSegmentsToggle");
+  if(clean && !clean.dataset.fix66){ clean.dataset.fix66="1"; clean.onclick=()=>{ adminDistanceMode="clean"; localStorage.setItem("mygps_admin_distance_mode", adminDistanceMode); renderHistory(); updateCharts(currentFiltered||[]); }; }
+  if(raw && !raw.dataset.fix66){ raw.dataset.fix66="1"; raw.onclick=()=>{ adminDistanceMode="raw"; localStorage.setItem("mygps_admin_distance_mode", adminDistanceMode); renderHistory(); updateCharts(currentFiltered||[]); }; }
+  if(rejected && !rejected.dataset.fix66){ rejected.dataset.fix66="1"; rejected.onchange=()=>{ adminShowRejectedSegments=!!rejected.checked; localStorage.setItem("mygps_admin_show_rejected", adminShowRejectedSegments?'1':'0'); adminFix66RenderRejectedSegments(); }; }
+}
+
+function gpsLogIsProblem(item){
+  const text = `${item.title || ""} ${item.message || ""} ${item.type || ""}`.toLowerCase();
+  return /(ошиб|error|permission|denied|выключ|отключ|stop|останов|kill|force|нет сигнала|no signal|bad|плох|watchdog|restart)/i.test(text);
+}
+function gpsLogStopReasonText(item){
+  if(!item) return "—";
+  const text = `${item.title || ""} ${item.message || ""}`.toLowerCase();
+  if(text.includes("swipe") || text.includes("recent")) return "закрытие свайпом из Recent Apps";
+  if(text.includes("logout") || text.includes("выход")) return "выход из аккаунта";
+  if(text.includes("stop all") || text.includes("откл")) return "явная команда отключения GPS";
+  if(text.includes("permission") || text.includes("denied")) return "нет разрешения на GPS лог / Firebase rules";
+  if(text.includes("sleep")) return "Smart GPS sleep, это не должно выключать GPS";
+  if(text.includes("live")) return "live stop/expire, основной GPS не должен выключаться";
+  if(text.includes("kill") || text.includes("force")) return "Android/OEM убил приложение";
+  return item.message || item.title || "последняя проблемная запись";
+}
+const adminFix66OriginalGpsLogRowClass = gpsLogRowClass;
+gpsLogRowClass = function(item){
+  const base = adminFix66OriginalGpsLogRowClass(item) || "";
+  const text = `${item.title || ""} ${item.message || ""}`.toLowerCase();
+  if(/ошиб|error|permission|denied|выключ|отключ|kill|force/.test(text)) return `${base} gpsLogRowError`.trim();
+  if(/watchdog|sleep|фильтр|плох|bad/.test(text)) return `${base} gpsLogRowWarn`.trim();
+  return base;
+};
+const adminFix66OriginalRenderGpsServiceLogs = renderGpsServiceLogs;
+renderGpsServiceLogs = function(){
+  const tbody = qs("gpsLogTbody");
+  if(!tbody) return;
+  const typeFilter = qs("gpsLogTypeFilter")?.value || "";
+  const uidFilter = qs("gpsLogUserFilter")?.value || "";
+  const onlyProblems = !!qs("gpsLogProblemsOnly")?.checked;
+  let rows = gpsServiceLogs.slice();
+  if(uidFilter) rows = rows.filter(x => x.uid === uidFilter);
+  if(typeFilter) rows = rows.filter(x => gpsLogKind(x) === typeFilter);
+  if(onlyProblems) rows = rows.filter(gpsLogIsProblem);
+  if(qs("gpsLogCount")) qs("gpsLogCount").textContent = String(rows.length);
+  const lastProblem = rows.find(gpsLogIsProblem) || gpsServiceLogs.find(gpsLogIsProblem);
+  adminFix66SetText("gpsLogStopReason", gpsLogStopReasonText(lastProblem));
+  tbody.innerHTML = "";
+  if(!rows.length){ tbody.innerHTML = `<tr><td colspan="6">GPS лог пуст по выбранному фильтру.</td></tr>`; adminFix66UpdateNowGpsStatus(); return; }
+  rows.forEach(item => {
+    const kind = gpsLogKind(item);
+    const tr = document.createElement("tr");
+    const ts = Number(item.ts || item.timestamp || 0);
+    tr.className = gpsLogRowClass(item);
+    tr.innerHTML = `<td>${fmtTime(ts)}</td><td><span class="gpsLogTypeBadge ${kind}">${gpsLogKindLabel(kind)}</span></td><td>${adminFix66Escape(item.title || item.type || "—")}</td><td>${adminFix66Escape(item.message || "—")}</td><td>${adminFix66Escape(getDisplayName(item.uid) || item.uid || "—")}</td><td>${adminFix66Escape(item.source || "android_service")}</td>`;
+    tbody.appendChild(tr);
+  });
+  adminFix66UpdateNowGpsStatus();
+};
+const adminFix66OriginalInstallGpsLogPanel = installGpsLogPanel;
+installGpsLogPanel = function(){
+  adminFix66OriginalInstallGpsLogPanel.apply(this, arguments);
+  const cb = qs("gpsLogProblemsOnly");
+  if(cb && !cb.dataset.fix66){ cb.dataset.fix66="1"; cb.addEventListener("change", renderGpsServiceLogs); }
+};
+
+function adminFix66UpdateNowGpsStatus(){
+  const uid = selectedUid || qs("gpsLogUserFilter")?.value || "";
+  const logs = gpsServiceLogs.filter(x => !uid || x.uid === uid).sort((a,b)=>Number(b.ts||b.timestamp||0)-Number(a.ts||a.timestamp||0));
+  const latest = logs[0];
+  const latestGps = logs.find(x => gpsLogKind(x) === "gps" || /gps/i.test(`${x.title||""} ${x.message||""}`));
+  const latestService = logs.find(x => gpsLogKind(x) === "service" || /service|сервис/i.test(`${x.title||""} ${x.message||""}`));
+  const latestSleep = logs.find(x => gpsLogKind(x) === "sleep");
+  const lastProblem = logs.find(gpsLogIsProblem);
+  adminFix66SetText("nowGpsDiagState", latestGps ? `${latestGps.title || latestGps.type || "GPS"}: ${latestGps.message || "—"}` : "нет GPS лога");
+  adminFix66SetText("nowGpsDiagService", latestService ? `${latestService.title || latestService.type || "Service"}: ${fmtTime(latestService.ts || latestService.timestamp)}` : "нет service лога");
+  adminFix66SetText("nowGpsDiagSmart", latestSleep ? `${latestSleep.message || latestSleep.title || "sleep"}` : "active / нет sleep лога");
+  adminFix66SetText("nowGpsDiagLast", latest ? `${fmtTime(latest.ts || latest.timestamp)} — ${latest.message || latest.title || latest.type || "—"}` : "нет записей");
+  if(lastProblem) adminFix66SetText("gpsLogStopReason", gpsLogStopReasonText(lastProblem));
+}
+const adminFix66OriginalUpdateNow = updateNowFromAvailableSources;
+updateNowFromAvailableSources = function(){
+  const result = adminFix66OriginalUpdateNow.apply(this, arguments);
+  setTimeout(adminFix66UpdateNowGpsStatus, 0);
+  return result;
+};
+
+function adminFix66PopulateGeofenceUsers(){
+  const sel = qs("geofenceUsersInput"); if(!sel) return;
+  const prev = Array.from(sel.selectedOptions||[]).map(o=>o.value);
+  sel.innerHTML = "";
+  (getAllKnownUserIds ? getAllKnownUserIds() : (allUsers||[])).filter(Boolean).forEach(uid=>{
+    const opt=document.createElement("option"); opt.value=uid; opt.textContent=getDisplayName(uid)||uid; if(prev.includes(uid)) opt.selected=true; sel.appendChild(opt);
+  });
+}
+const adminFix66OriginalNormalizeGeofence = normalizeGeofence;
+normalizeGeofence = function(item, index=0){
+  const base = adminFix66OriginalNormalizeGeofence(item, index);
+  return {...base, active: item?.active !== false, color: String(item?.color || '#22c55e'), cooldownMinutes: Math.max(0, Number(item?.cooldownMinutes ?? item?.antiSpamMinutes ?? adminSettings?.geofenceNotifications?.cooldownMinutes ?? 5)), userUids: Array.isArray(item?.userUids) ? item.userUids.map(String) : []};
+};
+const adminFix66OriginalReadGeofenceForm = readGeofenceForm;
+readGeofenceForm = function(){
+  const item = adminFix66OriginalReadGeofenceForm();
+  const sel = qs("geofenceUsersInput");
+  return {...item, active: !!qs("geofenceActiveInput")?.checked, color: qs("geofenceColorInput")?.value || '#22c55e', cooldownMinutes: Math.max(0, Number(qs("geofenceCooldownInput")?.value || 5)), userUids: sel ? Array.from(sel.selectedOptions).map(o=>o.value).filter(Boolean) : []};
+};
+const adminFix66OriginalResetGeofenceForm = resetGeofenceForm;
+resetGeofenceForm = function(){
+  adminFix66OriginalResetGeofenceForm.apply(this, arguments);
+  if(qs("geofenceActiveInput")) qs("geofenceActiveInput").checked = true;
+  if(qs("geofenceColorInput")) qs("geofenceColorInput").value = '#22c55e';
+  if(qs("geofenceCooldownInput")) qs("geofenceCooldownInput").value = '5';
+  if(qs("geofenceUsersInput")) Array.from(qs("geofenceUsersInput").options).forEach(o=>o.selected=false);
+};
+const adminFix66OriginalRenderGeofences = renderGeofences;
+renderGeofences = function(){
+  adminFix66PopulateGeofenceUsers();
+  adminSettings.geofences = normalizeGeofencesShape(adminSettings.geofences);
+  const tbody = qs("geofencesTbody");
+  if(!tbody) return;
+  const items = adminSettings.geofences;
+  tbody.innerHTML = items.length ? "" : `<tr><td colspan="4" class="smallMuted">Геозон пока нет.</td></tr>`;
+  items.forEach(item => {
+    const tr = document.createElement("tr");
+    const usersText = item.userUids?.length ? item.userUids.map(uid=>getDisplayName(uid)||uid).join(", ") : "все";
+    tr.innerHTML = `<td><span class="geofenceMiniBadge ${item.active!==false?'on':'off'}">${item.active!==false?'вкл':'выкл'}</span> ${adminFix66Escape(item.name)}<div class="smallMuted">Пользователи: ${adminFix66Escape(usersText)} · антиспам ${Number(item.cooldownMinutes||0)} мин</div></td><td class="mono">${Number(item.lat).toFixed(5)}, ${Number(item.lon).toFixed(5)}</td><td>${item.radiusM} м<br><span style="display:inline-block;width:34px;height:10px;border-radius:999px;background:${adminFix66Escape(item.color||'#22c55e')}"></span></td><td><div class="row"><button class="secondary small" data-geofence-toggle="${item.id}">${item.active!==false?'Выключить':'Включить'}</button><button class="secondary small" data-geofence-edit="${item.id}">Изменить</button><button class="secondary small" data-geofence-maps="${item.id}">Maps</button><button class="danger small" data-geofence-delete="${item.id}">Удалить</button></div></td>`;
+    tbody.appendChild(tr);
+  });
+  tbody.querySelectorAll("[data-geofence-toggle]").forEach(btn=>btn.onclick=async()=>{ const item=adminSettings.geofences.find(x=>x.id===btn.dataset.geofenceToggle); if(!item) return; item.active = item.active === false; await update(ref(db,"adminSettings/config"), { geofences: adminSettings.geofences }); await publishGeofencesToDevices(adminSettings.geofences); renderGeofences(); showToast(item.active!==false?'Геозона включена':'Геозона выключена','success'); });
+  tbody.querySelectorAll("[data-geofence-edit]").forEach(btn => btn.onclick = () => { const item = adminSettings.geofences.find(x => x.id === btn.dataset.geofenceEdit); if(!item) return; window.__editingGeofenceId = item.id; if(qs("geofenceNameInput")) qs("geofenceNameInput").value = item.name; if(qs("geofenceLatInput")) qs("geofenceLatInput").value = String(item.lat); if(qs("geofenceLonInput")) qs("geofenceLonInput").value = String(item.lon); if(qs("geofenceRadiusInput")) qs("geofenceRadiusInput").value = String(item.radiusM); if(qs("geofenceActiveInput")) qs("geofenceActiveInput").checked = item.active !== false; if(qs("geofenceColorInput")) qs("geofenceColorInput").value = item.color || '#22c55e'; if(qs("geofenceCooldownInput")) qs("geofenceCooldownInput").value = String(item.cooldownMinutes ?? 5); adminFix66PopulateGeofenceUsers(); if(qs("geofenceUsersInput")) Array.from(qs("geofenceUsersInput").options).forEach(o=>o.selected = (item.userUids||[]).includes(o.value)); updateGeofencePreviewFromForm(); if(qs("geofenceFormStatus")) qs("geofenceFormStatus").textContent = `Редактирование: ${item.name}`; });
+  tbody.querySelectorAll("[data-geofence-delete]").forEach(btn => btn.onclick = async () => { const id = btn.dataset.geofenceDelete; const item = adminSettings.geofences.find(x => x.id === id); if(!item) return; if(!confirm(`Удалить геозону «${item.name}»?`)) return; adminSettings.geofences = adminSettings.geofences.filter(x => x.id !== id); await update(ref(db, "adminSettings/config"), { geofences: adminSettings.geofences }); await publishGeofencesToDevices(adminSettings.geofences); await logAction("geofence_delete", `Удалена геозона ${item.name}`); renderGeofences(); resetGeofenceForm(); showToast("Геозона удалена", "success"); });
+  tbody.querySelectorAll("[data-geofence-maps]").forEach(btn => btn.onclick = () => { const item = adminSettings.geofences.find(x => x.id === btn.dataset.geofenceMaps); if(!item) return; window.open(`https://maps.google.com/?q=${encodeURIComponent(item.lat + "," + item.lon)}`, "_blank", "noopener,noreferrer"); });
+  renderGeofenceCirclesOnMap();
+};
+const adminFix66OriginalRenderGeofenceCirclesOnMap = renderGeofenceCirclesOnMap;
+renderGeofenceCirclesOnMap = function(){
+  geofenceSavedLayer.clearLayers();
+  const items = normalizeGeofencesShape(adminSettings.geofences);
+  const latlngs = [];
+  items.forEach(item=>{ if(!Number.isFinite(item.lat)||!Number.isFinite(item.lon)) return; const circle=L.circle([item.lat,item.lon], {radius:item.radiusM,color:item.active!==false?(item.color||'#22c55e'):'#64748b',fillColor:item.active!==false?(item.color||'#22c55e'):'#64748b',fillOpacity:item.active!==false?.13:.05,weight:2,dashArray:item.active!==false?null:'5,7'}).bindPopup(`${item.name}<br>${item.active!==false?'Активна':'Выключена'}<br>${item.radiusM} м`).addTo(geofenceSavedLayer); latlngs.push([item.lat,item.lon]); });
+  if(latlngs.length===1) geofenceMap.setView(latlngs[0], 15); else if(latlngs.length>1) geofenceMap.fitBounds(L.latLngBounds(latlngs), {padding:[30,30]});
+};
+const adminFix66GeofenceLastNotify = {};
+handleGeofenceTransitions = async function(point){
+  ensureGeofenceNotificationSettings();
+  const ts = Number(point?.timestamp || 0);
+  if(!point || !Number.isFinite(ts) || (Date.now() - ts) > getNowOfflineMs()) return;
+  const entityKey = selectedUid || "all";
+  const zones = normalizeGeofencesShape(adminSettings.geofences);
+  for(const zone of zones){
+    if(zone.active === false) continue;
+    if(zone.userUids?.length && selectedUid && !zone.userUids.includes(selectedUid)) continue;
+    const key = `${entityKey}:${zone.id}`;
+    const insideNow = pointInsideGeofence(point, zone);
+    if(!(key in geofenceTransitionState)){ geofenceTransitionState[key] = insideNow; continue; }
+    const insidePrev = geofenceTransitionState[key];
+    if(insidePrev === insideNow) continue;
+    geofenceTransitionState[key] = insideNow;
+    const action = insideNow ? "enter" : "exit";
+    const cooldownMs = Math.max(0, Number(zone.cooldownMinutes ?? adminSettings.geofenceNotifications?.cooldownMinutes ?? 5)) * 60 * 1000;
+    const spamKey = `${key}:${action}`;
+    if(cooldownMs && adminFix66GeofenceLastNotify[spamKey] && Date.now() - adminFix66GeofenceLastNotify[spamKey] < cooldownMs) continue;
+    adminFix66GeofenceLastNotify[spamKey] = Date.now();
+    const text = insideNow ? `Вход в геозону: ${zone.name}` : `Выход из геозоны: ${zone.name}`;
+    const notifyThisAction = action === "enter" ? adminSettings.geofenceNotifications.notifyEnterEnabled : adminSettings.geofenceNotifications.notifyExitEnabled;
+    if(!notifyThisAction) continue;
+    if(adminSettings.geofenceNotifications.toastEnabled) showToast(`📍 ${text}`, insideNow ? "success" : "warn", 4200);
+    if(adminSettings.geofenceNotifications.journalEnabled) await logDeviceEvent(`geofence_${action}`, text, { geofenceId: zone.id, geofenceName: zone.name, action, cooldownMinutes: zone.cooldownMinutes || 0 });
+    await maybeShowBrowserNotification("MyGps", text);
+  }
+};
+
+function adminFix66LiveHealth(){
+  const entries = Object.entries(allSessions || {}).map(([token, session]) => [token, getSessionRoot ? getSessionRoot(session) : session]).filter(([,s])=>s);
+  const now = Date.now();
+  let active=0, stale=0, metaBad=0, lastPointOk=0;
+  entries.forEach(([token, s])=>{ const meta=s.meta||{}, p=s.public?.lastPoint; const isActive=meta.active===true && Number(meta.expiresAt||0)>now; if(isActive){ active++; if(!meta.ownerUid || !meta.expiresAt) metaBad++; const age=p? now-Number(p.timestamp||p.ts||0):Infinity; if(p && age < 120000) lastPointOk++; else stale++; }});
+  adminFix66SetText("liveHealthActive", `${active}`);
+  adminFix66SetText("liveHealthLastPoint", active ? `${lastPointOk}/${active} свежие` : "нет активных");
+  adminFix66SetText("liveHealthMeta", metaBad ? `проблем: ${metaBad}` : "OK");
+  adminFix66SetText("liveHealthProblem", stale ? `нет свежей точки: ${stale}` : (metaBad ? "meta требует проверки" : "OK"));
+}
+const adminFix66OriginalRenderSessions = renderSessions;
+renderSessions = function(){ const r = adminFix66OriginalRenderSessions.apply(this, arguments); setTimeout(adminFix66LiveHealth, 0); return r; };
+function adminFix66InstallLiveHealth(){ const btn=qs("checkLiveHealthBtn"); if(btn && !btn.dataset.fix66){ btn.dataset.fix66="1"; btn.onclick=()=>{ adminFix66LiveHealth(); showToast("Live проверен", "success"); }; } }
+
+let adminFix66VisibilitySearch = "";
+const adminFix66OriginalRenderVisibilityPanel = renderVisibilityPanel;
+renderVisibilityPanel = function(){
+  const usersList = qs("visibilityUsersList"), targetsList = qs("visibilityTargetsList");
+  if(!usersList || !targetsList) return;
+  const query = adminFix66VisibilitySearch.toLowerCase();
+  const uids = getAllKnownUserIds().filter(uid => uid && uid !== "default");
+  if(!uids.length){ usersList.innerHTML=`<div class="emptyState">Пользователей пока нет.</div>`; targetsList.innerHTML=`<div class="emptyState">Некого настраивать.</div>`; return; }
+  if(!selectedVisibilityUid || !uids.includes(selectedVisibilityUid)) selectedVisibilityUid = selectedUid && uids.includes(selectedUid) ? selectedUid : uids[0];
+  const userRows = uids.filter(uid => !query || (getDisplayName(uid)||uid).toLowerCase().includes(query) || uid.toLowerCase().includes(query));
+  usersList.innerHTML = userRows.map(uid => { const lp=liveByUid?.[uid] || {}; const ts=Number(lp.timestamp||lp.ts||0); const online=ts && Date.now()-ts<getNowOfflineMs(); return `<button class="visibilityUserBtn ${uid===selectedVisibilityUid?'active':''}" data-visibility-user="${uid}"><div><span class="onlineDot ${online?'online':''}"></span><b>${adminFix66Escape(getDisplayName(uid))}</b></div><div class="smallMuted mono">${adminFix66Escape(uid)}</div></button>`; }).join("") || `<div class="emptyState">Ничего не найдено.</div>`;
+  const selectedName = getDisplayName(selectedVisibilityUid);
+  qs("visibilitySelectedTitle").textContent = `Кого видит: ${selectedName}`;
+  const visibleMap = userVisibility?.[selectedVisibilityUid] || {};
+  const targets = uids.filter(uid => uid !== selectedVisibilityUid && (!query || (getDisplayName(uid)||uid).toLowerCase().includes(query) || uid.toLowerCase().includes(query)));
+  targetsList.innerHTML = targets.length ? targets.map(uid=>{ const checked=visibleMap?.[uid]===true?'checked':''; const lp=liveByUid?.[uid]||{}; const online=Number(lp.timestamp||lp.ts||0) && Date.now()-Number(lp.timestamp||lp.ts||0)<getNowOfflineMs(); return `<div class="visibilityTargetRow"><label><input type="checkbox" data-visibility-target="${uid}" ${checked}><span><div class="visibilityTargetName"><span class="onlineDot ${online?'online':''}"></span>${adminFix66Escape(getDisplayName(uid))}</div><div class="visibilityTargetUid mono">${adminFix66Escape(uid)}</div></span></label></div>`; }).join("") : `<div class="emptyState">Нет пользователей по фильтру.</div>`;
+  usersList.querySelectorAll("[data-visibility-user]").forEach(btn=>btn.onclick=()=>{ selectedVisibilityUid=btn.dataset.visibilityUser; renderVisibilityPanel(); });
+  adminFix66InstallVisibilityTools();
+};
+function adminFix66InstallVisibilityTools(){
+  const search = qs("visibilitySearchInput");
+  if(search && !search.dataset.fix66){ search.dataset.fix66="1"; search.addEventListener("input", ()=>{ adminFix66VisibilitySearch=search.value||""; renderVisibilityPanel(); }); }
+  const allBtn=qs("visibilityTemplateAllBtn"), noneBtn=qs("visibilityTemplateNoneBtn"), pairBtn=qs("visibilityTemplatePairBtn");
+  if(allBtn && !allBtn.dataset.fix66){ allBtn.dataset.fix66="1"; allBtn.onclick=async()=>{ if(!confirm("Сделать так, чтобы все пользователи видели всех?")) return; const uids=getAllKnownUserIds().filter(uid=>uid&&uid!=="default"); const next={}; uids.forEach(uid=>{ next[uid]={}; uids.filter(t=>t!==uid).forEach(t=>next[uid][t]=true); }); await set(ref(db,"userVisibility"), next); userVisibility = next; renderVisibilityPanel(); showToast("Шаблон применён", "success"); }; }
+  if(noneBtn && !noneBtn.dataset.fix66){ noneBtn.dataset.fix66="1"; noneBtn.onclick=async()=>{ if(!confirm("Очистить видимость для всех пользователей?")) return; await remove(ref(db,"userVisibility")); userVisibility={}; renderVisibilityPanel(); showToast("Видимость очищена", "success"); }; }
+  if(pairBtn && !pairBtn.dataset.fix66){ pairBtn.dataset.fix66="1"; pairBtn.onclick=()=>showToast("Выбери пользователя, отметь нужные пары и нажми Сохранить", "warn", 4200); }
+}
+
+function adminFix66Install(){
+  adminFix66InstallHistoryMode();
+  installGpsLogPanel();
+  adminFix66PopulateGeofenceUsers();
+  adminFix66InstallLiveHealth();
+  adminFix66InstallVisibilityTools();
+  setTimeout(()=>{ try{ adminFix66UpdateNowGpsStatus(); adminFix66LiveHealth(); }catch(e){} }, 600);
+}
+window.addEventListener("load", () => { adminFix66Install(); setTimeout(adminFix66Install, 1500); });
+document.addEventListener("click", ev=>{ const btn=ev.target?.closest?.(".tab-btn[data-tab]"); if(btn) setTimeout(adminFix66Install, 60); }, true);
+/* === /Admin diagnostics upgrade fix_66 === */
+
 /* === /GPS service log panel fix_64 === */
 
 </script>
