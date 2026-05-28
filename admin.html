@@ -822,8 +822,15 @@ body.admin-normal-mode .adminModeHint::after{content:" Обычный режим
           <button id="todayBtn">Сегодня</button>
           <button id="yesterdayBtn" class="secondary">Вчера</button>
           <button id="weekBtn" class="secondary">Неделя</button>
+          <button id="range15mBtn" class="secondary">15 мин</button>
+          <button id="range30mBtn" class="secondary">30 мин</button>
           <button id="range1hBtn" class="secondary">1 час</button>
+          <button id="range2hBtn" class="secondary">2 часа</button>
           <button id="range24hBtn" class="secondary">24 часа</button>
+          <button id="morningBtn" class="secondary">Утро</button>
+          <button id="dayBtn" class="secondary">День</button>
+          <button id="eveningBtn" class="secondary">Вечер</button>
+          <button id="workdayBtn" class="secondary">Рабочий день</button>
           <button id="refreshHistoryBtn">Обновить историю</button>
         </div>
         <div class="row">
@@ -1485,6 +1492,7 @@ body.admin-normal-mode .adminModeHint::after{content:" Обычный режим
             <button id="runDbStructureCheckBtn" class="secondary">Проверить структуру</button>
             <button id="previewDbSafeRepairBtn" class="secondary">Проверить безопасные исправления</button>
             <button id="runDbSafeRepairBtn" class="warn">Исправить безопасно</button>
+            <button id="undoDbSafeRepairBtn" class="secondary">Откатить последнее исправление</button>
             <button id="downloadDbStructureReportBtn" class="secondary">Скачать отчёт</button>
           </div>
           <div class="grid4" style="margin-top:12px">
@@ -1525,7 +1533,7 @@ body.admin-normal-mode .adminModeHint::after{content:" Обычный режим
           <button id="downloadPostUpdateDiagBtn" class="secondary">Скачать диагностику</button>
         </div>
         <div class="postUpdateGrid">
-          <div class="postUpdateCard"><b>Admin version</b><span id="postAdminVersion">fix_85</span></div>
+          <div class="postUpdateCard"><b>Admin version</b><span id="postAdminVersion">fix_86</span></div>
           <div class="postUpdateCard"><b>Auth</b><span id="postAuthStatus">—</span></div>
           <div class="postUpdateCard"><b>Выбранный пользователь</b><span id="postSelectedUser">—</span></div>
           <div class="postUpdateCard"><b>GPS лог</b><span id="postGpsLogStatus">—</span></div>
@@ -3948,6 +3956,61 @@ async function fix85PreviewSafeRepair(){
     if(btn){btn.disabled=false; btn.textContent="Проверить безопасные исправления";}
   }
 }
+function fix86UndoStorageKey(){ return "mygps_admin_last_safe_repair_undo_v1"; }
+async function fix86CaptureSafeRepairUndo(plan){
+  const oldValues = {};
+  const actions = plan?.actions || [];
+  for(const action of actions){
+    const path = action.path;
+    if(!path || path in oldValues) continue;
+    try{
+      const snap = await get(ref(db, path));
+      oldValues[path] = snap.exists() ? snap.val() : null;
+    }catch(e){
+      oldValues[path] = {__undoReadError:true, message: errText?.(e) || String(e)};
+    }
+  }
+  const undo = {
+    createdAt: new Date().toISOString(),
+    count: actions.length,
+    oldValues,
+    actions: actions.map(a=>({label:a.label, path:a.path}))
+  };
+  try{ localStorage.setItem(fix86UndoStorageKey(), JSON.stringify(undo)); }catch(e){ console.warn("Unable to save safe repair undo snapshot", e); }
+  return undo;
+}
+async function fix86UndoLastSafeRepair(){
+  let undo = null;
+  try{ undo = JSON.parse(localStorage.getItem(fix86UndoStorageKey()) || "null"); }catch(e){ undo = null; }
+  const oldValues = undo?.oldValues || null;
+  const count = oldValues ? Object.keys(oldValues).length : 0;
+  if(!count) return showToast?.("Нет сохранённого отката", "warn", 3000);
+  if(!confirm(`Откатить последнее безопасное исправление Firebase?\n\nБудет восстановлено путей: ${count}. History маршрутов не трогается.`)) return;
+  const btn = qs("undoDbSafeRepairBtn");
+  if(btn){ btn.disabled = true; btn.textContent = "Откатываю…"; }
+  try{
+    const updates = {};
+    for(const [path, value] of Object.entries(oldValues)){
+      if(value && value.__undoReadError) continue;
+      updates[path] = value;
+    }
+    await update(ref(db), updates);
+    try{ localStorage.removeItem(fix86UndoStorageKey()); }catch(e){}
+    await logAction?.("firebase_safe_repair_undo", `Откат безопасного исправления Firebase: ${Object.keys(updates).length} путей`);
+    fix85SetRepairResult(`<b>Откат выполнен.</b><br><span class="smallMuted">Восстановлено путей: ${Object.keys(updates).length}. Запусти проверку структуры ещё раз.</span>`);
+    await loadSessions?.();
+    await loadUsers?.();
+    await fix84RunDbStructureCheck?.();
+    showToast?.("Откат выполнен", "success", 3500);
+  }catch(e){
+    recordError?.("fix86UndoLastSafeRepair", e);
+    fix85SetRepairResult(`<b>Ошибка отката:</b> ${escapeHtml(errText?.(e)||String(e))}`);
+    showToast?.("Ошибка отката", "error", 4200);
+  }finally{
+    if(btn){ btn.disabled = false; btn.textContent = "Откатить последнее исправление"; }
+  }
+}
+
 async function fix85RunSafeRepair(){
   let plan = fix85LastSafeRepairPlan;
   if(!plan) plan = await fix85BuildSafeRepairPlan();
@@ -3960,6 +4023,7 @@ async function fix85RunSafeRepair(){
   const btn = qs("runDbSafeRepairBtn");
   if(btn){btn.disabled=true; btn.textContent="Исправляю…";}
   try{
+    await fix86CaptureSafeRepairUndo(plan);
     await update(ref(db), plan.updates);
     await logAction?.("firebase_safe_repair", `Выполнено безопасных исправлений Firebase: ${count}`);
     fix85SetRepairResult(`<b>Готово: применено ${count} безопасных исправлений.</b><br><span class="smallMuted">History маршрутов не изменялся. Запусти проверку структуры ещё раз.</span>`);
@@ -3978,11 +4042,13 @@ async function fix85RunSafeRepair(){
 }
 window.fix85PreviewSafeRepair = fix85PreviewSafeRepair;
 window.fix85RunSafeRepair = fix85RunSafeRepair;
+window.fix86UndoLastSafeRepair = fix86UndoLastSafeRepair;
 /* === /Admin fix_85 === */
 
 qs("runDbStructureCheckBtn")?.addEventListener("click", ()=>fix84RunDbStructureCheck());
 qs("previewDbSafeRepairBtn")?.addEventListener("click", ()=>fix85PreviewSafeRepair());
 qs("runDbSafeRepairBtn")?.addEventListener("click", ()=>fix85RunSafeRepair());
+qs("undoDbSafeRepairBtn")?.addEventListener("click", ()=>fix86UndoLastSafeRepair());
 qs("downloadDbStructureReportBtn")?.addEventListener("click", ()=>fix84DownloadDbStructureReport());
 /* === /Admin fix_85 === */
 
@@ -7448,8 +7514,15 @@ if (qs("logoutTopBtn")) qs("logoutTopBtn").onclick = async()=>{ await signOut(au
 if (qs("todayBtn")) qs("todayBtn").onclick = ()=>{ const now=new Date(), start=new Date(); start.setHours(0,0,0,0); setDateTimeRange(start,now); setQuickRangeActive("todayBtn"); renderHistory(); };
 if (qs("yesterdayBtn")) qs("yesterdayBtn").onclick = ()=>{ const start=new Date(); start.setDate(start.getDate()-1); start.setHours(0,0,0,0); const end=new Date(start); end.setHours(23,59,0,0); setDateTimeRange(start,end); setQuickRangeActive("yesterdayBtn"); renderHistory(); };
 if (qs("weekBtn")) qs("weekBtn").onclick = ()=>{ const now=new Date(), start=new Date(); start.setDate(start.getDate()-7); setDateTimeRange(start,now); setQuickRangeActive("weekBtn"); renderHistory(); };
+if (qs("range15mBtn")) qs("range15mBtn").onclick = ()=>{ const now=new Date(), start=new Date(Date.now()-15*60*1000); setDateTimeRange(start,now); setQuickRangeActive("range15mBtn"); renderHistory(); };
+if (qs("range30mBtn")) qs("range30mBtn").onclick = ()=>{ const now=new Date(), start=new Date(Date.now()-30*60*1000); setDateTimeRange(start,now); setQuickRangeActive("range30mBtn"); renderHistory(); };
 if (qs("range1hBtn")) qs("range1hBtn").onclick = ()=>{ const now=new Date(), start=new Date(Date.now()-60*60*1000); setDateTimeRange(start,now); setQuickRangeActive("range1hBtn"); renderHistory(); };
+if (qs("range2hBtn")) qs("range2hBtn").onclick = ()=>{ const now=new Date(), start=new Date(Date.now()-2*60*60*1000); setDateTimeRange(start,now); setQuickRangeActive("range2hBtn"); renderHistory(); };
 if (qs("range24hBtn")) qs("range24hBtn").onclick = ()=>{ const now=new Date(), start=new Date(Date.now()-24*60*60*1000); setDateTimeRange(start,now); setQuickRangeActive("range24hBtn"); renderHistory(); };
+if (qs("morningBtn")) qs("morningBtn").onclick = ()=>{ const now=new Date(), start=new Date(); start.setHours(6,0,0,0); const end=new Date(); end.setHours(12,0,0,0); if(end>now) end.setTime(now.getTime()); setDateTimeRange(start,end); setQuickRangeActive("morningBtn"); renderHistory(); };
+if (qs("dayBtn")) qs("dayBtn").onclick = ()=>{ const now=new Date(), start=new Date(); start.setHours(12,0,0,0); const end=new Date(); end.setHours(18,0,0,0); if(end>now) end.setTime(now.getTime()); setDateTimeRange(start,end); setQuickRangeActive("dayBtn"); renderHistory(); };
+if (qs("eveningBtn")) qs("eveningBtn").onclick = ()=>{ const now=new Date(), start=new Date(); start.setHours(18,0,0,0); const end=new Date(); end.setHours(23,59,59,999); if(end>now) end.setTime(now.getTime()); setDateTimeRange(start,end); setQuickRangeActive("eveningBtn"); renderHistory(); };
+if (qs("workdayBtn")) qs("workdayBtn").onclick = ()=>{ const now=new Date(), start=new Date(); start.setHours(9,0,0,0); const end=new Date(); end.setHours(18,0,0,0); if(end>now) end.setTime(now.getTime()); setDateTimeRange(start,end); setQuickRangeActive("workdayBtn"); renderHistory(); };
 if (qs("applyFiltersBtn")) qs("applyFiltersBtn").onclick = renderHistory;
 if (qs("resetFiltersBtn")) qs("resetFiltersBtn").onclick = ()=>{ qs("maxAccuracyFilter").value=""; qs("minSpeedFilter").value=""; qs("maxSpeedFilter").value=""; qs("hideJunkToggle").checked=false; if(qs("hideStopsToggle")) qs("hideStopsToggle").checked=false; if(qs("onlyMoveToggle")) qs("onlyMoveToggle").checked=false; clearQuickRangeActive(); renderHistory(); };
 if (qs("refreshHistoryBtn")) qs("refreshHistoryBtn").onclick = async()=>{ await loadAllData(); showToast("История обновлена","success"); };
@@ -11268,7 +11341,7 @@ window.addEventListener('load', ()=>{ mygpsLivePatchInstallUi(); setTimeout(()=>
 
 
 /* === Admin fix_72: update check, route filter, diagnostics, replay events, cleanup === */
-const ADMIN_FIX70_VERSION = "fix_85";
+const ADMIN_FIX70_VERSION = "fix_86";
 function fix70Qs(id){ return document.getElementById(id); }
 function fix70Esc(v){ return String(v ?? "").replace(/[&<>'"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c])); }
 function fix70Badge(text, kind="ok"){ return `<span class="postUpdateBadge ${kind}">${fix70Esc(text)}</span>`; }
@@ -11536,7 +11609,7 @@ setTimeout(fix73Install,2600);
 
 
 /* === Admin fix_75: app versions + safe auto-refresh in Сейчас === */
-const ADMIN_FIX75_VERSION = "fix_85";
+const ADMIN_FIX75_VERSION = "fix_86";
 let adminFix75AutoTimer = null;
 let adminFix75Refreshing = false;
 function fix75Qs(id){ return document.getElementById(id); }
@@ -11687,7 +11760,7 @@ setTimeout(fix75Install,2800);
 
 
 /* === Admin fix_79: alert hints, selected user check, live garbage, stops list, clean exports === */
-const ADMIN_FIX79_VERSION = "fix_85";
+const ADMIN_FIX79_VERSION = "fix_86";
 function fix79Esc(v){ return String(v ?? "").replace(/[&<>'"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[ch])); }
 function fix79Ts(v){ const n=Number(v||0); return Number.isFinite(n) && n>0 ? n : 0; }
 function fix79PointLat(p){ return Number(p?.latitude ?? p?.lat); }
@@ -11935,7 +12008,7 @@ setTimeout(fix79Install,2500);
 
 
 /* === Admin fix_85: history search, improved stops, problem layers === */
-const ADMIN_FIX80_VERSION = "fix_85";
+const ADMIN_FIX80_VERSION = "fix_86";
 let fix80ProblemLayer = null;
 let fix80StopCircleLayer = null;
 let fix80SearchMarker = null;
@@ -12074,7 +12147,7 @@ setTimeout(fix80Install,2800);
 
 
 /* === Admin fix_85: saved map settings === */
-const ADMIN_FIX83_VERSION = "fix_85";
+const ADMIN_FIX83_VERSION = "fix_86";
 const ADMIN_FIX83_MAP_KEY = "mygps_admin_map_settings";
 function fix83Qs(id){ return document.getElementById(id); }
 function fix83ReadMapSettings(){
@@ -12265,7 +12338,7 @@ function fix83InitMapSettings(){
     fix83BindMapSettings();
     fix83HookExistingMapControls();
     fix83ApplyMapSettings({render:false, move:true});
-    const v=fix83Qs("postUpdateAdminVersion"); if(v) v.textContent="fix_85";
+    const v=fix83Qs("postUpdateAdminVersion"); if(v) v.textContent="fix_86";
   }catch(e){ console.warn("fix83InitMapSettings", e); }
 }
 setTimeout(fix83InitMapSettings, 350);
