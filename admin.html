@@ -525,7 +525,25 @@ tr.gpsLogRowStop,tr.gpsLogRowError{background:rgba(185,28,28,.13)}
 
 
 
-/* === Admin fix_78: UI cleanup, normal/diagnostic mode, mobile compact === */
+
+
+/* === Admin fix_79: hints, user check, live garbage, stops list, clean exports === */
+.alertAdvice{display:block;margin-top:4px;color:#cbd5e1;font-size:12px;line-height:1.35}
+.alertAdvice strong{color:#fde68a}
+.userQuickCheckBox,.liveGarbageBox,.stopsListBox,.cleanExportBox{margin-top:12px;padding:12px 14px;border-radius:16px;border:1px solid var(--border);background:rgba(255,255,255,.035);line-height:1.45}
+.userQuickCheckGrid,.liveGarbageGrid,.stopsListGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:10px}
+.userQuickCheckItem,.liveGarbageItem,.stopsListItem{padding:10px 12px;border-radius:14px;border:1px solid rgba(148,163,184,.15);background:rgba(15,23,42,.35)}
+.userQuickCheckItem b,.liveGarbageItem b,.stopsListItem b{display:block;margin-bottom:4px;color:#fff}
+.userQuickCheckStatus{display:inline-flex;align-items:center;padding:5px 9px;border-radius:999px;border:1px solid var(--border);font-size:12px;font-weight:900}
+.userQuickCheckStatus.ok{background:rgba(22,163,74,.20);border-color:#166534;color:#bbf7d0}
+.userQuickCheckStatus.warn{background:rgba(234,179,8,.18);border-color:#a16207;color:#fde68a}
+.userQuickCheckStatus.danger{background:rgba(185,28,28,.25);border-color:#7f1d1d;color:#fecaca}
+#historyStopsTbody tr:hover{background:rgba(37,99,235,.10)}
+.cleanExportBox .toolbar{margin-top:8px}
+@media(max-width:900px){.userQuickCheckGrid,.liveGarbageGrid,.stopsListGrid{grid-template-columns:1fr}.alertAdvice{font-size:11px}}
+/* === /Admin fix_79 === */
+
+/* === Admin fix_79: UI cleanup, normal/diagnostic mode, mobile compact === */
 .adminModeBar{
   display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px;
   padding:10px;border:1px solid var(--border);border-radius:16px;background:rgba(255,255,255,.025)
@@ -582,7 +600,7 @@ body.admin-normal-mode .adminModeHint::after{content:" Обычный режим
   body.admin-mobile-compact .adminToolsRow>.toolField{min-width:100%}
   body.admin-mobile-compact .distanceCompareGrid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
 }
-/* === /Admin fix_78 === */
+/* === /Admin fix_79 === */
 
 </style>
 </head>
@@ -724,7 +742,7 @@ body.admin-normal-mode .adminModeHint::after{content:" Обычный режим
         <div class="notice smallMuted">Звук/push срабатывают только для новых критических тревог после включения опции.</div>
         <div style="overflow:auto;margin-top:12px">
           <table>
-            <thead><tr><th>Уровень</th><th>Источник</th><th>Проблема</th><th>Пользователь</th><th>Время</th><th>Действие</th></tr></thead>
+            <thead><tr><th>Уровень</th><th>Источник</th><th>Проблема</th><th>Пользователь</th><th>Время</th><th>Что делать</th></tr></thead>
             <tbody id="alertCenterTbody"><tr><td colspan="6">Нажми “Обновить тревоги”.</td></tr></tbody>
           </table>
         </div>
@@ -758,10 +776,16 @@ body.admin-normal-mode .adminModeHint::after{content:" Обычный режим
           <button id="refreshNowBtn" class="secondary">Обновить сейчас</button>
           <button id="refreshLiveBtn" class="secondary">Обновить live</button>
           <button id="openSelectedLiveBtn" class="quickLiveOpenBtn">Открыть live</button>
+          <button id="checkSelectedUserBtn" class="secondary" type="button">Проверить выбранного</button>
           <button id="btnDiag" class="secondary">Диаг</button>
           <button id="downloadDiagBtn" class="secondary">Скачать диагностику</button>
           <button id="copyNowCoordsBtn" class="secondary">Копировать координаты</button>
           <button id="openNowMapsBtn" class="secondary">Google Maps</button>
+        </div>
+        <div id="selectedUserCheckBox" class="userQuickCheckBox hidden">
+          <strong>Проверка выбранного пользователя</strong>
+          <div class="smallMuted">Короткий результат по GPS, live, батарее, логам, history и геозонам.</div>
+          <div id="selectedUserCheckResult" class="userQuickCheckGrid"></div>
         </div>
         <div class="adminAutoRefreshBox" id="nowAutoRefreshBox">
           <label class="pill"><input id="nowAutoRefreshToggle" type="checkbox" style="width:auto;min-width:auto"> Автообновление</label>
@@ -840,6 +864,16 @@ body.admin-normal-mode .adminModeHint::after{content:" Обычный режим
             <button id="exportPdfBtn" class="secondary">PDF</button>
             
           </div>
+          <div class="cleanExportBox">
+            <strong>Экспорт чистого маршрута</strong>
+            <div class="smallMuted">Экспортирует только нормальные сегменты без GPS-дрейфа на стоянке и плохих скачков.</div>
+            <div class="toolbar">
+              <button id="exportCleanJsonBtn" class="secondary" type="button">Чистый JSON</button>
+              <button id="exportCleanCsvBtn" class="secondary" type="button">Чистый CSV</button>
+              <button id="exportCleanGpxBtn" class="secondary" type="button">Чистый GPX</button>
+              <button id="exportCleanPdfBtn" class="secondary" type="button">Чистый PDF</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -865,6 +899,16 @@ body.admin-normal-mode .adminModeHint::after{content:" Обычный режим
             <div class="distanceCompareItem"><b>Сырой пробег</b><div class="distanceCompareValue" id="rawDistanceValue">0 км</div></div>
             <div class="distanceCompareItem"><b>Отброшено</b><div class="distanceCompareValue" id="rejectedDistanceValue">0 км</div></div>
             <div class="distanceCompareItem"><b>Сегментов отброшено</b><div class="distanceCompareValue" id="rejectedSegmentsValue">0</div></div>
+          </div>
+        </div>
+        <div class="stopsListBox">
+          <strong>Список стоянок</strong>
+          <div class="smallMuted">Стоянки считаются по низкой скорости и малому радиусу движения. Кнопка “К точке” переносит карту к месту стоянки.</div>
+          <div style="overflow:auto;margin-top:10px">
+            <table>
+              <thead><tr><th>Начало</th><th>Конец</th><th>Длительность</th><th>Радиус</th><th>Координаты</th><th>Действие</th></tr></thead>
+              <tbody id="historyStopsTbody"><tr><td colspan="6">Стоянки будут показаны после обновления истории.</td></tr></tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -1118,6 +1162,15 @@ body.admin-normal-mode .adminModeHint::after{content:" Обычный режим
           <button id="endAllActiveSessionsBtn" class="warn">Остановить все активные</button>
           <button id="cleanupSessionsBtn" class="warn">Очистить истёкшие сессии</button>
           <button id="cleanupEndedSessionsBtn" class="warn">Очистить завершённые сессии</button>
+        </div>
+        <div class="liveGarbageBox">
+          <strong>Безопасная очистка live-мусора</strong>
+          <div class="smallMuted">Проверяет истёкшие, завершённые, старые и битые live-сессии. Историю маршрутов не трогает.</div>
+          <div class="toolbar">
+            <button id="previewLiveGarbageBtn" class="secondary" type="button">Проверить мусор live</button>
+            <button id="cleanupLiveGarbageBtn" class="warn" type="button">Очистить найденное</button>
+          </div>
+          <div id="liveGarbageResult" class="liveGarbageGrid"></div>
         </div>
         <div style="overflow:auto">
           <table>
@@ -1424,7 +1477,7 @@ body.admin-normal-mode .adminModeHint::after{content:" Обычный режим
           <button id="downloadPostUpdateDiagBtn" class="secondary">Скачать диагностику</button>
         </div>
         <div class="postUpdateGrid">
-          <div class="postUpdateCard"><b>Admin version</b><span id="postAdminVersion">fix_78</span></div>
+          <div class="postUpdateCard"><b>Admin version</b><span id="postAdminVersion">fix_79</span></div>
           <div class="postUpdateCard"><b>Auth</b><span id="postAuthStatus">—</span></div>
           <div class="postUpdateCard"><b>Выбранный пользователь</b><span id="postSelectedUser">—</span></div>
           <div class="postUpdateCard"><b>GPS лог</b><span id="postGpsLogStatus">—</span></div>
@@ -10727,7 +10780,7 @@ window.addEventListener('load', ()=>{ mygpsLivePatchInstallUi(); setTimeout(()=>
 
 
 /* === Admin fix_72: update check, route filter, diagnostics, replay events, cleanup === */
-const ADMIN_FIX70_VERSION = "fix_78";
+const ADMIN_FIX70_VERSION = "fix_79";
 function fix70Qs(id){ return document.getElementById(id); }
 function fix70Esc(v){ return String(v ?? "").replace(/[&<>'"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c])); }
 function fix70Badge(text, kind="ok"){ return `<span class="postUpdateBadge ${kind}">${fix70Esc(text)}</span>`; }
@@ -10995,7 +11048,7 @@ setTimeout(fix73Install,2600);
 
 
 /* === Admin fix_75: app versions + safe auto-refresh in Сейчас === */
-const ADMIN_FIX75_VERSION = "fix_78";
+const ADMIN_FIX75_VERSION = "fix_79";
 let adminFix75AutoTimer = null;
 let adminFix75Refreshing = false;
 function fix75Qs(id){ return document.getElementById(id); }
@@ -11145,6 +11198,254 @@ setTimeout(fix75Install,2800);
 /* === /Admin fix_75 === */
 
 
+/* === Admin fix_79: alert hints, selected user check, live garbage, stops list, clean exports === */
+const ADMIN_FIX79_VERSION = "fix_79";
+function fix79Esc(v){ return String(v ?? "").replace(/[&<>'"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[ch])); }
+function fix79Ts(v){ const n=Number(v||0); return Number.isFinite(n) && n>0 ? n : 0; }
+function fix79PointLat(p){ return Number(p?.latitude ?? p?.lat); }
+function fix79PointLon(p){ return Number(p?.longitude ?? p?.lon); }
+function fix79ValidPoint(p){ const lat=fix79PointLat(p), lon=fix79PointLon(p); return Number.isFinite(lat)&&Number.isFinite(lon)&&Math.abs(lat)<=90&&Math.abs(lon)<=180; }
+function fix79Age(ms){
+  const ts=fix79Ts(ms); if(!ts) return "нет данных";
+  const sec=Math.max(0,Math.floor((Date.now()-ts)/1000));
+  if(sec<60) return `${sec} сек назад`;
+  const min=Math.floor(sec/60); if(min<60) return `${min} мин назад`;
+  const h=Math.floor(min/60); if(h<48) return `${h} ч назад`;
+  return `${Math.floor(h/24)} дн назад`;
+}
+function fix79StatusBadge(level, text){ return `<span class="userQuickCheckStatus ${level}">${fix79Esc(text)}</span>`; }
+function fix79AlertAdvice(alert){
+  const hay=`${alert?.source||""} ${alert?.title||""} ${alert?.action||""}`.toLowerCase();
+  if(/permission|denied|rules|firebase/.test(hay)) return "Проверь Firebase Rules и разрешение для нужного узла. Если это gpsServiceLogs — добавь rule для чтения/записи.";
+  if(/live/.test(hay) && /lastpoint|стар|stale|active/.test(hay)) return "Проверь liveOwners/activeSessionId, liveSessions/meta и public/lastPoint. Если lastPoint старый — MyGps не пишет live-точки.";
+  if(/live/.test(hay) && /истека|expire|expires/.test(hay)) return "Продли live-сессию или создай новую ссылку. Если viewer открыт, проверь expiresAt и active=true.";
+  if(/gps|service|точк|обнов/.test(hay) && /стар|stale|offline|давно/.test(hay)) return "Проверь интернет телефона, разрешение фоновой геолокации, энергосбережение Android и не был ли MyGps закрыт swipe.";
+  if(/battery|батар/.test(hay)) return "Поставь телефон на зарядку или включи более экономный GPS-профиль.";
+  if(/accuracy|точност|сигнал|gps/.test(hay)) return "Проверь открытое небо/помещение, accuracy, спутники и не фильтруются ли плохие точки.";
+  if(/geofence|геозон/.test(hay)) return "Проверь радиус геозоны, привязку к пользователю и антиспам события enter/exit.";
+  return alert?.action && alert.action !== "—" ? alert.action : "Открой GPS лог и вкладку Сейчас, затем проверь последнюю точку и статус live.";
+}
+
+const fix79OldRenderAlerts = typeof fix68RenderAlerts === "function" ? fix68RenderAlerts : null;
+if(fix79OldRenderAlerts){
+  fix68RenderAlerts = function(){
+    const tbody=qs("alertCenterTbody");
+    if(!tbody) return fix79OldRenderAlerts.apply(this, arguments);
+    const crit=(adminFix68Alerts||[]).filter(a=>a.sev==='danger').length;
+    const warn=(adminFix68Alerts||[]).filter(a=>a.sev==='warn').length;
+    if(qs('alertCriticalCount')) qs('alertCriticalCount').innerHTML=`<span class="alertBadge ${crit?'danger':'ok'}">${crit}</span>`;
+    if(qs('alertWarnCount')) qs('alertWarnCount').innerHTML=`<span class="alertBadge ${warn?'warn':'ok'}">${warn}</span>`;
+    if(qs('alertSelectedUser')) qs('alertSelectedUser').textContent=fix68DisplayUid(selectedUid||qs('userSelect')?.value||'');
+    if(qs('alertLastCheck')) qs('alertLastCheck').textContent=fmtTime(Date.now());
+    tbody.innerHTML='';
+    (adminFix68Alerts||[]).forEach(a=>{
+      const tr=document.createElement('tr');
+      tr.className=a.sev==='danger'?'alertDangerRow':(a.sev==='warn'?'alertWarnRow':'alertOkRow');
+      const advice=fix79AlertAdvice(a);
+      tr.innerHTML=`<td>${fix68SeverityBadge(a.sev)}</td><td>${fix79Esc(a.source)}</td><td>${fix79Esc(a.title)}</td><td>${fix79Esc(fix68DisplayUid(a.uid))}</td><td>${fmtTime(a.ts)}</td><td>${fix79Esc(a.action||'—')}<span class="alertAdvice"><strong>Подсказка:</strong> ${fix79Esc(advice)}</span></td>`;
+      tbody.appendChild(tr);
+    });
+    const sig=(adminFix68Alerts||[]).filter(a=>a.sev==='danger').map(a=>`${a.source}:${a.uid}:${a.title}`).join('|');
+    if(sig && sig!==adminFix68LastCriticalSig){
+      adminFix68LastCriticalSig=sig;
+      const first=(adminFix68Alerts||[]).find(a=>a.sev==='danger');
+      if(first) fix68Notify('MyGps Admin: критическая тревога', `${first.source}: ${first.title}`);
+    }
+  };
+}
+
+function fix79LatestPointForUid(uid){
+  const livePoint = liveByUid?.[uid] || null;
+  const hist = (historyByUid?.[uid] || []).filter(Boolean).sort((a,b)=>fix79Ts(b.timestamp||b.ts)-fix79Ts(a.timestamp||a.ts));
+  const histPoint = hist[0] || null;
+  const liveTs = fix79Ts(livePoint?.timestamp || livePoint?.ts);
+  const histTs = fix79Ts(histPoint?.timestamp || histPoint?.ts);
+  return liveTs >= histTs ? livePoint : histPoint;
+}
+function fix79FindActiveSession(uid){
+  const now=Date.now();
+  return Object.entries(allSessions||{}).find(([token,s])=>{
+    if(token==="_init") return false;
+    const root = typeof getSessionRoot === "function" ? getSessionRoot(s) : s;
+    const meta=root?.meta||{};
+    return meta.ownerUid===uid && meta.active===true && Number(meta.expiresAt||0)>now;
+  });
+}
+async function fix79CheckSelectedUser(){
+  const uid=selectedUid || qs("userSelect")?.value || "";
+  const box=qs("selectedUserCheckBox"), grid=qs("selectedUserCheckResult");
+  if(!uid) return showToast?.("Выбери пользователя", "warn");
+  if(box) box.classList.remove("hidden");
+  if(grid) grid.innerHTML='<div class="emptyState">Проверяю…</div>';
+  try{
+    const p=fix79LatestPointForUid(uid);
+    const pTs=fix79Ts(p?.timestamp||p?.ts);
+    const ageMs=pTs ? Date.now()-pTs : Infinity;
+    const acc=Number(p?.accuracy ?? NaN);
+    const bat=Number(p?.battery ?? p?.batteryLevel ?? NaN);
+    const active=fix79FindActiveSession(uid);
+    const logs=(typeof gpsServiceLogs !== "undefined" ? gpsServiceLogs : []).filter(x=>x.uid===uid).sort((a,b)=>fix79Ts(b.ts||b.timestamp)-fix79Ts(a.ts||a.timestamp));
+    const problemLog=logs.find(x=>typeof gpsLogIsProblem === "function" ? gpsLogIsProblem(x) : /error|ошиб|stop|denied|permission/i.test(`${x.title||""} ${x.message||""}`));
+    let geofenceCount="—";
+    try{ const gs=await get(ref(db,`geofences/${uid}`)); geofenceCount=String(Object.keys(gs.val()||{}).length); }catch(e){ geofenceCount="нет доступа"; }
+    const historyCount=(historyByUid?.[uid]||[]).length;
+    const items=[];
+    items.push({name:"Последняя точка", level:(!pTs?'danger':ageMs>10*60*1000?'danger':ageMs>2*60*1000?'warn':'ok'), value:pTs?fix79Age(pTs):"нет точки", note:p&&fix79ValidPoint(p)?`${fix79PointLat(p).toFixed(5)}, ${fix79PointLon(p).toFixed(5)}`:"—"});
+    items.push({name:"Точность", level:(!Number.isFinite(acc)?'warn':acc>100?'danger':acc>50?'warn':'ok'), value:Number.isFinite(acc)?`${acc.toFixed(0)} м`:"нет данных", note:acc>100?"плохая точность может портить маршрут":"—"});
+    items.push({name:"Батарея", level:(!Number.isFinite(bat)?'warn':bat<15?'danger':bat<30?'warn':'ok'), value:Number.isFinite(bat)?`${bat.toFixed(0)}%`:"нет данных", note:bat<20?"лучше зарядить телефон":"—"});
+    items.push({name:"Live", level:active?'ok':'warn', value:active?"активен":"нет активного", note:active?`token ${active[0]}`:"создай live при необходимости"});
+    items.push({name:"GPS лог", level:problemLog?'warn':'ok', value:logs.length?`${logs.length} записей`:"нет записей", note:problemLog?(problemLog.message||problemLog.title||"есть проблема"):"критичных проблем не видно"});
+    items.push({name:"History", level:historyCount?'ok':'warn', value:`${historyCount} точек`, note:historyCount?"история доступна":"нет точек в history"});
+    items.push({name:"Геозоны", level:geofenceCount==='нет доступа'?'warn':'ok', value:geofenceCount, note:"количество зон для пользователя"});
+    items.push({name:"Рекомендация", level:items?.some?.(i=>i.level==='danger')?'danger':items?.some?.(i=>i.level==='warn')?'warn':'ok', value:items.some(i=>i.level==='danger')?"есть проблема":items.some(i=>i.level==='warn')?"есть предупреждения":"всё нормально", note:items.some(i=>i.level==='danger')?"смотри красные пункты выше":"—"});
+    if(grid) grid.innerHTML=items.map(i=>`<div class="userQuickCheckItem"><b>${fix79Esc(i.name)}</b>${fix79StatusBadge(i.level,i.value)}<div class="smallMuted" style="margin-top:6px">${fix79Esc(i.note||'—')}</div></div>`).join("");
+    showToast?.("Проверка выбранного пользователя готова", "success");
+  }catch(e){
+    if(grid) grid.innerHTML=`<div class="emptyState">Ошибка проверки: ${fix79Esc(errText?.(e)||e)}</div>`;
+    recordError?.("fix79CheckSelectedUser", e);
+  }
+}
+
+function fix79ClassifyLiveGarbage(){
+  const now=Date.now();
+  const rows=[];
+  Object.entries(allSessions||{}).forEach(([token,s])=>{
+    if(token==="_init") return;
+    const root = typeof getSessionRoot === "function" ? getSessionRoot(s) : s;
+    const meta=root?.meta||{};
+    const lp=root?.public?.lastPoint||{};
+    const exp=Number(meta.expiresAt||0);
+    const active=meta.active===true;
+    const lpTs=fix79Ts(lp.timestamp||lp.ts);
+    let reason="";
+    if(exp && exp<now) reason="истёкшая";
+    else if(!active) reason="завершённая";
+    else if(active && (!lpTs || now-lpTs>60*60*1000)) reason="active без свежей точки";
+    else if(exp && now-exp>7*24*60*60*1000) reason="старая";
+    if(reason) rows.push({token,reason,ownerUid:meta.ownerUid||"",expiresAt:exp,lastPointAt:lpTs,active});
+  });
+  return rows;
+}
+function fix79RenderLiveGarbage(rows){
+  const box=qs("liveGarbageResult");
+  if(!box) return;
+  if(!rows.length){ box.innerHTML='<div class="liveGarbageItem"><b>Мусор live не найден</b><span class="smallMuted">Очищать нечего.</span></div>'; return; }
+  const counts=rows.reduce((a,r)=>(a[r.reason]=(a[r.reason]||0)+1,a),{});
+  box.innerHTML=Object.entries(counts).map(([k,v])=>`<div class="liveGarbageItem"><b>${fix79Esc(k)}</b><span>${v}</span></div>`).join("") + `<div class="liveGarbageItem"><b>Всего к очистке</b><span>${rows.length}</span></div>`;
+}
+async function fix79PreviewLiveGarbage(){ const rows=fix79ClassifyLiveGarbage(); fix79RenderLiveGarbage(rows); showToast?.(`Найдено live-мусора: ${rows.length}`, rows.length?'warn':'success'); return rows; }
+async function fix79CleanupLiveGarbage(){
+  const rows=fix79ClassifyLiveGarbage();
+  fix79RenderLiveGarbage(rows);
+  if(!rows.length) return showToast?.("Мусор live не найден", "info");
+  if(!confirm(`Удалить найденные live-сессии: ${rows.length}?\nИстория маршрутов не будет тронута.`)) return;
+  const updates={}; rows.forEach(r=>updates[`liveSessions/${r.token}`]=null);
+  await update(ref(db), updates);
+  await logAction?.("live_garbage_cleanup", `Удалено live-мусора: ${rows.length}`);
+  showToast?.(`Удалено live-сессий: ${rows.length}`, "success");
+  await loadSessions?.();
+  renderSessions?.();
+  fix79RenderLiveGarbage([]);
+}
+
+function fix79CleanRoutePoints(points){
+  const clean = typeof adminFix66CleanDistance === "function" ? adminFix66CleanDistance(points) : null;
+  if(!clean) return (points||[]).filter(fix79ValidPoint).sort((a,b)=>fix79Ts(a.timestamp)-fix79Ts(b.timestamp));
+  const ok=[];
+  const seen=new Set();
+  for(let i=1;i<clean.sorted.length;i++){
+    const prev=clean.sorted[i-1], cur=clean.sorted[i];
+    const d=adminFix66SegmentDecision(prev,cur);
+    if(d.ok){
+      [prev,cur].forEach(p=>{ const key=fix79Ts(p.timestamp||p.ts)+":"+fix79PointLat(p)+":"+fix79PointLon(p); if(!seen.has(key)){ seen.add(key); ok.push(p); } });
+    }
+  }
+  return ok;
+}
+function fix79CleanExportBase(){ return typeof exportBaseName === "function" ? exportBaseName("clean") : `history_clean_${new Date().toISOString().slice(0,10)}`; }
+function fix79DownloadCleanJson(){ const pts=fix79CleanRoutePoints(getExportPoints()); if(!pts.length) return showToast?.("Нет чистых точек для экспорта","warn"); downloadText(`${fix79CleanExportBase()}.json`, JSON.stringify(pts,null,2), "application/json"); showToast?.("Чистый JSON экспортирован","success"); }
+function fix79DownloadCleanCsv(){ const pts=fix79CleanRoutePoints(getExportPoints()); if(!pts.length) return showToast?.("Нет чистых точек для экспорта","warn"); downloadText(`${fix79CleanExportBase()}.csv`, buildCsv(pts), "text/csv"); showToast?.("Чистый CSV экспортирован","success"); }
+function fix79DownloadCleanGpx(){ const pts=fix79CleanRoutePoints(getExportPoints()); if(!pts.length) return showToast?.("Нет чистых точек для экспорта","warn"); downloadText(`${fix79CleanExportBase()}.gpx`, buildGpx(pts), "application/gpx+xml"); showToast?.("Чистый GPX экспортирован","success"); }
+async function fix79DownloadCleanPdf(){
+  const pts=fix79CleanRoutePoints(getExportPoints());
+  if(!pts.length) return showToast?.("Нет чистых точек для PDF", "warn");
+  try{
+    const {jsPDF}=window.jspdf||{};
+    if(!jsPDF) throw new Error("jsPDF не загружен");
+    const doc=new jsPDF();
+    const s=computeSummary(pts);
+    let y=14;
+    doc.setFontSize(16); doc.text("MyGps clean route report",14,y); y+=10;
+    doc.setFontSize(10); doc.text(`User: ${userLabel?.(selectedUid)||selectedUid||"—"}`,14,y); y+=6;
+    doc.text(`Created: ${new Date().toLocaleString("ru-RU")}`,14,y); y+=8;
+    doc.text(`Points: ${pts.length}`,14,y); y+=6;
+    doc.text(`Clean distance: ${s.km.toFixed(2)} km`,14,y); y+=6;
+    doc.text(`Avg speed: ${s.avgSpeed.toFixed(1)} km/h`,14,y); y+=8;
+    const rows=pts.slice(0,250).map(p=>[fmtTime(p.timestamp), `${fix79PointLat(p).toFixed(5)}, ${fix79PointLon(p).toFixed(5)}`, p.speed!=null?Number(p.speed).toFixed(1):"—", p.accuracy!=null?Number(p.accuracy).toFixed(0):"—"]);
+    doc.autoTable?.({startY:y, head:[["Time","Coordinates","Speed","Accuracy"]], body:rows, styles:{fontSize:8}});
+    doc.save(`${fix79CleanExportBase()}.pdf`);
+    showToast?.("Чистый PDF экспортирован", "success");
+  }catch(e){ recordError?.("fix79DownloadCleanPdf", e); showToast?.("Ошибка чистого PDF: "+(errText?.(e)||e), "error", 4000); }
+}
+
+function fix79BuildStops(points){
+  const pts=(points||[]).filter(fix79ValidPoint).sort((a,b)=>fix79Ts(a.timestamp)-fix79Ts(b.timestamp));
+  const stops=[]; let start=0;
+  const flush=(end)=>{
+    if(end<=start) return;
+    const slice=pts.slice(start,end+1);
+    const dur=fix79Ts(slice[slice.length-1].timestamp)-fix79Ts(slice[0].timestamp);
+    if(dur<2*60*1000) return;
+    const center=slice.reduce((a,p)=>({latitude:a.latitude+fix79PointLat(p)/slice.length, longitude:a.longitude+fix79PointLon(p)/slice.length}),{latitude:0,longitude:0});
+    const radius=Math.max(...slice.map(p=>distanceMeters({latitude:fix79PointLat(p),longitude:fix79PointLon(p)},center)));
+    if(radius<=80) stops.push({start:slice[0],end:slice[slice.length-1],duration:dur,center,radius,points:slice.length});
+  };
+  for(let i=0;i<pts.length;i++){
+    const sp=Number(pts[i].speed||0);
+    if(sp>2.2){ flush(i-1); start=i+1; }
+  }
+  flush(pts.length-1);
+  return stops;
+}
+function fix79RenderStopsList(){
+  const tbody=qs("historyStopsTbody"); if(!tbody) return;
+  const pts=(typeof filteredHistory==="function"?filteredHistory():currentFiltered||[]);
+  const stops=fix79BuildStops(pts);
+  if(!stops.length){ tbody.innerHTML='<tr><td colspan="6">Стоянок не найдено.</td></tr>'; return; }
+  tbody.innerHTML=stops.slice(0,80).map((s,i)=>`<tr><td>${fmtTime(s.start.timestamp)}</td><td>${fmtTime(s.end.timestamp)}</td><td>${formatDuration(s.duration)}</td><td>${Math.round(s.radius)} м</td><td class="mono">${s.center.latitude.toFixed(5)}, ${s.center.longitude.toFixed(5)}</td><td><button class="small secondary" type="button" data-stop-center="${i}">К точке</button></td></tr>`).join("");
+  tbody.querySelectorAll("[data-stop-center]").forEach(btn=>btn.onclick=()=>{
+    const st=stops[Number(btn.dataset.stopCenter)];
+    if(st && historyMap){ historyMap.setView([st.center.latitude,st.center.longitude], Math.max(historyMap.getZoom(),16)); L.circle([st.center.latitude,st.center.longitude], {radius:Math.max(15,st.radius), color:'#eab308', weight:2, fillOpacity:.12}).addTo(historyMap); }
+  });
+}
+const fix79OldRenderHistory = typeof renderHistory === "function" ? renderHistory : null;
+if(fix79OldRenderHistory){
+  renderHistory = async function(){
+    const res = await fix79OldRenderHistory.apply(this, arguments);
+    try{ fix79RenderStopsList(); }catch(e){ recordError?.("fix79RenderStopsList", e); }
+    return res;
+  };
+}
+
+function fix79Install(){
+  const pairs=[
+    ["checkSelectedUserBtn", fix79CheckSelectedUser],
+    ["previewLiveGarbageBtn", fix79PreviewLiveGarbage],
+    ["cleanupLiveGarbageBtn", fix79CleanupLiveGarbage],
+    ["exportCleanJsonBtn", fix79DownloadCleanJson],
+    ["exportCleanCsvBtn", fix79DownloadCleanCsv],
+    ["exportCleanGpxBtn", fix79DownloadCleanGpx],
+    ["exportCleanPdfBtn", fix79DownloadCleanPdf]
+  ];
+  pairs.forEach(([id,fn])=>{ const el=qs(id); if(el && !el.dataset.fix79){ el.dataset.fix79="1"; el.addEventListener("click", ev=>{ ev.preventDefault(); fn().catch?.(e=>{ recordError?.(`fix79 ${id}`, e); showToast?.((errText?.(e)||e), "error", 4500); }); }); }});
+  if(qs("postAdminVersion")) qs("postAdminVersion").textContent=ADMIN_FIX79_VERSION;
+  try{ fix79RenderStopsList(); }catch(e){}
+}
+window.addEventListener("load",()=>setTimeout(fix79Install,1200));
+setTimeout(fix79Install,2500);
+/* === /Admin fix_79 === */
+
+
 /* === /Admin fix_72 integrated === */
 
 </script>
@@ -11232,7 +11533,7 @@ setTimeout(fix75Install,2800);
 
 
 
-<!-- === Admin fix_78: UI cleanup, normal/diagnostic mode, mobile compact === -->
+<!-- === Admin fix_79: UI cleanup, normal/diagnostic mode, mobile compact === -->
 <script>
 (function(){
   const DIAG_TABS = new Set(['alertCenterPanel','usagePanel','trafficPanel','gpsLogPanel','errorsPanel','systemCheckPanel','postUpdatePanel','adminLogsPanel']);
@@ -11331,6 +11632,6 @@ setTimeout(fix75Install,2800);
   setTimeout(install, 1500);
 })();
 </script>
-<!-- === /Admin fix_78 === -->
+<!-- === /Admin fix_79 === -->
 
 </body></html>
