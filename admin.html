@@ -1503,7 +1503,7 @@ body.admin-normal-mode .adminModeHint::after{content:" Обычный режим
           <button id="downloadPostUpdateDiagBtn" class="secondary">Скачать диагностику</button>
         </div>
         <div class="postUpdateGrid">
-          <div class="postUpdateCard"><b>Admin version</b><span id="postAdminVersion">fix_80</span></div>
+          <div class="postUpdateCard"><b>Admin version</b><span id="postAdminVersion">fix_81</span></div>
           <div class="postUpdateCard"><b>Auth</b><span id="postAuthStatus">—</span></div>
           <div class="postUpdateCard"><b>Выбранный пользователь</b><span id="postSelectedUser">—</span></div>
           <div class="postUpdateCard"><b>GPS лог</b><span id="postGpsLogStatus">—</span></div>
@@ -10806,7 +10806,7 @@ window.addEventListener('load', ()=>{ mygpsLivePatchInstallUi(); setTimeout(()=>
 
 
 /* === Admin fix_72: update check, route filter, diagnostics, replay events, cleanup === */
-const ADMIN_FIX70_VERSION = "fix_80";
+const ADMIN_FIX70_VERSION = "fix_81";
 function fix70Qs(id){ return document.getElementById(id); }
 function fix70Esc(v){ return String(v ?? "").replace(/[&<>'"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c])); }
 function fix70Badge(text, kind="ok"){ return `<span class="postUpdateBadge ${kind}">${fix70Esc(text)}</span>`; }
@@ -11074,7 +11074,7 @@ setTimeout(fix73Install,2600);
 
 
 /* === Admin fix_75: app versions + safe auto-refresh in Сейчас === */
-const ADMIN_FIX75_VERSION = "fix_80";
+const ADMIN_FIX75_VERSION = "fix_81";
 let adminFix75AutoTimer = null;
 let adminFix75Refreshing = false;
 function fix75Qs(id){ return document.getElementById(id); }
@@ -11225,7 +11225,7 @@ setTimeout(fix75Install,2800);
 
 
 /* === Admin fix_79: alert hints, selected user check, live garbage, stops list, clean exports === */
-const ADMIN_FIX79_VERSION = "fix_80";
+const ADMIN_FIX79_VERSION = "fix_81";
 function fix79Esc(v){ return String(v ?? "").replace(/[&<>'"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[ch])); }
 function fix79Ts(v){ const n=Number(v||0); return Number.isFinite(n) && n>0 ? n : 0; }
 function fix79PointLat(p){ return Number(p?.latitude ?? p?.lat); }
@@ -11472,8 +11472,8 @@ setTimeout(fix79Install,2500);
 /* === /Admin fix_79 === */
 
 
-/* === Admin fix_80: history search, improved stops, problem layers === */
-const ADMIN_FIX80_VERSION = "fix_80";
+/* === Admin fix_81: history search, improved stops, problem layers === */
+const ADMIN_FIX80_VERSION = "fix_81";
 let fix80ProblemLayer = null;
 let fix80StopCircleLayer = null;
 let fix80SearchMarker = null;
@@ -11624,8 +11624,7 @@ function fix80ExportStopsCsv(){
   if(!stops.length) return showToast?.("Стоянок нет для экспорта", "warn");
   const rows=[["start","end","duration_min","radius_m","repeat_count","lat","lon"]];
   stops.forEach(s=>rows.push([new Date(fix79Ts(s.start.timestamp||s.start.ts)).toISOString(), new Date(fix79Ts(s.end.timestamp||s.end.ts)).toISOString(), (s.duration/60000).toFixed(1), Math.round(s.radius), s.repeatCount, s.center.latitude.toFixed(6), s.center.longitude.toFixed(6)]));
-  const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("
-");
+  const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
   downloadText(`${exportBaseName?.()||"history"}_stops.csv`, csv, "text/csv");
   showToast?.("Стоянки экспортированы", "success");
 }
@@ -11657,7 +11656,7 @@ function fix80Install(){
 }
 window.addEventListener("load",()=>setTimeout(fix80Install,1400));
 setTimeout(fix80Install,2800);
-/* === /Admin fix_80 === */
+/* === /Admin fix_81 === */
 
 
 /* === /Admin fix_72 integrated === */
