@@ -603,7 +603,7 @@ body.admin-normal-mode .adminModeHint::after{content:" Обычный режим
 /* === /Admin fix_79 === */
 
 
-/* Admin fix_83: map settings */
+/* Admin fix_84: map settings */
 .mapSettingsGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:12px}
 .mapSettingCard{padding:12px 14px;border-radius:14px;border:1px solid var(--border);background:rgba(255,255,255,.03);line-height:1.45}
 .mapSettingCard b{display:block;margin-bottom:8px}
@@ -1476,6 +1476,29 @@ body.admin-normal-mode .adminModeHint::after{content:" Обычный режим
           <div class="rulesCheckGrid" id="rulesCheckGrid"><div class="emptyState">Rules check ещё не запускался.</div></div>
         </div>
 
+
+
+        <div class="card" style="margin-top:12px">
+          <h3>Проверка структуры Firebase</h3>
+          <p class="sub">Ищет битые связи и мусор: liveOwners без liveSessions, active live без lastPoint, sessions без ownerUid, пустые users, битую видимость, проблемные геозоны и слишком большие логи.</p>
+          <div class="toolbar">
+            <button id="runDbStructureCheckBtn" class="secondary">Проверить структуру</button>
+            <button id="downloadDbStructureReportBtn" class="secondary">Скачать отчёт</button>
+          </div>
+          <div class="grid4" style="margin-top:12px">
+            <div class="stat"><div class="label">Итог</div><div class="value" id="dbStructSummary">—</div></div>
+            <div class="stat"><div class="label">Критично</div><div class="value" id="dbStructCritical">0</div></div>
+            <div class="stat"><div class="label">Внимание</div><div class="value" id="dbStructWarnings">0</div></div>
+            <div class="stat"><div class="label">Проверено</div><div class="value" id="dbStructChecked">0</div></div>
+          </div>
+          <div style="overflow:auto;margin-top:12px">
+            <table>
+              <thead><tr><th>Уровень</th><th>Проблема</th><th>Путь</th><th>Что делать</th></tr></thead>
+              <tbody id="dbStructureTbody"><tr><td colspan="4">Проверка ещё не запускалась.</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
         <div id="systemCheckRows" style="margin-top:12px">
           <div class="emptyState">Проверка ещё не запускалась.</div>
         </div>
@@ -1499,7 +1522,7 @@ body.admin-normal-mode .adminModeHint::after{content:" Обычный режим
           <button id="downloadPostUpdateDiagBtn" class="secondary">Скачать диагностику</button>
         </div>
         <div class="postUpdateGrid">
-          <div class="postUpdateCard"><b>Admin version</b><span id="postAdminVersion">fix_83</span></div>
+          <div class="postUpdateCard"><b>Admin version</b><span id="postAdminVersion">fix_84</span></div>
           <div class="postUpdateCard"><b>Auth</b><span id="postAuthStatus">—</span></div>
           <div class="postUpdateCard"><b>Выбранный пользователь</b><span id="postSelectedUser">—</span></div>
           <div class="postUpdateCard"><b>GPS лог</b><span id="postGpsLogStatus">—</span></div>
@@ -3519,6 +3542,249 @@ document.querySelectorAll(".tab-btn").forEach(btn=>{
     setTimeout(()=>{ historyMap.invalidateSize(); liveMap.invalidateSize(); sessionMap.invalidateSize(); geofenceMap.invalidateSize(); speedChart?.resize(); distanceChart?.resize(); },50);
   };
 });
+
+
+
+/* === Admin fix_84: Firebase structure check === */
+let fix84LastDbStructureReport = null;
+
+function fix84Val(v, fallback="—"){
+  return v === null || v === undefined || v === "" ? fallback : String(v);
+}
+function fix84GetSessionRoot(session){
+  if(!session || typeof session !== "object") return {meta:{}, public:{}};
+  if(session.meta || session.public) return {meta: session.meta || {}, public: session.public || {}, raw: session};
+  return {meta: session || {}, public: session.public || {}, raw: session};
+}
+function fix84CountObj(obj){
+  return obj && typeof obj === "object" ? Object.keys(obj).filter(k=>k !== "_init").length : 0;
+}
+function fix84AddIssue(list, level, problem, path, action, details=""){
+  list.push({
+    level,
+    problem: details ? `${problem}: ${details}` : problem,
+    path: path || "—",
+    action: action || "Проверить вручную"
+  });
+}
+function fix84SeverityBadge(level){
+  const cls = level === "critical" ? "err" : level === "warning" ? "warn" : "ok";
+  const text = level === "critical" ? "Критично" : level === "warning" ? "Внимание" : "OK";
+  return `<span class="checkBadge ${cls}">${text}</span>`;
+}
+function fix84RenderDbStructure(rows, meta){
+  const tbody = qs("dbStructureTbody");
+  if(tbody){
+    if(!rows.length){
+      tbody.innerHTML = `<tr><td>${fix84SeverityBadge("ok")}</td><td>Структура выглядит нормально</td><td>—</td><td>Ничего делать не нужно.</td></tr>`;
+    }else{
+      tbody.innerHTML = rows.map(r=>`<tr>
+        <td>${fix84SeverityBadge(r.level)}</td>
+        <td>${escapeHtml(r.problem)}</td>
+        <td class="mono">${escapeHtml(r.path)}</td>
+        <td>${escapeHtml(r.action)}</td>
+      </tr>`).join("");
+    }
+  }
+  const crit = rows.filter(r=>r.level === "critical").length;
+  const warn = rows.filter(r=>r.level === "warning").length;
+  const checked = meta?.checked || 0;
+  const summary = crit ? `Есть критичные: ${crit}` : warn ? `Есть предупреждения: ${warn}` : "OK";
+  qs("dbStructSummary") && (qs("dbStructSummary").textContent = summary);
+  qs("dbStructCritical") && (qs("dbStructCritical").textContent = String(crit));
+  qs("dbStructWarnings") && (qs("dbStructWarnings").textContent = String(warn));
+  qs("dbStructChecked") && (qs("dbStructChecked").textContent = String(checked));
+}
+async function fix84RunDbStructureCheck(){
+  const btn = qs("runDbStructureCheckBtn");
+  if(btn){ btn.disabled = true; btn.textContent = "Проверяю…"; }
+  try{
+    fix84RenderDbStructure([{level:"ok", problem:"Проверка запущена", path:"Firebase", action:"Идёт чтение основных узлов."}], {checked:0});
+    const now = Date.now();
+    const [usersSnap, ownersSnap, sessionsSnap, visibilitySnap, geofencesSnap] = await Promise.all([
+      get(ref(db, "users")),
+      get(ref(db, "liveOwners")),
+      get(ref(db, "liveSessions")),
+      get(ref(db, "userVisibility")),
+      get(ref(db, "geofences"))
+    ]);
+    const users = usersSnap.val() || {};
+    const owners = ownersSnap.val() || {};
+    const sessions = sessionsSnap.val() || {};
+    const visibility = visibilitySnap.val() || {};
+    const geofences = geofencesSnap.val() || {};
+    const userKeys = new Set(Object.keys(users).filter(k=>k !== "_init"));
+    const rows = [];
+    let checked = 0;
+
+    for(const uid of userKeys){
+      checked++;
+      const u = users[uid] || {};
+      const name = u.name || u.displayName || u.username || "";
+      const email = u.email || "";
+      const lastSeen = Number(u.lastSeen || u.updatedAt || u.lastUpdated || 0);
+      if(!name && !email){
+        fix84AddIssue(rows, "warning", "Пустой профиль пользователя", `users/${uid}`, "Если это старый anonymous/unknown UID — удалить через вкладку Пользователи.");
+      }
+      if(lastSeen && now - lastSeen > 1000*60*60*24*30){
+        fix84AddIssue(rows, "warning", "Пользователь давно не обновлялся", `users/${uid}`, "Проверить, нужен ли профиль, или оставить как архивный.", `последняя активность ${Math.round((now-lastSeen)/86400000)} дн. назад`);
+      }
+    }
+
+    for(const [uid, owner] of Object.entries(owners || {})){
+      if(uid === "_init") continue;
+      checked++;
+      if(!userKeys.has(uid)){
+        fix84AddIssue(rows, "warning", "liveOwners для несуществующего пользователя", `liveOwners/${uid}`, "Проверить UID. Если пользователя нет — очистить этот liveOwners.");
+      }
+      const token = owner?.activeSessionId || owner?.sessionId || owner?.token || "";
+      if(token){
+        const session = sessions[token];
+        if(!session){
+          fix84AddIssue(rows, "critical", "liveOwners указывает на несуществующую liveSessions", `liveOwners/${uid}/activeSessionId`, "Очистить liveOwners или создать новую live-сессию.", token);
+        }else{
+          const root = fix84GetSessionRoot(session);
+          const meta = root.meta || {};
+          if(meta.ownerUid && meta.ownerUid !== uid){
+            fix84AddIssue(rows, "critical", "ownerUid live-сессии не совпадает с liveOwners", `liveSessions/${token}/meta/ownerUid`, "Исправить liveOwners или завершить битую live-сессию.", `liveOwners=${uid}, ownerUid=${meta.ownerUid}`);
+          }
+        }
+      }
+    }
+
+    for(const [token, session] of Object.entries(sessions || {})){
+      if(token === "_init") continue;
+      checked++;
+      const root = fix84GetSessionRoot(session);
+      const meta = root.meta || {};
+      const pub = root.public || {};
+      const ownerUid = meta.ownerUid || session.ownerUid || "";
+      const active = meta.active === true || meta.status === "active" || session.active === true;
+      const expiresAt = Number(meta.expiresAt || session.expiresAt || 0);
+      const endedAt = Number(meta.endedAt || session.endedAt || 0);
+      const lp = pub.lastPoint || session.lastPoint || {};
+      const lpTs = Number(lp.timestamp || lp.ts || lp.updatedAt || 0);
+      if(!ownerUid){
+        fix84AddIssue(rows, "critical", "liveSessions без ownerUid", `liveSessions/${token}/meta/ownerUid`, "Завершить/очистить эту сессию или восстановить ownerUid.");
+      }else if(!userKeys.has(ownerUid)){
+        fix84AddIssue(rows, "warning", "liveSessions принадлежит отсутствующему пользователю", `liveSessions/${token}`, "Проверить пользователя. Если UID старый — очистить сессию.", ownerUid);
+      }
+      if(active && expiresAt && expiresAt < now){
+        fix84AddIssue(rows, "warning", "Active live уже истёк по expiresAt", `liveSessions/${token}/meta`, "Нажать завершить/очистить истёкшие live-сессии.");
+      }
+      if(active && !lpTs){
+        fix84AddIssue(rows, "critical", "Active live без public/lastPoint", `liveSessions/${token}/public/lastPoint`, "Проверить MyGps, live write и Firebase Rules.");
+      }else if(active && lpTs && now - lpTs > 1000*60*5){
+        fix84AddIssue(rows, "warning", "Active live со старым lastPoint", `liveSessions/${token}/public/lastPoint`, "Проверить интернет телефона, GPS service и live режим.", `${Math.round((now-lpTs)/60000)} мин. назад`);
+      }
+      if(!active && endedAt && now - endedAt > 1000*60*60*24*7){
+        fix84AddIssue(rows, "warning", "Старая завершённая live-сессия", `liveSessions/${token}`, "Можно удалить через безопасную очистку live-мусора.");
+      }
+    }
+
+    for(const [uid, targets] of Object.entries(visibility || {})){
+      if(uid === "_init") continue;
+      checked++;
+      if(!userKeys.has(uid)){
+        fix84AddIssue(rows, "warning", "userVisibility для отсутствующего пользователя", `userVisibility/${uid}`, "Очистить старую настройку видимости.");
+      }
+      if(targets && typeof targets === "object"){
+        for(const [targetUid, val] of Object.entries(targets)){
+          if(targetUid === "_init") continue;
+          if(!userKeys.has(targetUid)){
+            fix84AddIssue(rows, "warning", "Видимость указывает на отсутствующего пользователя", `userVisibility/${uid}/${targetUid}`, "Удалить targetUid из видимости.");
+          }
+          if(!(val === true || val === false)){
+            fix84AddIssue(rows, "warning", "Некорректное значение видимости", `userVisibility/${uid}/${targetUid}`, "Значение должно быть true/false.", String(val));
+          }
+        }
+      }
+    }
+
+    for(const [uid, zones] of Object.entries(geofences || {})){
+      if(uid === "_init") continue;
+      checked++;
+      if(!userKeys.has(uid)){
+        fix84AddIssue(rows, "warning", "geofences для отсутствующего пользователя", `geofences/${uid}`, "Проверить владельца геозоны или удалить старый узел.");
+      }
+      if(zones && typeof zones === "object"){
+        for(const [zoneId, zone] of Object.entries(zones)){
+          if(zoneId === "_init") continue;
+          const lat = Number(zone.lat ?? zone.latitude);
+          const lon = Number(zone.lon ?? zone.lng ?? zone.longitude);
+          const radius = Number(zone.radius || zone.radiusM || 0);
+          if(!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180){
+            fix84AddIssue(rows, "critical", "Геозона с неправильными координатами", `geofences/${uid}/${zoneId}`, "Исправить координаты или удалить геозону.");
+          }
+          if(!Number.isFinite(radius) || radius < 10 || radius > 100000){
+            fix84AddIssue(rows, "warning", "Геозона с подозрительным радиусом", `geofences/${uid}/${zoneId}/radius`, "Поставить нормальный радиус, например 50–500 м.", String(radius));
+          }
+          const assigned = zone.userUids || zone.users || zone.targets || {};
+          if(assigned && typeof assigned === "object"){
+            for(const [targetUid, enabled] of Object.entries(assigned)){
+              if(targetUid === "_init") continue;
+              if(enabled && !userKeys.has(targetUid)){
+                fix84AddIssue(rows, "warning", "Геозона привязана к отсутствующему пользователю", `geofences/${uid}/${zoneId}/users/${targetUid}`, "Удалить отсутствующего пользователя из привязки геозоны.");
+              }
+            }
+          }
+        }
+      }
+    }
+
+    const selectedForLogs = selectedUid || auth.currentUser?.uid || "";
+    if(selectedForLogs){
+      checked++;
+      try{
+        const logSnap = await get(ref(db, `gpsServiceLogs/${selectedForLogs}`));
+        const count = fix84CountObj(logSnap.val());
+        if(count > 1500){
+          fix84AddIssue(rows, "warning", "GPS лог выбранного пользователя слишком большой", `gpsServiceLogs/${selectedForLogs}`, "Очистить старые GPS logs через автоочистку логов.", `${count} записей`);
+        }
+      }catch(e){
+        fix84AddIssue(rows, "warning", "Не удалось проверить gpsServiceLogs", `gpsServiceLogs/${selectedForLogs}`, "Проверить Firebase Rules для gpsServiceLogs.", errText?.(e) || String(e));
+      }
+      try{
+        const evSnap = await get(ref(db, `events/${selectedForLogs}`));
+        const count = fix84CountObj(evSnap.val());
+        if(count > 3000){
+          fix84AddIssue(rows, "warning", "events выбранного пользователя слишком большой", `events/${selectedForLogs}`, "Очистить старые events через автоочистку логов.", `${count} записей`);
+        }
+      }catch(e){
+        // events may be empty or restricted in some deployments; don't fail the whole check
+      }
+    }
+
+    rows.sort((a,b)=>({critical:0,warning:1,ok:2}[a.level]??3)-({critical:0,warning:1,ok:2}[b.level]??3));
+    fix84LastDbStructureReport = {generatedAt:new Date().toISOString(), selectedUid:selectedUid||null, checked, issues:rows};
+    fix84RenderDbStructure(rows, {checked});
+    showToast?.(rows.length ? `Структура: найдено ${rows.length} замечаний` : "Структура Firebase: OK", rows.some(r=>r.level==="critical") ? "warn" : "success", 3500);
+  }catch(e){
+    fix84LastDbStructureReport = {generatedAt:new Date().toISOString(), error: errText?.(e) || String(e)};
+    fix84RenderDbStructure([{level:"critical", problem:"Проверка структуры не выполнена", path:"Firebase", action: errText?.(e) || String(e)}], {checked:0});
+    recordError?.("fix84RunDbStructureCheck", e);
+    showToast?.("Ошибка проверки структуры: "+(errText?.(e)||e), "error", 4500);
+  }finally{
+    if(btn){ btn.disabled = false; btn.textContent = "Проверить структуру"; }
+  }
+}
+function fix84DownloadDbStructureReport(){
+  if(!fix84LastDbStructureReport){
+    showToast?.("Сначала запусти проверку структуры", "warn", 2500);
+    return;
+  }
+  const blob = new Blob([JSON.stringify(fix84LastDbStructureReport, null, 2)], {type:"application/json;charset=utf-8"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `mygps_firebase_structure_${new Date().toISOString().replace(/[:.]/g,"-")}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+}
+window.fix84RunDbStructureCheck = fix84RunDbStructureCheck;
+window.fix84DownloadDbStructureReport = fix84DownloadDbStructureReport;
+qs("runDbStructureCheckBtn")?.addEventListener("click", ()=>fix84RunDbStructureCheck());
+qs("downloadDbStructureReportBtn")?.addEventListener("click", ()=>fix84DownloadDbStructureReport());
+/* === /Admin fix_84 === */
 
 async function reverseGeocode(lat, lon){
   const latNum = Number(lat), lonNum = Number(lon);
@@ -10802,7 +11068,7 @@ window.addEventListener('load', ()=>{ mygpsLivePatchInstallUi(); setTimeout(()=>
 
 
 /* === Admin fix_72: update check, route filter, diagnostics, replay events, cleanup === */
-const ADMIN_FIX70_VERSION = "fix_83";
+const ADMIN_FIX70_VERSION = "fix_84";
 function fix70Qs(id){ return document.getElementById(id); }
 function fix70Esc(v){ return String(v ?? "").replace(/[&<>'"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c])); }
 function fix70Badge(text, kind="ok"){ return `<span class="postUpdateBadge ${kind}">${fix70Esc(text)}</span>`; }
@@ -11070,7 +11336,7 @@ setTimeout(fix73Install,2600);
 
 
 /* === Admin fix_75: app versions + safe auto-refresh in Сейчас === */
-const ADMIN_FIX75_VERSION = "fix_83";
+const ADMIN_FIX75_VERSION = "fix_84";
 let adminFix75AutoTimer = null;
 let adminFix75Refreshing = false;
 function fix75Qs(id){ return document.getElementById(id); }
@@ -11221,7 +11487,7 @@ setTimeout(fix75Install,2800);
 
 
 /* === Admin fix_79: alert hints, selected user check, live garbage, stops list, clean exports === */
-const ADMIN_FIX79_VERSION = "fix_83";
+const ADMIN_FIX79_VERSION = "fix_84";
 function fix79Esc(v){ return String(v ?? "").replace(/[&<>'"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[ch])); }
 function fix79Ts(v){ const n=Number(v||0); return Number.isFinite(n) && n>0 ? n : 0; }
 function fix79PointLat(p){ return Number(p?.latitude ?? p?.lat); }
@@ -11468,8 +11734,8 @@ setTimeout(fix79Install,2500);
 /* === /Admin fix_79 === */
 
 
-/* === Admin fix_83: history search, improved stops, problem layers === */
-const ADMIN_FIX80_VERSION = "fix_83";
+/* === Admin fix_84: history search, improved stops, problem layers === */
+const ADMIN_FIX80_VERSION = "fix_84";
 let fix80ProblemLayer = null;
 let fix80StopCircleLayer = null;
 let fix80SearchMarker = null;
@@ -11652,14 +11918,14 @@ function fix80Install(){
 }
 window.addEventListener("load",()=>setTimeout(fix80Install,1400));
 setTimeout(fix80Install,2800);
-/* === /Admin fix_83 === */
+/* === /Admin fix_84 === */
 
 
 /* === /Admin fix_72 integrated === */
 
 
-/* === Admin fix_83: saved map settings === */
-const ADMIN_FIX83_VERSION = "fix_83";
+/* === Admin fix_84: saved map settings === */
+const ADMIN_FIX83_VERSION = "fix_84";
 const ADMIN_FIX83_MAP_KEY = "mygps_admin_map_settings";
 function fix83Qs(id){ return document.getElementById(id); }
 function fix83ReadMapSettings(){
@@ -11850,7 +12116,7 @@ function fix83InitMapSettings(){
     fix83BindMapSettings();
     fix83HookExistingMapControls();
     fix83ApplyMapSettings({render:false, move:true});
-    const v=fix83Qs("postUpdateAdminVersion"); if(v) v.textContent="fix_83";
+    const v=fix83Qs("postUpdateAdminVersion"); if(v) v.textContent="fix_84";
   }catch(e){ console.warn("fix83InitMapSettings", e); }
 }
 setTimeout(fix83InitMapSettings, 350);
