@@ -692,8 +692,7 @@ tr.gpsLogRowStop,tr.gpsLogRowError{background:rgba(185,28,28,.13)}
         <div class="adminVersionGrid" id="nowVersionsGrid">
           <div class="adminVersionCard"><b>MyGps Android</b><span id="nowMyGpsVersion">—</span><span class="adminVersionHint" id="nowMyGpsVersionHint">по данным пользователя / live</span></div>
           <div class="adminVersionCard"><b>MyGpsLive</b><span id="nowMyGpsLiveVersion">—</span><span class="adminVersionHint" id="nowMyGpsLiveVersionHint">по данным live-сессии</span></div>
-          <div class="adminVersionCard"><b>Admin</b><span id="nowAdminVersion">fix_75</span><span class="adminVersionHint">текущая админка</span></div>
-        </div>
+                  </div>
 
         <div id="nowLiveWarning" class="nowLiveWarning">—</div>
 
@@ -1368,7 +1367,7 @@ tr.gpsLogRowStop,tr.gpsLogRowError{background:rgba(185,28,28,.13)}
           <button id="downloadPostUpdateDiagBtn" class="secondary">Скачать диагностику</button>
         </div>
         <div class="postUpdateGrid">
-          <div class="postUpdateCard"><b>Admin version</b><span id="postAdminVersion">fix_75</span></div>
+          <div class="postUpdateCard"><b>Admin version</b><span id="postAdminVersion">fix_76</span></div>
           <div class="postUpdateCard"><b>MyGps Android</b><span id="postMyGpsVersion">—</span></div>
           <div class="postUpdateCard"><b>MyGpsLive</b><span id="postMyGpsLiveVersion">—</span></div>
           <div class="postUpdateCard"><b>Auth</b><span id="postAuthStatus">—</span></div>
@@ -10941,7 +10940,7 @@ setTimeout(fix73Install,2600);
 
 
 /* === Admin fix_75: app versions + safe auto-refresh in Сейчас === */
-const ADMIN_FIX75_VERSION = "fix_75";
+const ADMIN_FIX75_VERSION = "fix_76";
 let adminFix75AutoTimer = null;
 let adminFix75Refreshing = false;
 function fix75Qs(id){ return document.getElementById(id); }
