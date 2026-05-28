@@ -603,7 +603,7 @@ body.admin-normal-mode .adminModeHint::after{content:" Обычный режим
 /* === /Admin fix_79 === */
 
 
-/* Admin fix_84: map settings */
+/* Admin fix_85: map settings */
 .mapSettingsGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:12px}
 .mapSettingCard{padding:12px 14px;border-radius:14px;border:1px solid var(--border);background:rgba(255,255,255,.03);line-height:1.45}
 .mapSettingCard b{display:block;margin-bottom:8px}
@@ -1483,6 +1483,8 @@ body.admin-normal-mode .adminModeHint::after{content:" Обычный режим
           <p class="sub">Ищет битые связи и мусор: liveOwners без liveSessions, active live без lastPoint, sessions без ownerUid, пустые users, битую видимость, проблемные геозоны и слишком большие логи.</p>
           <div class="toolbar">
             <button id="runDbStructureCheckBtn" class="secondary">Проверить структуру</button>
+            <button id="previewDbSafeRepairBtn" class="secondary">Проверить безопасные исправления</button>
+            <button id="runDbSafeRepairBtn" class="warn">Исправить безопасно</button>
             <button id="downloadDbStructureReportBtn" class="secondary">Скачать отчёт</button>
           </div>
           <div class="grid4" style="margin-top:12px">
@@ -1491,6 +1493,7 @@ body.admin-normal-mode .adminModeHint::after{content:" Обычный режим
             <div class="stat"><div class="label">Внимание</div><div class="value" id="dbStructWarnings">0</div></div>
             <div class="stat"><div class="label">Проверено</div><div class="value" id="dbStructChecked">0</div></div>
           </div>
+          <div id="dbSafeRepairResult" class="notice smallMuted">Безопасное исправление ещё не проверялось. Оно не трогает history маршрутов.</div>
           <div style="overflow:auto;margin-top:12px">
             <table>
               <thead><tr><th>Уровень</th><th>Проблема</th><th>Путь</th><th>Что делать</th></tr></thead>
@@ -1522,7 +1525,7 @@ body.admin-normal-mode .adminModeHint::after{content:" Обычный режим
           <button id="downloadPostUpdateDiagBtn" class="secondary">Скачать диагностику</button>
         </div>
         <div class="postUpdateGrid">
-          <div class="postUpdateCard"><b>Admin version</b><span id="postAdminVersion">fix_84</span></div>
+          <div class="postUpdateCard"><b>Admin version</b><span id="postAdminVersion">fix_85</span></div>
           <div class="postUpdateCard"><b>Auth</b><span id="postAuthStatus">—</span></div>
           <div class="postUpdateCard"><b>Выбранный пользователь</b><span id="postSelectedUser">—</span></div>
           <div class="postUpdateCard"><b>GPS лог</b><span id="postGpsLogStatus">—</span></div>
@@ -3545,7 +3548,7 @@ document.querySelectorAll(".tab-btn").forEach(btn=>{
 
 
 
-/* === Admin fix_84: Firebase structure check === */
+/* === Admin fix_85: Firebase structure check === */
 let fix84LastDbStructureReport = null;
 
 function fix84Val(v, fallback="—"){
@@ -3781,10 +3784,207 @@ function fix84DownloadDbStructureReport(){
   setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
 }
 window.fix84RunDbStructureCheck = fix84RunDbStructureCheck;
+
 window.fix84DownloadDbStructureReport = fix84DownloadDbStructureReport;
+
+/* === Admin fix_85: clean stable + safe Firebase repair === */
+let fix85LastSafeRepairPlan = null;
+function fix85RepairLine(text, path){
+  return `<div><b>${escapeHtml(text)}</b><br><span class="mono smallMuted">${escapeHtml(path || "—")}</span></div>`;
+}
+function fix85SetRepairResult(html){
+  const el = qs("dbSafeRepairResult");
+  if(el) el.innerHTML = html;
+}
+function fix85SessionInfo(session){
+  const root = fix84GetSessionRoot(session);
+  const meta = root.meta || {};
+  const pub = root.public || {};
+  const ownerUid = meta.ownerUid || session?.ownerUid || "";
+  const status = String(meta.status || session?.status || "").toLowerCase();
+  const active = meta.active === true || status === "active" || session?.active === true;
+  const expiresAt = Number(meta.expiresAt || session?.expiresAt || 0);
+  const endedAt = Number(meta.endedAt || session?.endedAt || 0);
+  const lp = pub.lastPoint || session?.lastPoint || null;
+  const lpTs = Number(lp?.timestamp || lp?.ts || lp?.updatedAt || 0);
+  return {root, meta, pub, ownerUid, status, active, expiresAt, endedAt, lp, lpTs};
+}
+async function fix85BuildSafeRepairPlan(){
+  const now = Date.now();
+  const [usersSnap, ownersSnap, sessionsSnap, visibilitySnap, geofencesSnap] = await Promise.all([
+    get(ref(db, "users")),
+    get(ref(db, "liveOwners")),
+    get(ref(db, "liveSessions")),
+    get(ref(db, "userVisibility")),
+    get(ref(db, "geofences"))
+  ]);
+  const users = usersSnap.val() || {};
+  const owners = ownersSnap.val() || {};
+  const sessions = sessionsSnap.val() || {};
+  const visibility = visibilitySnap.val() || {};
+  const geofences = geofencesSnap.val() || {};
+  const userKeys = new Set(Object.keys(users || {}).filter(k => k !== "_init"));
+  const updates = {};
+  const actions = [];
+  const addUpdate = (path, value, label) => {
+    if(path in updates) return;
+    updates[path] = value;
+    actions.push({type:"update", path, label});
+  };
+
+  for(const [uid, owner] of Object.entries(owners || {})){
+    if(uid === "_init") continue;
+    const token = owner?.activeSessionId || owner?.sessionId || owner?.token || "";
+    if(!userKeys.has(uid)){
+      addUpdate(`liveOwners/${uid}`, null, "Удалить liveOwners отсутствующего пользователя");
+      continue;
+    }
+    if(token && !sessions[token]){
+      addUpdate(`liveOwners/${uid}/activeSessionId`, null, "Очистить битый activeSessionId");
+      addUpdate(`liveOwners/${uid}/sessionId`, null, "Очистить битый sessionId");
+      addUpdate(`liveOwners/${uid}/token`, null, "Очистить битый token");
+      addUpdate(`liveOwners/${uid}/active`, false, "Снять active у битого liveOwner");
+    }
+  }
+
+  for(const [token, session] of Object.entries(sessions || {})){
+    if(token === "_init") continue;
+    const info = fix85SessionInfo(session);
+    const endedOld = !info.active && info.endedAt && (now - info.endedAt > 7*24*60*60*1000);
+    const expiredActive = info.active && info.expiresAt && info.expiresAt < now;
+    const missingOwner = !info.ownerUid;
+    const missingUser = info.ownerUid && !userKeys.has(info.ownerUid);
+    if(expiredActive){
+      addUpdate(`liveSessions/${token}/meta/active`, false, "Пометить истёкший active live как неактивный");
+      addUpdate(`liveSessions/${token}/meta/status`, "expired", "Поставить status expired");
+      addUpdate(`liveSessions/${token}/meta/endedAt`, now, "Поставить endedAt");
+      addUpdate(`liveSessions/${token}/meta/remainingMs`, 0, "Поставить remainingMs 0");
+      addUpdate(`liveSessions/${token}/meta/paused`, false, "Снять paused");
+      if(info.ownerUid){
+        const ownerToken = owners?.[info.ownerUid]?.activeSessionId || owners?.[info.ownerUid]?.sessionId || owners?.[info.ownerUid]?.token || "";
+        if(ownerToken === token){
+          addUpdate(`liveOwners/${info.ownerUid}/activeSessionId`, null, "Очистить activeSessionId истёкшей live-сессии");
+          addUpdate(`liveOwners/${info.ownerUid}/active`, false, "Снять active у liveOwner");
+        }
+      }
+    }
+    if(endedOld){
+      addUpdate(`liveSessions/${token}`, null, "Удалить старую завершённую live-сессию");
+    }
+    if((missingOwner || missingUser) && !info.active){
+      addUpdate(`liveSessions/${token}`, null, missingOwner ? "Удалить неактивную live-сессию без ownerUid" : "Удалить неактивную live-сессию отсутствующего пользователя");
+    }else if((missingOwner || missingUser) && info.active){
+      addUpdate(`liveSessions/${token}/meta/active`, false, "Остановить active live с битым ownerUid");
+      addUpdate(`liveSessions/${token}/meta/status`, "ended", "Поставить status ended для битой live-сессии");
+      addUpdate(`liveSessions/${token}/meta/endedAt`, now, "Поставить endedAt для битой live-сессии");
+      addUpdate(`liveSessions/${token}/meta/remainingMs`, 0, "Поставить remainingMs 0");
+    }
+  }
+
+  for(const [uid, targets] of Object.entries(visibility || {})){
+    if(uid === "_init") continue;
+    if(!userKeys.has(uid)){
+      addUpdate(`userVisibility/${uid}`, null, "Удалить видимость отсутствующего пользователя");
+      continue;
+    }
+    if(targets && typeof targets === "object"){
+      for(const [targetUid, val] of Object.entries(targets)){
+        if(targetUid === "_init") continue;
+        if(!userKeys.has(targetUid) || !(val === true || val === false)){
+          addUpdate(`userVisibility/${uid}/${targetUid}`, null, "Удалить битую связь видимости");
+        }
+      }
+    }
+  }
+
+  for(const [uid, zones] of Object.entries(geofences || {})){
+    if(uid === "_init") continue;
+    if(!userKeys.has(uid)){
+      addUpdate(`geofences/${uid}`, null, "Удалить геозоны отсутствующего пользователя");
+      continue;
+    }
+    if(zones && typeof zones === "object"){
+      for(const [zoneId, zone] of Object.entries(zones)){
+        if(zoneId === "_init") continue;
+        const assigned = zone?.userUids || zone?.users || zone?.targets || {};
+        if(assigned && typeof assigned === "object"){
+          const field = zone?.userUids ? "userUids" : (zone?.users ? "users" : "targets");
+          for(const [targetUid, enabled] of Object.entries(assigned)){
+            if(targetUid === "_init") continue;
+            if(enabled && !userKeys.has(targetUid)){
+              addUpdate(`geofences/${uid}/${zoneId}/${field}/${targetUid}`, null, "Удалить отсутствующего пользователя из геозоны");
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return {createdAt:new Date().toISOString(), updates, actions};
+}
+function fix85RenderSafeRepairPlan(plan){
+  fix85LastSafeRepairPlan = plan;
+  const count = plan?.actions?.length || 0;
+  if(!count){
+    fix85SetRepairResult(`<b>Безопасные исправления не нужны.</b><br><span class="smallMuted">History не проверялся и не будет изменяться.</span>`);
+    return;
+  }
+  const preview = plan.actions.slice(0, 20).map(a => fix85RepairLine(a.label, a.path)).join("");
+  const more = count > 20 ? `<div class="smallMuted">…и ещё ${count-20}</div>` : "";
+  fix85SetRepairResult(`<b>Будет выполнено безопасных изменений: ${count}</b><br><span class="smallMuted">History маршрутов не трогается. Перед применением проверь список.</span><div style="margin-top:8px;display:grid;gap:8px">${preview}${more}</div>`);
+}
+async function fix85PreviewSafeRepair(){
+  const btn = qs("previewDbSafeRepairBtn");
+  if(btn){btn.disabled=true; btn.textContent="Проверяю…";}
+  try{
+    const plan = await fix85BuildSafeRepairPlan();
+    fix85RenderSafeRepairPlan(plan);
+    showToast?.(plan.actions.length ? `Найдено безопасных исправлений: ${plan.actions.length}` : "Безопасные исправления не нужны", plan.actions.length ? "warn" : "success", 3000);
+  }catch(e){
+    recordError?.("fix85PreviewSafeRepair", e);
+    fix85SetRepairResult(`<b>Ошибка проверки безопасных исправлений:</b> ${escapeHtml(errText?.(e)||String(e))}`);
+    showToast?.("Ошибка проверки исправлений", "error", 3500);
+  }finally{
+    if(btn){btn.disabled=false; btn.textContent="Проверить безопасные исправления";}
+  }
+}
+async function fix85RunSafeRepair(){
+  let plan = fix85LastSafeRepairPlan;
+  if(!plan) plan = await fix85BuildSafeRepairPlan();
+  const count = plan?.actions?.length || 0;
+  if(!count){
+    fix85RenderSafeRepairPlan(plan);
+    return showToast?.("Исправлять нечего", "success", 2500);
+  }
+  if(!confirm(`Применить ${count} безопасных исправлений?\n\nHistory маршрутов НЕ будет изменяться.`)) return;
+  const btn = qs("runDbSafeRepairBtn");
+  if(btn){btn.disabled=true; btn.textContent="Исправляю…";}
+  try{
+    await update(ref(db), plan.updates);
+    await logAction?.("firebase_safe_repair", `Выполнено безопасных исправлений Firebase: ${count}`);
+    fix85SetRepairResult(`<b>Готово: применено ${count} безопасных исправлений.</b><br><span class="smallMuted">History маршрутов не изменялся. Запусти проверку структуры ещё раз.</span>`);
+    fix85LastSafeRepairPlan = null;
+    await loadSessions?.();
+    await loadUsers?.();
+    await fix84RunDbStructureCheck();
+    showToast?.(`Безопасные исправления применены: ${count}`, "success", 3500);
+  }catch(e){
+    recordError?.("fix85RunSafeRepair", e);
+    fix85SetRepairResult(`<b>Ошибка применения исправлений:</b> ${escapeHtml(errText?.(e)||String(e))}`);
+    showToast?.("Ошибка применения исправлений", "error", 4200);
+  }finally{
+    if(btn){btn.disabled=false; btn.textContent="Исправить безопасно";}
+  }
+}
+window.fix85PreviewSafeRepair = fix85PreviewSafeRepair;
+window.fix85RunSafeRepair = fix85RunSafeRepair;
+/* === /Admin fix_85 === */
+
 qs("runDbStructureCheckBtn")?.addEventListener("click", ()=>fix84RunDbStructureCheck());
+qs("previewDbSafeRepairBtn")?.addEventListener("click", ()=>fix85PreviewSafeRepair());
+qs("runDbSafeRepairBtn")?.addEventListener("click", ()=>fix85RunSafeRepair());
 qs("downloadDbStructureReportBtn")?.addEventListener("click", ()=>fix84DownloadDbStructureReport());
-/* === /Admin fix_84 === */
+/* === /Admin fix_85 === */
 
 async function reverseGeocode(lat, lon){
   const latNum = Number(lat), lonNum = Number(lon);
@@ -11068,7 +11268,7 @@ window.addEventListener('load', ()=>{ mygpsLivePatchInstallUi(); setTimeout(()=>
 
 
 /* === Admin fix_72: update check, route filter, diagnostics, replay events, cleanup === */
-const ADMIN_FIX70_VERSION = "fix_84";
+const ADMIN_FIX70_VERSION = "fix_85";
 function fix70Qs(id){ return document.getElementById(id); }
 function fix70Esc(v){ return String(v ?? "").replace(/[&<>'"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c])); }
 function fix70Badge(text, kind="ok"){ return `<span class="postUpdateBadge ${kind}">${fix70Esc(text)}</span>`; }
@@ -11336,7 +11536,7 @@ setTimeout(fix73Install,2600);
 
 
 /* === Admin fix_75: app versions + safe auto-refresh in Сейчас === */
-const ADMIN_FIX75_VERSION = "fix_84";
+const ADMIN_FIX75_VERSION = "fix_85";
 let adminFix75AutoTimer = null;
 let adminFix75Refreshing = false;
 function fix75Qs(id){ return document.getElementById(id); }
@@ -11487,7 +11687,7 @@ setTimeout(fix75Install,2800);
 
 
 /* === Admin fix_79: alert hints, selected user check, live garbage, stops list, clean exports === */
-const ADMIN_FIX79_VERSION = "fix_84";
+const ADMIN_FIX79_VERSION = "fix_85";
 function fix79Esc(v){ return String(v ?? "").replace(/[&<>'"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[ch])); }
 function fix79Ts(v){ const n=Number(v||0); return Number.isFinite(n) && n>0 ? n : 0; }
 function fix79PointLat(p){ return Number(p?.latitude ?? p?.lat); }
@@ -11734,8 +11934,8 @@ setTimeout(fix79Install,2500);
 /* === /Admin fix_79 === */
 
 
-/* === Admin fix_84: history search, improved stops, problem layers === */
-const ADMIN_FIX80_VERSION = "fix_84";
+/* === Admin fix_85: history search, improved stops, problem layers === */
+const ADMIN_FIX80_VERSION = "fix_85";
 let fix80ProblemLayer = null;
 let fix80StopCircleLayer = null;
 let fix80SearchMarker = null;
@@ -11800,55 +12000,7 @@ function fix80RenderProblemLayer(force=false){
   const sum=fix80Q("problemLayerSummary");
   if(sum) sum.innerHTML=`<span class="problemLayerBadge bad">плохие ${bad}</span> <span class="problemLayerBadge jump">скачки ${jump}</span> <span class="problemLayerBadge drift">дрейф ${drift}</span>`;
 }
-function fix80ParseCoords(text){
-  const m=String(text||"").trim().match(/(-?\d+(?:[\.,]\d+)?)\s*[,;\s]\s*(-?\d+(?:[\.,]\d+)?)/);
-  if(!m) return null;
-  const lat=Number(m[1].replace(",",".")), lon=Number(m[2].replace(",","."));
-  if(Number.isFinite(lat)&&Number.isFinite(lon)&&Math.abs(lat)<=90&&Math.abs(lon)<=180) return {lat,lon,label:`${lat.toFixed(5)}, ${lon.toFixed(5)}`};
-  return null;
-}
-async function fix80GeocodeSearch(query){
-  const coord=fix80ParseCoords(query);
-  if(coord) return coord;
-  const url=`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&accept-language=ru&q=${encodeURIComponent(query)}`;
-  const res=await fetch(url,{headers:{"Accept":"application/json"}});
-  if(!res.ok) throw new Error("geocode failed");
-  const arr=await res.json();
-  const first=arr?.[0];
-  if(!first) throw new Error("адрес не найден");
-  return {lat:Number(first.lat),lon:Number(first.lon),label:first.display_name||query};
-}
-function fix80NearestPoint(lat, lon, pts){
-  const target={latitude:lat, longitude:lon};
-  let best=null, bestD=Infinity;
-  pts.forEach(p=>{ const d=distanceMeters(target,{latitude:fix79PointLat(p),longitude:fix79PointLon(p)}); if(d<bestD){best=p;bestD=d;} });
-  return {point:best, meters:bestD};
-}
-async function fix80SearchHistoryPlace(){
-  const input=fix80Q("historyPlaceSearchInput"), out=fix80Q("historyPlaceSearchResult");
-  const q=input?.value?.trim()||"";
-  if(!q) return showToast?.("Введи адрес или координаты", "warn");
-  const pts=fix80Pts();
-  if(!pts.length) return showToast?.("Сначала загрузи историю", "warn");
-  if(out) out.textContent="Ищу место…";
-  try{
-    const geo=await fix80GeocodeSearch(q);
-    const nearest=fix80NearestPoint(geo.lat, geo.lon, pts);
-    if(!nearest.point) throw new Error("нет ближайшей точки");
-    const lat=fix79PointLat(nearest.point), lon=fix79PointLon(nearest.point);
-    if(fix80SearchMarker) historyMap.removeLayer(fix80SearchMarker);
-    fix80SearchMarker=L.circleMarker([lat,lon],{radius:8,color:"#a855f7",fillColor:"#a855f7",fillOpacity:.9,weight:2}).bindTooltip(`Ближайшая точка к поиску<br>${Math.round(nearest.meters)} м`).addTo(historyMap);
-    historyMap.setView([lat,lon], Math.max(historyMap.getZoom(),16));
-    try{ await selectHistoryPoint(nearest.point); }catch(e){}
-    if(out) out.innerHTML=`Найдено: <b>${fix79Esc(geo.label)}</b><br>Ближайшая точка маршрута: ${Math.round(nearest.meters)} м, ${fmtTime(nearest.point.timestamp||nearest.point.ts)}`;
-    showToast?.("Место найдено на маршруте", "success");
-  }catch(e){ if(out) out.textContent=`Не найдено: ${errText?.(e)||e}`; showToast?.("Место не найдено", "warn"); }
-}
-function fix80ClearHistorySearch(){
-  const input=fix80Q("historyPlaceSearchInput"), out=fix80Q("historyPlaceSearchResult");
-  if(input) input.value=""; if(out) out.textContent="Поиск будет работать по загруженной истории.";
-  if(fix80SearchMarker){ try{historyMap.removeLayer(fix80SearchMarker);}catch(e){} fix80SearchMarker=null; }
-}
+/* fix_85 cleanup: removed unused history place search code. */
 function fix80BuildImprovedStops(points){
   const all = typeof fix79BuildStops === "function" ? fix79BuildStops(points) : [];
   const ignored=fix80IgnoredStops();
@@ -11905,27 +12057,24 @@ if(fix80OldRenderHistory){
 }
 function fix80Install(){
   const bind=(id,fn)=>{ const el=fix80Q(id); if(el && !el.dataset.fix80){ el.dataset.fix80="1"; el.addEventListener("click",ev=>{ev.preventDefault(); try{ const r=fn(); r?.catch?.(e=>{recordError?.(`fix80 ${id}`,e);showToast?.(errText?.(e)||String(e),"error",4500);}); }catch(e){recordError?.(`fix80 ${id}`,e);showToast?.(errText?.(e)||String(e),"error",4500);} }); } };
-  bind("historyPlaceSearchBtn", fix80SearchHistoryPlace);
-  bind("historyPlaceClearBtn", fix80ClearHistorySearch);
   bind("refreshProblemLayerBtn", ()=>fix80RenderProblemLayer(true));
   bind("clearProblemLayerBtn", fix80ClearProblemLayer);
   bind("exportStopsCsvBtn", fix80ExportStopsCsv);
   bind("resetIgnoredStopsBtn", fix80ResetIgnoredStops);
   const t=fix80Q("showProblemPointsToggle"); if(t && !t.dataset.fix80){ t.dataset.fix80="1"; t.addEventListener("change",()=>fix80RenderProblemLayer(false)); }
-  const inp=fix80Q("historyPlaceSearchInput"); if(inp && !inp.dataset.fix80){ inp.dataset.fix80="1"; inp.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); fix80SearchHistoryPlace(); }}); }
   if(fix80Q("postAdminVersion")) fix80Q("postAdminVersion").textContent=ADMIN_FIX80_VERSION;
   try{ fix80RenderStopsList(); }catch(e){}
 }
 window.addEventListener("load",()=>setTimeout(fix80Install,1400));
 setTimeout(fix80Install,2800);
-/* === /Admin fix_84 === */
+/* === /Admin fix_85 === */
 
 
 /* === /Admin fix_72 integrated === */
 
 
-/* === Admin fix_84: saved map settings === */
-const ADMIN_FIX83_VERSION = "fix_84";
+/* === Admin fix_85: saved map settings === */
+const ADMIN_FIX83_VERSION = "fix_85";
 const ADMIN_FIX83_MAP_KEY = "mygps_admin_map_settings";
 function fix83Qs(id){ return document.getElementById(id); }
 function fix83ReadMapSettings(){
@@ -12116,7 +12265,7 @@ function fix83InitMapSettings(){
     fix83BindMapSettings();
     fix83HookExistingMapControls();
     fix83ApplyMapSettings({render:false, move:true});
-    const v=fix83Qs("postUpdateAdminVersion"); if(v) v.textContent="fix_84";
+    const v=fix83Qs("postUpdateAdminVersion"); if(v) v.textContent="fix_85";
   }catch(e){ console.warn("fix83InitMapSettings", e); }
 }
 setTimeout(fix83InitMapSettings, 350);
