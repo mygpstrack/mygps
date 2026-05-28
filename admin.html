@@ -1550,7 +1550,7 @@ body.admin-readonly-mode textarea.adminWriteDisabled{opacity:.45!important;curso
           <button id="downloadPostUpdateDiagBtn" class="secondary">Скачать диагностику</button>
         </div>
         <div class="postUpdateGrid">
-          <div class="postUpdateCard"><b>Admin version</b><span id="postAdminVersion">fix_89</span></div>
+          <div class="postUpdateCard"><b>Admin version</b><span id="postAdminVersion">fix_90</span></div>
           <div class="postUpdateCard"><b>Auth</b><span id="postAuthStatus">—</span></div>
           <div class="postUpdateCard"><b>Выбранный пользователь</b><span id="postSelectedUser">—</span></div>
           <div class="postUpdateCard"><b>GPS лог</b><span id="postGpsLogStatus">—</span></div>
@@ -2192,7 +2192,7 @@ setInterval(() => {
 
 const db = getDatabase(app);
 
-// === Traffic optimization fix_89 ===
+// === Traffic optimization fix_90 ===
 const ADMIN_HISTORY_DEFAULT_LIMIT_NOTE = "История загружается только для выбранного пользователя и выбранного периода.";
 const ADMIN_GPS_LOG_LIMIT = 100;
 const ADMIN_ADMIN_LOG_LIMIT = 200;
@@ -3575,7 +3575,7 @@ document.querySelectorAll(".tab-btn").forEach(btn=>{
     if(btn.dataset.tab === "historyPanel") { showTrafficLoadHint("История не обновляется автоматически: нажми Обновить историю."); }
     if(btn.dataset.tab === "journalPanel") window.loadLimitedEvents?.().catch(e=>recordError("loadLimitedEvents", e));
     if(btn.dataset.tab === "visibilityPanel") renderVisibilityPanel();
-    if(btn.dataset.tab === "systemCheckPanel") { /* traffic fix_89: system check only by button */ }
+    if(btn.dataset.tab === "systemCheckPanel") { /* traffic fix_90: system check only by button */ }
     setTimeout(()=>{ historyMap.invalidateSize(); liveMap.invalidateSize(); sessionMap.invalidateSize(); geofenceMap.invalidateSize(); speedChart?.resize(); distanceChart?.resize(); },50);
   };
 });
@@ -4575,7 +4575,7 @@ function notifyLiveGpsProfileChanges(liveSnapshot){
 }
 
 async function loadAllData(){
-  // Traffic optimization fix_89:
+  // Traffic optimization fix_90:
   // Do not download the whole /history tree. Load only selected user's history
   // inside selected date/time range using timestamp index.
   const [liveSnap, usersSnap] = await Promise.all([
@@ -7932,7 +7932,7 @@ onAuthStateChanged(auth, async user => {
     renderJournal();
     updateNowFromAvailableSources();
   });
-  // Traffic optimization fix_89: do not attach realtime listener to whole /history.
+  // Traffic optimization fix_90: do not attach realtime listener to whole /history.
   // History is loaded manually for selected user + selected period by loadAllData().
   trackedOnValue(query(ref(db, "liveSessions"), limitToLast(ADMIN_SESSIONS_LIMIT)), snap => { allSessions=snap.val()||{}; updateUsage(); renderSessions(); updateActiveSessionToast(); updateNowFromAvailableSources(); });
   trackedOnValue(query(ref(db, "adminLogs/deletions"), limitToLast(ADMIN_ADMIN_LOG_LIMIT)), snap => { deletionsLog=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0)); renderJournal(); });
@@ -7959,7 +7959,7 @@ onAuthStateChanged(auth, async user => {
     appEventLogs = [...androidEventLogs, ...legacyEventJournalLogs].sort((a,b)=>Number(b.ts||0)-Number(a.ts||0));
     renderJournal();
   }
-  // Traffic optimization fix_89: events/eventJournal are loaded only when Journal/Timeline is opened manually.
+  // Traffic optimization fix_90: events/eventJournal are loaded only when Journal/Timeline is opened manually.
   // window.loadLimitedEvents?.().catch(e=>recordError("loadLimitedEvents", e));
 
   await loadAdminSettings();
@@ -7967,7 +7967,7 @@ onAuthStateChanged(auth, async user => {
   await loadUsers();
   restoreUiState();
   await loadStartupLight();
-  // Traffic optimization fix_89: sessions/backups/history/reports load only by opening tab or pressing refresh.
+  // Traffic optimization fix_90: sessions/backups/history/reports load only by opening tab or pressing refresh.
   // await loadSessions();
   // await renderBackups();
   // Low traffic: automatic full backup disabled on open; use Backup button manually.
@@ -11247,46 +11247,11 @@ function mygpsLivePatchEscape(value){
   try{ return escapeHtml(value); }catch(e){ return String(value ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;'); }
 }
 function mygpsLivePatchInstallUi(){
-  if(!document.getElementById('mygpsLiveDetailsStyle')){
-    const st=document.createElement('style');
-    st.id='mygpsLiveDetailsStyle';
-    st.textContent=`
-      .liveDetailsCard{margin-top:12px;border-color:rgba(59,130,246,.28);background:linear-gradient(180deg,rgba(37,99,235,.10),rgba(255,255,255,.025))}
-      .liveDetailsGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:12px}
-      .liveDetailsOpenList{margin-top:12px;display:grid;gap:8px}
-      .liveOpenItem{padding:10px 12px;border-radius:14px;border:1px solid var(--border);background:rgba(255,255,255,.035);line-height:1.45}
-      .liveOpenItem b{display:block;margin-bottom:3px}
-      .liveOpenMeta{color:var(--muted);font-size:12px;word-break:break-word}
-      .liveViewBadge{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;border:1px solid rgba(59,130,246,.45);background:rgba(37,99,235,.18);font-weight:900;color:#bfdbfe}
-      @media(max-width:900px){.liveDetailsGrid{grid-template-columns:1fr}}
-    `;
-    document.head.appendChild(st);
-  }
-  const sessionsPanel=document.getElementById('sessionsPanel');
-  const managementCard=sessionsPanel ? Array.from(sessionsPanel.querySelectorAll('.card')).find(c=>c.textContent.includes('Управление live-сессиями')) : null;
-  if(managementCard && !document.getElementById('liveViewDetailsCard')){
-    const box=document.createElement('div');
-    box.id='liveViewDetailsCard';
-    box.className='notice liveDetailsCard';
-    box.innerHTML=`
-      <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center">
-        <div><strong>Открытия активной live-ссылки</strong><div class="smallMuted">Показывает данные из liveSessions/&lt;token&gt;/viewStats. IP/город появятся только если их записывает live-страница или Cloud Function.</div></div>
-        <button id="liveViewDetailsRefreshBtn" class="secondary small" type="button">Обновить</button>
-      </div>
-      <div class="liveDetailsGrid">
-        <div class="stat"><div class="label">Открытий всего</div><div class="value" id="liveDetailsOpenCount">0</div></div>
-        <div class="stat"><div class="label">Первое открытие</div><div class="value" id="liveDetailsFirstOpen">—</div></div>
-        <div class="stat"><div class="label">Последнее открытие</div><div class="value" id="liveDetailsLastOpen">—</div></div>
-        <div class="stat"><div class="label">Последний IP / город</div><div class="value" id="liveDetailsLastPlace">—</div></div>
-      </div>
-      <div class="liveDetailsOpenList" id="liveDetailsOpenList"><div class="smallMuted">Открытий пока нет.</div></div>
-    `;
-    const tableWrap=managementCard.querySelector('div[style*="overflow:auto"]');
-    managementCard.insertBefore(box, tableWrap || null);
-    const btn=document.getElementById('liveViewDetailsRefreshBtn');
-    if(btn) btn.onclick=()=>{ renderSessions(); showToast && showToast('Детали открытий обновлены','success'); };
-  }
+  // fix_90: блок “Открытия активной live-ссылки” убран из вкладки Live-сессии.
+  const old=document.getElementById('liveViewDetailsCard');
+  if(old) old.remove();
 }
+
 function mygpsLivePatchGetStats(session){
   const root=getSessionRoot(session)||{};
   const stats=root.viewStats||{};
@@ -11319,38 +11284,11 @@ function mygpsLivePatchActiveEntry(){
   }catch(e){return null;}
 }
 function mygpsLivePatchRenderDetails(entry){
-  mygpsLivePatchInstallUi();
-  const card=document.getElementById('liveViewDetailsCard');
-  if(!card) return;
-  if(!entry){
-    const ids=['liveDetailsOpenCount','liveDetailsFirstOpen','liveDetailsLastOpen','liveDetailsLastPlace'];
-    ids.forEach(id=>{ const el=document.getElementById(id); if(el) el.textContent=id==='liveDetailsOpenCount'?'0':'—'; });
-    const list=document.getElementById('liveDetailsOpenList'); if(list) list.innerHTML='<div class="smallMuted">Активной live-сессии нет.</div>';
-    return;
-  }
-  const [token, session]=entry;
-  const s=mygpsLivePatchGetStats(session);
-  const place=[s.lastIp, s.lastCity, s.lastCountry].filter(Boolean).join(' · ') || '—';
-  const set=(id,val)=>{ const el=document.getElementById(id); if(el) el.textContent=val; };
-  set('liveDetailsOpenCount', String(s.openCount));
-  set('liveDetailsFirstOpen', fmtTime(s.firstOpenAt));
-  set('liveDetailsLastOpen', fmtTime(s.lastOpenAt));
-  set('liveDetailsLastPlace', place);
-  const listEl=document.getElementById('liveDetailsOpenList');
-  if(listEl){
-    if(!s.list.length){
-      const ua=s.lastUserAgent ? `<div class="liveOpenMeta">Браузер: ${mygpsLivePatchEscape(s.lastUserAgent)}</div>` : '';
-      listEl.innerHTML=`<div class="liveOpenItem"><b>Последнее открытие</b><div class="liveOpenMeta">Token: ${mygpsLivePatchEscape(token)}</div><div class="liveOpenMeta">IP/город: ${mygpsLivePatchEscape(place)}</div>${ua}</div>`;
-    }else{
-      listEl.innerHTML=s.list.slice(0,8).map((o,i)=>{
-        const ts=Number(o.openedAt||o.ts||o.timestamp||0);
-        const p=[o.ip||o.clientIp||'', o.city||'', o.country||o.countryName||''].filter(Boolean).join(' · ') || 'нет IP/города';
-        const ua=o.userAgent||o.ua||'';
-        return `<div class="liveOpenItem"><b>#${i+1} · ${fmtTime(ts)}</b><div class="liveOpenMeta">${mygpsLivePatchEscape(p)}</div>${ua?`<div class="liveOpenMeta">${mygpsLivePatchEscape(ua)}</div>`:''}</div>`;
-      }).join('');
-    }
-  }
+  // fix_90: отдельная карточка с открытиями/IP больше не отображается.
+  const old=document.getElementById('liveViewDetailsCard');
+  if(old) old.remove();
 }
+
 function mygpsLivePatchCollectSessionPoints(session){
   const root=getSessionRoot(session)||{};
   const arr=[];
@@ -11442,7 +11380,7 @@ window.addEventListener('load', ()=>{ mygpsLivePatchInstallUi(); setTimeout(()=>
 
 
 /* === Admin fix_72: update check, route filter, diagnostics, replay events, cleanup === */
-const ADMIN_FIX70_VERSION = "fix_89";
+const ADMIN_FIX70_VERSION = "fix_90";
 function fix70Qs(id){ return document.getElementById(id); }
 function fix70Esc(v){ return String(v ?? "").replace(/[&<>'"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c])); }
 function fix70Badge(text, kind="ok"){ return `<span class="postUpdateBadge ${kind}">${fix70Esc(text)}</span>`; }
@@ -11710,7 +11648,7 @@ setTimeout(fix73Install,2600);
 
 
 /* === Admin fix_75: app versions + safe auto-refresh in Сейчас === */
-const ADMIN_FIX75_VERSION = "fix_89";
+const ADMIN_FIX75_VERSION = "fix_90";
 let adminFix75AutoTimer = null;
 let adminFix75Refreshing = false;
 function fix75Qs(id){ return document.getElementById(id); }
@@ -11861,7 +11799,7 @@ setTimeout(fix75Install,2800);
 
 
 /* === Admin fix_79: alert hints, selected user check, live garbage, stops list, clean exports === */
-const ADMIN_FIX79_VERSION = "fix_89";
+const ADMIN_FIX79_VERSION = "fix_90";
 function fix79Esc(v){ return String(v ?? "").replace(/[&<>'"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[ch])); }
 function fix79Ts(v){ const n=Number(v||0); return Number.isFinite(n) && n>0 ? n : 0; }
 function fix79PointLat(p){ return Number(p?.latitude ?? p?.lat); }
@@ -12109,7 +12047,7 @@ setTimeout(fix79Install,2500);
 
 
 /* === Admin fix_87: history search, improved stops, problem layers === */
-const ADMIN_FIX80_VERSION = "fix_89";
+const ADMIN_FIX80_VERSION = "fix_90";
 let fix80ProblemLayer = null;
 let fix80StopCircleLayer = null;
 let fix80SearchMarker = null;
@@ -12248,7 +12186,7 @@ setTimeout(fix80Install,2800);
 
 
 /* === Admin fix_87: saved map settings === */
-const ADMIN_FIX83_VERSION = "fix_89";
+const ADMIN_FIX83_VERSION = "fix_90";
 const ADMIN_FIX83_MAP_KEY = "mygps_admin_map_settings";
 function fix83Qs(id){ return document.getElementById(id); }
 function fix83ReadMapSettings(){
@@ -12439,7 +12377,7 @@ function fix83InitMapSettings(){
     fix83BindMapSettings();
     fix83HookExistingMapControls();
     fix83ApplyMapSettings({render:false, move:true});
-    const v=fix83Qs("postUpdateAdminVersion"); if(v) v.textContent="fix_89";
+    const v=fix83Qs("postUpdateAdminVersion"); if(v) v.textContent="fix_90";
   }catch(e){ console.warn("fix83InitMapSettings", e); }
 }
 setTimeout(fix83InitMapSettings, 350);
@@ -12608,7 +12546,7 @@ async function auditAdminButton(btn, actionStatus = 'clicked'){
       buttonId: id || null,
       panel: adminFix87ActivePanel(),
       selectedUid: selectedUid || null,
-      source: 'admin_fix_89'
+      source: 'admin_fix_90'
     });
   }catch(e){
     console.warn('auditAdminButton error', e);
@@ -12750,7 +12688,7 @@ window.applyReadOnlyMode = applyReadOnlyMode;
 
 
 <script>
-// === Admin fix_89: reports are manual to save Firebase traffic ===
+// === Admin fix_90: reports are manual to save Firebase traffic ===
 (function(){
   function q(id){ return document.getElementById(id); }
   function setReportsStatus(text){ const el=q('reportsStatus'); if(el) el.textContent = text || 'Отчёты'; }
@@ -12803,7 +12741,7 @@ window.applyReadOnlyMode = applyReadOnlyMode;
     clearReportsUi('Нажми «Обновить отчёты»');
   });
 })();
-// === /Admin fix_89 ===
+// === /Admin fix_90 ===
 </script>
 
 </body></html>
