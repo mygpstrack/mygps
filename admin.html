@@ -602,6 +602,13 @@ body.admin-normal-mode .adminModeHint::after{content:" Обычный режим
 }
 /* === /Admin fix_79 === */
 
+
+/* Admin fix_83: map settings */
+.mapSettingsGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:12px}
+.mapSettingCard{padding:12px 14px;border-radius:14px;border:1px solid var(--border);background:rgba(255,255,255,.03);line-height:1.45}
+.mapSettingCard b{display:block;margin-bottom:8px}
+@media(max-width:900px){.mapSettingsGrid{grid-template-columns:1fr}}
+
 </style>
 </head>
 <body>
@@ -1492,7 +1499,7 @@ body.admin-normal-mode .adminModeHint::after{content:" Обычный режим
           <button id="downloadPostUpdateDiagBtn" class="secondary">Скачать диагностику</button>
         </div>
         <div class="postUpdateGrid">
-          <div class="postUpdateCard"><b>Admin version</b><span id="postAdminVersion">fix_82</span></div>
+          <div class="postUpdateCard"><b>Admin version</b><span id="postAdminVersion">fix_83</span></div>
           <div class="postUpdateCard"><b>Auth</b><span id="postAuthStatus">—</span></div>
           <div class="postUpdateCard"><b>Выбранный пользователь</b><span id="postSelectedUser">—</span></div>
           <div class="postUpdateCard"><b>GPS лог</b><span id="postGpsLogStatus">—</span></div>
@@ -10795,7 +10802,7 @@ window.addEventListener('load', ()=>{ mygpsLivePatchInstallUi(); setTimeout(()=>
 
 
 /* === Admin fix_72: update check, route filter, diagnostics, replay events, cleanup === */
-const ADMIN_FIX70_VERSION = "fix_82";
+const ADMIN_FIX70_VERSION = "fix_83";
 function fix70Qs(id){ return document.getElementById(id); }
 function fix70Esc(v){ return String(v ?? "").replace(/[&<>'"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c])); }
 function fix70Badge(text, kind="ok"){ return `<span class="postUpdateBadge ${kind}">${fix70Esc(text)}</span>`; }
@@ -11063,7 +11070,7 @@ setTimeout(fix73Install,2600);
 
 
 /* === Admin fix_75: app versions + safe auto-refresh in Сейчас === */
-const ADMIN_FIX75_VERSION = "fix_82";
+const ADMIN_FIX75_VERSION = "fix_83";
 let adminFix75AutoTimer = null;
 let adminFix75Refreshing = false;
 function fix75Qs(id){ return document.getElementById(id); }
@@ -11214,7 +11221,7 @@ setTimeout(fix75Install,2800);
 
 
 /* === Admin fix_79: alert hints, selected user check, live garbage, stops list, clean exports === */
-const ADMIN_FIX79_VERSION = "fix_82";
+const ADMIN_FIX79_VERSION = "fix_83";
 function fix79Esc(v){ return String(v ?? "").replace(/[&<>'"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[ch])); }
 function fix79Ts(v){ const n=Number(v||0); return Number.isFinite(n) && n>0 ? n : 0; }
 function fix79PointLat(p){ return Number(p?.latitude ?? p?.lat); }
@@ -11461,8 +11468,8 @@ setTimeout(fix79Install,2500);
 /* === /Admin fix_79 === */
 
 
-/* === Admin fix_82: history search, improved stops, problem layers === */
-const ADMIN_FIX80_VERSION = "fix_82";
+/* === Admin fix_83: history search, improved stops, problem layers === */
+const ADMIN_FIX80_VERSION = "fix_83";
 let fix80ProblemLayer = null;
 let fix80StopCircleLayer = null;
 let fix80SearchMarker = null;
@@ -11645,10 +11652,212 @@ function fix80Install(){
 }
 window.addEventListener("load",()=>setTimeout(fix80Install,1400));
 setTimeout(fix80Install,2800);
-/* === /Admin fix_82 === */
+/* === /Admin fix_83 === */
 
 
 /* === /Admin fix_72 integrated === */
+
+
+/* === Admin fix_83: saved map settings === */
+const ADMIN_FIX83_VERSION = "fix_83";
+const ADMIN_FIX83_MAP_KEY = "mygps_admin_map_settings";
+function fix83Qs(id){ return document.getElementById(id); }
+function fix83ReadMapSettings(){
+  try{
+    return Object.assign({
+      liveAutoCenter:true,
+      showProblemPoints:false,
+      showStops:true,
+      rememberHistoryView:true,
+      historyCenter:null,
+      historyZoom:null
+    }, JSON.parse(localStorage.getItem(ADMIN_FIX83_MAP_KEY)||"{}")||{});
+  }catch(e){
+    return {liveAutoCenter:true,showProblemPoints:false,showStops:true,rememberHistoryView:true,historyCenter:null,historyZoom:null};
+  }
+}
+function fix83SaveMapSettings(settings){
+  try{ localStorage.setItem(ADMIN_FIX83_MAP_KEY, JSON.stringify(settings)); }catch(e){}
+}
+function fix83InjectMapSettingsPanel(){
+  const settingsPanel = fix83Qs("settingsPanel");
+  if(!settingsPanel || fix83Qs("adminMapSettingsCard")) return;
+  const firstCard = settingsPanel.querySelector(".card");
+  if(!firstCard) return;
+  const card = document.createElement("div");
+  card.className = "card";
+  card.id = "adminMapSettingsCard";
+  card.style.marginTop = "12px";
+  card.innerHTML = `
+    <h3>Настройки карты</h3>
+    <p class="sub">Локальные настройки админки. Сохраняются только в браузере и Firebase не трогают.</p>
+    <div class="mapSettingsGrid">
+      <div class="mapSettingCard"><b>Live карта</b><label class="pill"><input id="mapLiveAutoCenterSetting" type="checkbox" style="width:auto;min-width:auto"> Автоцентр live</label></div>
+      <div class="mapSettingCard"><b>История</b><label class="pill"><input id="mapShowProblemPointsSetting" type="checkbox" style="width:auto;min-width:auto"> Проблемные точки</label></div>
+      <div class="mapSettingCard"><b>Стоянки</b><label class="pill"><input id="mapShowStopsSetting" type="checkbox" style="width:auto;min-width:auto"> Показывать стоянки</label></div>
+      <div class="mapSettingCard"><b>Позиция карты</b><label class="pill"><input id="mapRememberHistoryViewSetting" type="checkbox" style="width:auto;min-width:auto"> Запоминать zoom/центр</label></div>
+    </div>
+    <div class="toolbar">
+      <button id="saveMapSettingsBtn" class="success" type="button">Сохранить карту</button>
+      <button id="resetMapSettingsBtn" class="secondary" type="button">Сбросить карту</button>
+      <button id="centerHistoryMapSavedBtn" class="secondary" type="button">К сохранённой позиции</button>
+    </div>
+    <div class="smallMuted" id="mapSettingsSummary">—</div>
+  `;
+  const routeCard = fix83Qs("routeMaxAccuracyInput")?.closest?.(".card");
+  if(routeCard && routeCard.parentNode) routeCard.parentNode.insertBefore(card, routeCard);
+  else firstCard.appendChild(card);
+}
+function fix83SyncMapSettingsUi(){
+  const st = fix83ReadMapSettings();
+  if(fix83Qs("mapLiveAutoCenterSetting")) fix83Qs("mapLiveAutoCenterSetting").checked = !!st.liveAutoCenter;
+  if(fix83Qs("mapShowProblemPointsSetting")) fix83Qs("mapShowProblemPointsSetting").checked = !!st.showProblemPoints;
+  if(fix83Qs("mapShowStopsSetting")) fix83Qs("mapShowStopsSetting").checked = !!st.showStops;
+  if(fix83Qs("mapRememberHistoryViewSetting")) fix83Qs("mapRememberHistoryViewSetting").checked = !!st.rememberHistoryView;
+  const summary = fix83Qs("mapSettingsSummary");
+  if(summary){
+    const center = st.historyCenter ? `${Number(st.historyCenter.lat).toFixed(5)}, ${Number(st.historyCenter.lng).toFixed(5)} · zoom ${st.historyZoom||"—"}` : "позиция не сохранена";
+    summary.textContent = `Live автоцентр: ${st.liveAutoCenter?"вкл":"выкл"} · проблемные точки: ${st.showProblemPoints?"вкл":"выкл"} · стоянки: ${st.showStops?"вкл":"выкл"} · ${center}`;
+  }
+}
+function fix83ApplyMapSettings({render=false, move=false}={}){
+  const st = fix83ReadMapSettings();
+  try{
+    liveAutoCenter = !!st.liveAutoCenter;
+    updateLiveAutoCenterButton?.();
+  }catch(e){}
+  const problemToggle = fix83Qs("showProblemPointsToggle");
+  if(problemToggle) problemToggle.checked = !!st.showProblemPoints;
+  const hideStops = fix83Qs("hideStopsToggle");
+  if(hideStops) hideStops.checked = !st.showStops;
+  if(move && st.rememberHistoryView && st.historyCenter && typeof historyMap !== "undefined"){
+    try{ historyMap.setView([Number(st.historyCenter.lat), Number(st.historyCenter.lng)], Number(st.historyZoom||historyMap.getZoom()||12)); }catch(e){}
+  }
+  if(render){
+    try{ if(typeof fix80RenderProblemLayer === "function") fix80RenderProblemLayer(false); }catch(e){}
+    try{ if(typeof renderHistory === "function") renderHistory(); }catch(e){}
+  }
+  fix83SyncMapSettingsUi();
+}
+function fix83CollectMapSettingsFromUi(){
+  const old = fix83ReadMapSettings();
+  const next = Object.assign({}, old, {
+    liveAutoCenter: !!fix83Qs("mapLiveAutoCenterSetting")?.checked,
+    showProblemPoints: !!fix83Qs("mapShowProblemPointsSetting")?.checked,
+    showStops: !!fix83Qs("mapShowStopsSetting")?.checked,
+    rememberHistoryView: !!fix83Qs("mapRememberHistoryViewSetting")?.checked
+  });
+  try{
+    if(typeof historyMap !== "undefined" && next.rememberHistoryView){
+      const c = historyMap.getCenter();
+      next.historyCenter = {lat:c.lat, lng:c.lng};
+      next.historyZoom = historyMap.getZoom();
+    }
+  }catch(e){}
+  return next;
+}
+function fix83BindMapSettings(){
+  fix83InjectMapSettingsPanel();
+  fix83SyncMapSettingsUi();
+  const save = fix83Qs("saveMapSettingsBtn");
+  if(save && !save.dataset.fix83){
+    save.dataset.fix83="1";
+    save.onclick = ()=>{
+      const next = fix83CollectMapSettingsFromUi();
+      fix83SaveMapSettings(next);
+      fix83ApplyMapSettings({render:true});
+      showToast?.("Настройки карты сохранены", "success");
+    };
+  }
+  const reset = fix83Qs("resetMapSettingsBtn");
+  if(reset && !reset.dataset.fix83){
+    reset.dataset.fix83="1";
+    reset.onclick = ()=>{
+      localStorage.removeItem(ADMIN_FIX83_MAP_KEY);
+      fix83ApplyMapSettings({render:true});
+      showToast?.("Настройки карты сброшены", "info");
+    };
+  }
+  const go = fix83Qs("centerHistoryMapSavedBtn");
+  if(go && !go.dataset.fix83){
+    go.dataset.fix83="1";
+    go.onclick = ()=>{
+      const st=fix83ReadMapSettings();
+      if(!st.historyCenter) return showToast?.("Сохранённой позиции карты пока нет", "warn");
+      fix83ApplyMapSettings({move:true});
+    };
+  }
+  ["mapLiveAutoCenterSetting","mapShowProblemPointsSetting","mapShowStopsSetting","mapRememberHistoryViewSetting"].forEach(id=>{
+    const el=fix83Qs(id);
+    if(el && !el.dataset.fix83){
+      el.dataset.fix83="1";
+      el.addEventListener("change",()=>{
+        const next=fix83CollectMapSettingsFromUi();
+        fix83SaveMapSettings(next);
+        fix83ApplyMapSettings({render:true});
+      });
+    }
+  });
+}
+function fix83HookExistingMapControls(){
+  const liveBtn = fix83Qs("liveAutoCenterBtn");
+  if(liveBtn && !liveBtn.dataset.fix83store){
+    liveBtn.dataset.fix83store="1";
+    liveBtn.addEventListener("click",()=>setTimeout(()=>{
+      const st=fix83ReadMapSettings();
+      st.liveAutoCenter = !!liveAutoCenter;
+      fix83SaveMapSettings(st);
+      fix83SyncMapSettingsUi();
+    },30));
+  }
+  const problemToggle = fix83Qs("showProblemPointsToggle");
+  if(problemToggle && !problemToggle.dataset.fix83store){
+    problemToggle.dataset.fix83store="1";
+    problemToggle.addEventListener("change",()=>{
+      const st=fix83ReadMapSettings();
+      st.showProblemPoints = !!problemToggle.checked;
+      fix83SaveMapSettings(st);
+      fix83SyncMapSettingsUi();
+    });
+  }
+  const hideStops = fix83Qs("hideStopsToggle");
+  if(hideStops && !hideStops.dataset.fix83store){
+    hideStops.dataset.fix83store="1";
+    hideStops.addEventListener("change",()=>{
+      const st=fix83ReadMapSettings();
+      st.showStops = !hideStops.checked;
+      fix83SaveMapSettings(st);
+      fix83SyncMapSettingsUi();
+    });
+  }
+  try{
+    if(typeof historyMap !== "undefined" && !historyMap._fix83RememberHook){
+      historyMap._fix83RememberHook = true;
+      historyMap.on("moveend zoomend",()=>{
+        const st=fix83ReadMapSettings();
+        if(!st.rememberHistoryView) return;
+        const c=historyMap.getCenter();
+        st.historyCenter={lat:c.lat,lng:c.lng};
+        st.historyZoom=historyMap.getZoom();
+        fix83SaveMapSettings(st);
+        fix83SyncMapSettingsUi();
+      });
+    }
+  }catch(e){}
+}
+function fix83InitMapSettings(){
+  try{
+    fix83BindMapSettings();
+    fix83HookExistingMapControls();
+    fix83ApplyMapSettings({render:false, move:true});
+    const v=fix83Qs("postUpdateAdminVersion"); if(v) v.textContent="fix_83";
+  }catch(e){ console.warn("fix83InitMapSettings", e); }
+}
+setTimeout(fix83InitMapSettings, 350);
+document.addEventListener("click", ev=>{
+  const tab = ev.target?.closest?.('.tab-btn[data-tab="settingsPanel"]');
+  if(tab) setTimeout(fix83InitMapSettings, 80);
+}, true);
 
 </script>
 
