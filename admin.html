@@ -496,7 +496,7 @@ tr.gpsLogRowStop,tr.gpsLogRowError{background:rgba(185,28,28,.13)}
 
 
 
-/* === Admin fix_71: update check, route filter, diagnostics, replay events, cleanup === */
+/* === Admin fix_72: update check, route filter, diagnostics, replay events, cleanup === */
 .postUpdateGrid,.routeFilterGrid,.cleanupSettingsGrid,.diagGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:12px}
 .postUpdateCard,.routeFilterCard,.cleanupSettingCard,.replayEventCard{padding:12px 14px;border-radius:16px;border:1px solid var(--border);background:rgba(255,255,255,.035);line-height:1.45}
 .postUpdateCard b,.routeFilterCard b,.cleanupSettingCard b,.replayEventCard b{display:block;margin-bottom:5px;color:#fff}
@@ -508,7 +508,7 @@ tr.gpsLogRowStop,tr.gpsLogRowError{background:rgba(185,28,28,.13)}
 #replayNearbyEventsTbody tr:hover{background:rgba(96,165,250,.10)}
 .replayEventNow{background:rgba(245,158,11,.12)!important}
 @media(max-width:900px){.postUpdateGrid,.routeFilterGrid,.cleanupSettingsGrid,.diagGrid{grid-template-columns:1fr}}
-/* === /Admin fix_71 === */
+/* === /Admin fix_72 === */
 
 </style>
 </head>
@@ -1350,7 +1350,7 @@ tr.gpsLogRowStop,tr.gpsLogRowError{background:rgba(185,28,28,.13)}
           <button id="downloadPostUpdateDiagBtn" class="secondary">Скачать диагностику</button>
         </div>
         <div class="postUpdateGrid">
-          <div class="postUpdateCard"><b>Admin version</b><span id="postAdminVersion">fix_71</span></div>
+          <div class="postUpdateCard"><b>Admin version</b><span id="postAdminVersion">fix_72</span></div>
           <div class="postUpdateCard"><b>Auth</b><span id="postAuthStatus">—</span></div>
           <div class="postUpdateCard"><b>Выбранный пользователь</b><span id="postSelectedUser">—</span></div>
           <div class="postUpdateCard"><b>GPS лог</b><span id="postGpsLogStatus">—</span></div>
@@ -1721,7 +1721,7 @@ window.addEventListener("load", () => {
 
 
 
-/* === Admin fix_71: strict tabs + post-update buttons === */
+/* === Admin fix_72: strict tabs + post-update buttons === */
 function fix71PanelIds(){
   return ['alertCenterPanel','nowPanel','historyPanel','reportsPanel','usagePanel','trafficPanel','sessionsPanel','usersPanel','visibilityPanel','geofencesPanel','journalPanel','gpsLogPanel','errorsPanel','systemCheckPanel','postUpdatePanel','adminLogsPanel','settingsPanel'];
 }
@@ -1764,7 +1764,7 @@ function fix71Install(){
 window.addEventListener('load',()=>setTimeout(fix71Install,400));
 setTimeout(fix71Install,1800);
 setTimeout(fix71Install,3500);
-/* === /Admin fix_71 === */
+/* === /Admin fix_72 === */
 
 </script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js">
@@ -10451,86 +10451,8 @@ function fix68Install(){ fix68ApplyAlertSettings(); ['adminSoundAlertsToggle','a
 document.addEventListener('click', ev=>{ const btn=ev.target?.closest?.('.tab-btn[data-tab]'); if(btn) setTimeout(()=>fix68ShowPanel(btn.dataset.tab),35); }, true);
 window.addEventListener('load', ()=>{ fix68Install(); setTimeout(fix68Install,1500); setTimeout(()=>fix68UpdateUserHealth().catch(()=>{}),2500); });
 /* === /Admin alert center + health + rules + timeline fix_68 === */
-</script>
 
-
-<!-- === Fix 68: Leaflet maps stable resize / no blank map after admin open === -->
-<script type="module">
-// This script runs after the main module. Most map variables are module-scoped there,
-// so we use DOM + Leaflet container resize events through global events and safe retries.
-(function(){
-  const mapIds = ['liveMap','historyMap','sessionMap','geofenceMap'];
-  let resizeTimer = null;
-
-  function visible(el){
-    if(!el) return false;
-    const r = el.getBoundingClientRect();
-    return r.width > 40 && r.height > 40 && getComputedStyle(el).display !== 'none' && !el.closest('.hidden');
-  }
-
-  function fireMapResize(reason){
-    try{
-      // Leaflet listens to window resize and recalculates tile layout.
-      window.dispatchEvent(new Event('resize'));
-    }catch(e){}
-
-    // Retry several times because tabs/panels become visible after CSS/layout settles.
-    [60, 180, 420, 900].forEach(delay => {
-      setTimeout(() => {
-        try{ window.dispatchEvent(new Event('resize')); }catch(e){}
-        mapIds.forEach(id => {
-          const el = document.getElementById(id);
-          if(!visible(el)) return;
-          // Force browser layout recalculation for Leaflet tile containers.
-          el.style.minHeight = el.style.minHeight || '';
-          el.getBoundingClientRect();
-        });
-      }, delay);
-    });
-  }
-
-  function scheduleMapResize(reason=''){
-    clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => fireMapResize(reason), 40);
-  }
-
-  // Tab switching: fixes white/half-loaded maps when a Leaflet map was initialized hidden.
-  document.addEventListener('click', (ev) => {
-    const btn = ev.target && ev.target.closest ? ev.target.closest('.tab-btn[data-tab]') : null;
-    if(btn) scheduleMapResize('tab');
-  }, true);
-
-  // Initial admin open/login and browser resize/orientation changes.
-  window.addEventListener('load', () => scheduleMapResize('load'));
-  window.addEventListener('resize', () => scheduleMapResize('resize'));
-  window.addEventListener('orientationchange', () => scheduleMapResize('orientation'));
-
-  // When hidden panels become visible after login/tab restore, resize maps automatically.
-  const observer = new MutationObserver((mutations) => {
-    for(const m of mutations){
-      if(m.type === 'attributes' && (m.attributeName === 'class' || m.attributeName === 'style')){
-        const t = m.target;
-        if(t && (t.id === 'adminPanel' || /Panel$/.test(t.id || '') || mapIds.includes(t.id || ''))){
-          scheduleMapResize('mutation');
-          return;
-        }
-      }
-    }
-  });
-
-  window.addEventListener('DOMContentLoaded', () => {
-    try{
-      document.querySelectorAll('#adminPanel,#nowPanel,#historyPanel,#sessionsPanel,#geofencesPanel,#liveMap,#historyMap,#sessionMap,#geofenceMap')
-        .forEach(el => observer.observe(el, {attributes:true, attributeFilter:['class','style']}));
-    }catch(e){}
-    scheduleMapResize('dom');
-  });
-
-  // Expose manual helper for existing code if needed.
-  window.fixAdminMapsLayout = scheduleMapResize;
-})();
-
-
+/* === Admin fix_72: integrated tools inside main module === */
 /* === MyGps live view details + realtime sync final patch === */
 function mygpsLivePatchEscape(value){
   try{ return escapeHtml(value); }catch(e){ return String(value ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;'); }
@@ -10730,8 +10652,8 @@ function startLiveSessionsRealtimeSync(){
 window.addEventListener('load', ()=>{ mygpsLivePatchInstallUi(); setTimeout(()=>{ try{ startLiveSessionsRealtimeSync(); }catch(e){} }, 1800); });
 
 
-/* === Admin fix_71: update check, route filter, diagnostics, replay events, cleanup === */
-const ADMIN_FIX70_VERSION = "fix_71";
+/* === Admin fix_72: update check, route filter, diagnostics, replay events, cleanup === */
+const ADMIN_FIX70_VERSION = "fix_72";
 function fix70Qs(id){ return document.getElementById(id); }
 function fix70Esc(v){ return String(v ?? "").replace(/[&<>'"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c])); }
 function fix70Badge(text, kind="ok"){ return `<span class="postUpdateBadge ${kind}">${fix70Esc(text)}</span>`; }
@@ -10893,14 +10815,102 @@ function fix70Install(){
 }
 const fix70OldLoadAdminSettings = typeof loadAdminSettings === 'function' ? loadAdminSettings : null;
 if(fix70OldLoadAdminSettings){ loadAdminSettings = async function(){ await fix70OldLoadAdminSettings.apply(this,arguments); try{ fix70ApplyRouteFilterUi(); fix70ApplyRetentionUi(); }catch(e){} }; }
+window.fix70Install = fix70Install;
+window.fix70RunPostUpdateCheck = fix70RunPostUpdateCheck;
+window.fix70DownloadDiagnostics = fix70DownloadDiagnostics;
+window.fix70ApplyRouteFilterUi = fix70ApplyRouteFilterUi;
+window.fix70ApplyRetentionUi = fix70ApplyRetentionUi;
 window.addEventListener('load',()=>setTimeout(fix70Install,1200));
 setTimeout(fix70Install,2500);
-/* === /Admin fix_71 === */
+/* === /Admin fix_72 === */
 
 
 
 
 /* === /MyGps live view details + realtime sync final patch === */
+/* === /Admin fix_72 integrated === */
+
+</script>
+
+
+<!-- === Fix 68: Leaflet maps stable resize / no blank map after admin open === -->
+<script type="module">
+// This script runs after the main module. Most map variables are module-scoped there,
+// so we use DOM + Leaflet container resize events through global events and safe retries.
+(function(){
+  const mapIds = ['liveMap','historyMap','sessionMap','geofenceMap'];
+  let resizeTimer = null;
+
+  function visible(el){
+    if(!el) return false;
+    const r = el.getBoundingClientRect();
+    return r.width > 40 && r.height > 40 && getComputedStyle(el).display !== 'none' && !el.closest('.hidden');
+  }
+
+  function fireMapResize(reason){
+    try{
+      // Leaflet listens to window resize and recalculates tile layout.
+      window.dispatchEvent(new Event('resize'));
+    }catch(e){}
+
+    // Retry several times because tabs/panels become visible after CSS/layout settles.
+    [60, 180, 420, 900].forEach(delay => {
+      setTimeout(() => {
+        try{ window.dispatchEvent(new Event('resize')); }catch(e){}
+        mapIds.forEach(id => {
+          const el = document.getElementById(id);
+          if(!visible(el)) return;
+          // Force browser layout recalculation for Leaflet tile containers.
+          el.style.minHeight = el.style.minHeight || '';
+          el.getBoundingClientRect();
+        });
+      }, delay);
+    });
+  }
+
+  function scheduleMapResize(reason=''){
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => fireMapResize(reason), 40);
+  }
+
+  // Tab switching: fixes white/half-loaded maps when a Leaflet map was initialized hidden.
+  document.addEventListener('click', (ev) => {
+    const btn = ev.target && ev.target.closest ? ev.target.closest('.tab-btn[data-tab]') : null;
+    if(btn) scheduleMapResize('tab');
+  }, true);
+
+  // Initial admin open/login and browser resize/orientation changes.
+  window.addEventListener('load', () => scheduleMapResize('load'));
+  window.addEventListener('resize', () => scheduleMapResize('resize'));
+  window.addEventListener('orientationchange', () => scheduleMapResize('orientation'));
+
+  // When hidden panels become visible after login/tab restore, resize maps automatically.
+  const observer = new MutationObserver((mutations) => {
+    for(const m of mutations){
+      if(m.type === 'attributes' && (m.attributeName === 'class' || m.attributeName === 'style')){
+        const t = m.target;
+        if(t && (t.id === 'adminPanel' || /Panel$/.test(t.id || '') || mapIds.includes(t.id || ''))){
+          scheduleMapResize('mutation');
+          return;
+        }
+      }
+    }
+  });
+
+  window.addEventListener('DOMContentLoaded', () => {
+    try{
+      document.querySelectorAll('#adminPanel,#nowPanel,#historyPanel,#sessionsPanel,#geofencesPanel,#liveMap,#historyMap,#sessionMap,#geofenceMap')
+        .forEach(el => observer.observe(el, {attributes:true, attributeFilter:['class','style']}));
+    }catch(e){}
+    scheduleMapResize('dom');
+  });
+
+  // Expose manual helper for existing code if needed.
+  window.fixAdminMapsLayout = scheduleMapResize;
+})();
+
+
+
 </script>
 
 </body></html>
