@@ -1034,6 +1034,10 @@ body.admin-readonly-mode textarea.adminWriteDisabled{opacity:.45!important;curso
     <div id="reportsPanel" class="hidden">
       <div class="card">
         <h2>Отчёты</h2>
+        <div class="toolbar">
+          <button id="refreshReportsBtn" class="secondary" type="button">Обновить отчёты</button>
+          <span id="reportsStatus" class="lastUpdateChip">Отчёты: ожидание данных</span>
+        </div>
         <div class="grid2">
           <div class="chartWrap"><h3>Скорость</h3><canvas id="speedChart" height="220"></canvas></div>
           <div class="chartWrap"><h3>Пробег по дням</h3><canvas id="distanceChart" height="220"></canvas></div>
@@ -12714,5 +12718,78 @@ window.applyReadOnlyMode = applyReadOnlyMode;
 })();
 </script>
 <!-- === /Admin fix_79 === -->
+
+
+
+<script>
+// === Admin fix_88: force reports refresh/load history ===
+(function(){
+  function q(id){ return document.getElementById(id); }
+  function setReportsStatus(text){ const el=q('reportsStatus'); if(el) el.textContent = text || 'Отчёты'; }
+  function clearReportsUi(text){
+    try{
+      if(typeof speedChart !== 'undefined' && speedChart){ speedChart.destroy?.(); speedChart = null; }
+      if(typeof distanceChart !== 'undefined' && distanceChart){ distanceChart.destroy?.(); distanceChart = null; }
+    }catch(e){}
+    const tbody=q('dailyStatsTbody');
+    if(tbody) tbody.innerHTML = '<tr><td colspan="5">' + (text || 'Нет данных для отчёта') + '</td></tr>';
+  }
+  async function refreshReportsFix88(){
+    setReportsStatus('Отчёты: загружаю историю…');
+    try{
+      if(typeof ensureHistoryLoaded === 'function') await ensureHistoryLoaded();
+      else if(typeof loadAllData === 'function') await loadAllData();
+
+      let points = [];
+      try{
+        if(typeof filteredHistory === 'function') points = filteredHistory() || [];
+        else if(typeof getSelectedHistoryPoints === 'function') points = getSelectedHistoryPoints() || [];
+      }catch(e){}
+      points = (points || [])
+        .filter(p => p && p.latitude != null && p.longitude != null && p.timestamp != null)
+        .sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+
+      if(!points.length){
+        clearReportsUi('Нет данных за выбранный период. Открой Историю или выбери другой период.');
+        setReportsStatus('Отчёты: нет данных');
+        return;
+      }
+
+      if(typeof updateCharts === 'function') updateCharts(points);
+      else clearReportsUi('Функция отчётов недоступна');
+
+      setReportsStatus('Отчёты: ' + points.length + ' точек, обновлено ' + new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}));
+    }catch(e){
+      console.error('fix88 refresh reports failed', e);
+      clearReportsUi('Ошибка загрузки отчётов: ' + (e?.message || e));
+      setReportsStatus('Отчёты: ошибка');
+      try{ if(typeof recordError === 'function') recordError('fix88RefreshReports', e); }catch(_){}
+    }
+  }
+
+  window.refreshReportsFix88 = refreshReportsFix88;
+
+  document.addEventListener('click', function(ev){
+    const reportTab = ev.target && ev.target.closest ? ev.target.closest('.tab-btn[data-tab="reportsPanel"]') : null;
+    if(reportTab) setTimeout(refreshReportsFix88, 120);
+    const btn = ev.target && ev.target.closest ? ev.target.closest('#refreshReportsBtn') : null;
+    if(btn){ ev.preventDefault(); refreshReportsFix88(); }
+  }, true);
+
+  const obs = new MutationObserver(()=>{
+    const panel=q('reportsPanel');
+    if(panel && !panel.classList.contains('hidden') && !panel.dataset.fix88Loaded){
+      panel.dataset.fix88Loaded = '1';
+      setTimeout(refreshReportsFix88, 120);
+    }
+  });
+  window.addEventListener('DOMContentLoaded', ()=>{
+    const panel=q('reportsPanel');
+    if(panel) obs.observe(panel, {attributes:true, attributeFilter:['class']});
+    if(panel && !panel.classList.contains('hidden')) setTimeout(refreshReportsFix88, 120);
+  });
+})();
+// === /Admin fix_88 ===
+</script>
 
 </body></html>
