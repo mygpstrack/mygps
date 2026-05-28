@@ -427,6 +427,89 @@
     .riskBadge.danger{background:rgba(185,28,28,.25);border-color:#7f1d1d;color:#fecaca}
     @media(max-width:900px){.trafficRiskGrid{grid-template-columns:1fr}}
 
+
+
+    /* GPS service log panel */
+    .gpsLogTypeBadge{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:999px;border:1px solid #166534;background:rgba(22,163,74,.22);color:#bbf7d0;font-weight:900;font-size:12px}
+    .gpsLogRowStop{background:rgba(185,28,28,.10)}
+    .gpsLogRowSleep{background:rgba(180,83,9,.09)}
+    .gpsLogRowGood{background:rgba(22,163,74,.07)}
+
+
+
+/* === Admin diagnostics upgrade fix_66 === */
+.gpsDiagGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:12px}
+.gpsDiagCard{padding:12px 14px;border-radius:16px;border:1px solid var(--border);background:rgba(255,255,255,.035);line-height:1.45}
+.gpsDiagCard b{display:block;margin-bottom:4px;color:#fff}
+.gpsLogProblemToggle{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;border:1px solid var(--border);background:rgba(255,255,255,.04)}
+.gpsLogTypeBadge{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:999px;border:1px solid var(--border);font-size:12px;font-weight:900}
+.gpsLogTypeBadge.service{background:rgba(100,116,139,.18);border-color:#475569;color:#cbd5e1}
+.gpsLogTypeBadge.gps{background:rgba(22,163,74,.20);border-color:#166534;color:#bbf7d0}
+.gpsLogTypeBadge.live{background:rgba(37,99,235,.20);border-color:#1d4ed8;color:#bfdbfe}
+.gpsLogTypeBadge.sleep{background:rgba(234,179,8,.18);border-color:#a16207;color:#fde68a}
+.gpsLogTypeBadge.filter{background:rgba(180,83,9,.20);border-color:#92400e;color:#fed7aa}
+tr.gpsLogRowGood{background:rgba(22,163,74,.07)}
+tr.gpsLogRowSleep,tr.gpsLogRowWarn{background:rgba(234,179,8,.08)}
+tr.gpsLogRowStop,tr.gpsLogRowError{background:rgba(185,28,28,.13)}
+.historyModeBox{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px}
+.historyModeBox .active{background:#16a34a!important}
+.cleanDistanceHint{border-color:rgba(34,197,94,.25);background:rgba(22,163,74,.08)}
+.geofenceMiniBadge{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:999px;border:1px solid var(--border);font-size:12px;font-weight:800;margin-right:4px}
+.geofenceMiniBadge.on{background:rgba(22,163,74,.18);border-color:#166534;color:#bbf7d0}
+.geofenceMiniBadge.off{background:rgba(100,116,139,.18);border-color:#475569;color:#cbd5e1}
+.liveHealthGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:12px}
+.liveHealthBox{padding:12px 14px;border-radius:14px;border:1px solid var(--border);background:rgba(255,255,255,.035);line-height:1.45}
+.visibilityTools{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+.visibilityTools input{max-width:260px}
+.onlineDot{display:inline-block;width:9px;height:9px;border-radius:999px;margin-right:6px;background:#64748b}
+.onlineDot.online{background:#22c55e}
+@media(max-width:900px){.gpsDiagGrid,.liveHealthGrid{grid-template-columns:1fr}.visibilityTools input{max-width:none}}
+/* === /Admin diagnostics upgrade fix_66 === */
+
+
+
+/* === Admin alert center + health + rules + timeline fix_68 === */
+.alertCenterGrid,.userHealthGrid,.rulesCheckGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:12px}
+.alertCard,.healthCard,.rulesCard{padding:12px 14px;border-radius:16px;border:1px solid var(--border);background:rgba(255,255,255,.035);line-height:1.45}
+.alertCard b,.healthCard b,.rulesCard b{display:block;margin-bottom:5px;color:#fff}
+.alertBadge{display:inline-flex;align-items:center;gap:6px;padding:5px 9px;border-radius:999px;border:1px solid var(--border);font-size:12px;font-weight:900}
+.alertBadge.ok{background:rgba(22,163,74,.20);border-color:#166534;color:#bbf7d0}
+.alertBadge.warn{background:rgba(234,179,8,.18);border-color:#a16207;color:#fde68a}
+.alertBadge.danger{background:rgba(185,28,28,.25);border-color:#7f1d1d;color:#fecaca}
+.alertBadge.info{background:rgba(37,99,235,.20);border-color:#1d4ed8;color:#bfdbfe}
+#alertCenterTbody tr.alertDangerRow{background:rgba(185,28,28,.12)}
+#alertCenterTbody tr.alertWarnRow{background:rgba(234,179,8,.08)}
+#alertCenterTbody tr.alertOkRow{background:rgba(22,163,74,.06)}
+.alertSettingsBox{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}
+.timelineToolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px}
+.timelineBadge{display:inline-flex;align-items:center;padding:4px 8px;border-radius:999px;border:1px solid var(--border);font-size:12px;font-weight:800}
+.timelineBadge.gps{background:rgba(22,163,74,.18);border-color:#166534;color:#bbf7d0}
+.timelineBadge.live{background:rgba(37,99,235,.18);border-color:#1d4ed8;color:#bfdbfe}
+.timelineBadge.geofence{background:rgba(180,83,9,.18);border-color:#92400e;color:#fed7aa}
+.timelineBadge.alert{background:rgba(185,28,28,.18);border-color:#7f1d1d;color:#fecaca}
+#routeTimelineTbody tr{cursor:pointer}
+#routeTimelineTbody tr:hover{background:rgba(96,165,250,.10)}
+.rulesCard.ok{border-color:#166534;background:rgba(22,163,74,.08)}
+.rulesCard.err{border-color:#7f1d1d;background:rgba(185,28,28,.10)}
+@media(max-width:900px){.alertCenterGrid,.userHealthGrid,.rulesCheckGrid{grid-template-columns:1fr}}
+/* === /Admin alert center + health + rules + timeline fix_68 === */
+
+
+
+/* === Admin fix_70: update check, route filter, diagnostics, replay events, cleanup === */
+.postUpdateGrid,.routeFilterGrid,.cleanupSettingsGrid,.diagGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:12px}
+.postUpdateCard,.routeFilterCard,.cleanupSettingCard,.replayEventCard{padding:12px 14px;border-radius:16px;border:1px solid var(--border);background:rgba(255,255,255,.035);line-height:1.45}
+.postUpdateCard b,.routeFilterCard b,.cleanupSettingCard b,.replayEventCard b{display:block;margin-bottom:5px;color:#fff}
+.postUpdateBadge{display:inline-flex;align-items:center;padding:5px 9px;border-radius:999px;border:1px solid var(--border);font-weight:900;font-size:12px}
+.postUpdateBadge.ok{background:rgba(22,163,74,.22);border-color:#166534;color:#bbf7d0}
+.postUpdateBadge.warn{background:rgba(180,83,9,.22);border-color:#92400e;color:#fde68a}
+.postUpdateBadge.err{background:rgba(185,28,28,.25);border-color:#7f1d1d;color:#fecaca}
+#replayNearbyEventsTbody tr{cursor:pointer}
+#replayNearbyEventsTbody tr:hover{background:rgba(96,165,250,.10)}
+.replayEventNow{background:rgba(245,158,11,.12)!important}
+@media(max-width:900px){.postUpdateGrid,.routeFilterGrid,.cleanupSettingsGrid,.diagGrid{grid-template-columns:1fr}}
+/* === /Admin fix_70 === */
+
 </style>
 </head>
 <body>
@@ -528,6 +611,7 @@
 
       <div class="tabs">
         <button class="tab-btn active" data-tab="nowPanel">Сейчас</button>
+        <button class="tab-btn" data-tab="alertCenterPanel">Тревоги</button>
         <button class="tab-btn" data-tab="historyPanel">История</button>
         <button class="tab-btn" data-tab="reportsPanel">Отчёты</button>
         <button class="tab-btn" data-tab="usagePanel">Объём</button>
@@ -537,16 +621,51 @@
         <button class="tab-btn" data-tab="visibilityPanel">Видимость</button>
         <button class="tab-btn" data-tab="geofencesPanel">Геозоны</button>
         <button class="tab-btn" data-tab="journalPanel">Журнал</button>
+        <button class="tab-btn" data-tab="gpsLogPanel">GPS лог</button>
         <button class="tab-btn" data-tab="errorsPanel">Ошибки</button>
         <button class="tab-btn" data-tab="systemCheckPanel">Проверка</button>
+        <button class="tab-btn" data-tab="postUpdatePanel">После обновления</button>
         <button class="tab-btn" data-tab="adminLogsPanel">Логи админа</button>
         <button class="tab-btn" data-tab="settingsPanel">Настройки</button>
+      </div>
+    </div>
+
+
+    <div id="alertCenterPanel" class="hidden">
+      <div class="card">
+        <h2>Центр тревог</h2>
+        <p class="sub">Быстрый экран диагностики: GPS/service, live, батарея, Firebase rules, geofence и последние события.</p>
+        <div class="alertCenterGrid">
+          <div class="alertCard"><b>Критические</b><div id="alertCriticalCount">0</div></div>
+          <div class="alertCard"><b>Предупреждения</b><div id="alertWarnCount">0</div></div>
+          <div class="alertCard"><b>Выбранный пользователь</b><div id="alertSelectedUser">—</div></div>
+          <div class="alertCard"><b>Последняя проверка</b><div id="alertLastCheck">—</div></div>
+        </div>
+        <div class="alertSettingsBox">
+          <button id="refreshAlertsBtn" class="secondary">Обновить тревоги</button>
+          <label class="pill"><input id="adminSoundAlertsToggle" type="checkbox" style="width:auto;min-width:auto"/> Звук</label>
+          <label class="pill"><input id="adminBrowserPushToggle" type="checkbox" style="width:auto;min-width:auto"/> Push в браузере</label>
+          <button id="requestAdminPushBtn" class="secondary">Разрешить push</button>
+        </div>
+        <div class="notice smallMuted">Звук/push срабатывают только для новых критических тревог после включения опции.</div>
+        <div style="overflow:auto;margin-top:12px">
+          <table>
+            <thead><tr><th>Уровень</th><th>Источник</th><th>Проблема</th><th>Пользователь</th><th>Время</th><th>Действие</th></tr></thead>
+            <tbody id="alertCenterTbody"><tr><td colspan="6">Нажми “Обновить тревоги”.</td></tr></tbody>
+          </table>
+        </div>
       </div>
     </div>
 
     <div id="nowPanel">
       <div class="card">
         <h2>Сейчас</h2>
+        <div class="gpsDiagGrid" id="nowGpsDiagGrid">
+          <div class="gpsDiagCard"><b>GPS</b><span id="nowGpsDiagState">—</span></div>
+          <div class="gpsDiagCard"><b>Service</b><span id="nowGpsDiagService">—</span></div>
+          <div class="gpsDiagCard"><b>Smart GPS</b><span id="nowGpsDiagSmart">—</span></div>
+          <div class="gpsDiagCard"><b>Последний лог</b><span id="nowGpsDiagLast">—</span></div>
+        </div>
         <div class="grid4">
           <div class="stat"><div class="label">Статус</div><div class="value" id="nowStatus">Нет данных</div></div>
           <div class="stat"><div class="label">Источник</div><div class="value" id="nowSource">—</div></div>
@@ -564,6 +683,21 @@
         </div>
 
         
+
+        <div class="card" style="margin-top:12px">
+          <h3>Здоровье пользователя</h3>
+          <div class="userHealthGrid">
+            <div class="healthCard"><b>Online</b><span id="userHealthOnline">—</span></div>
+            <div class="healthCard"><b>GPS / Service</b><span id="userHealthGpsService">—</span></div>
+            <div class="healthCard"><b>Smart / Sleep</b><span id="userHealthSmart">—</span></div>
+            <div class="healthCard"><b>Live</b><span id="userHealthLive">—</span></div>
+            <div class="healthCard"><b>Последняя точка</b><span id="userHealthLastPoint">—</span></div>
+            <div class="healthCard"><b>Батарея</b><span id="userHealthBattery">—</span></div>
+            <div class="healthCard"><b>Последний GPS stop</b><span id="userHealthStopReason">—</span></div>
+            <div class="healthCard"><b>Последняя геозона</b><span id="userHealthGeofence">—</span></div>
+          </div>
+        </div>
+
         <div id="nowLiveWarning" class="nowLiveWarning">—</div>
 
         <div class="row">
@@ -571,6 +705,7 @@
           <button id="refreshNowBtn" class="secondary">Обновить сейчас</button>
           <button id="refreshLiveBtn" class="secondary">Обновить live</button>
           <button id="btnDiag" class="secondary">Диаг</button>
+          <button id="downloadDiagBtn" class="secondary">Скачать диагностику</button>
           <button id="copyNowCoordsBtn" class="secondary">Копировать координаты</button>
           <button id="openNowMapsBtn" class="secondary">Google Maps</button>
         </div>
@@ -607,6 +742,13 @@
           <button id="applyFiltersBtn" class="secondary">Применить</button>
           <button id="resetFiltersBtn" class="secondary">Сбросить</button>
         </div>
+        <div class="historyModeBox">
+          <span class="smallMuted">Расчёт пробега:</span>
+          <button id="distanceModeCleanBtn" class="small active" type="button">Чистый пробег</button>
+          <button id="distanceModeRawBtn" class="small secondary" type="button">Сырой пробег</button>
+          <label class="pill"><input id="showRejectedSegmentsToggle" type="checkbox" style="width:auto;min-width:auto"/> Показывать отброшенные сегменты</label>
+        </div>
+        <div id="cleanDistanceNotice" class="notice cleanDistanceHint smallMuted">Чистый пробег не считает GPS-дрейф на стоянке, плохую точность и невозможные скачки.</div>
         <div class="toolbar">
           <button id="fitRouteBtn" class="secondary">Центрировать маршрут</button>
           <button id="lastRouteBtn" class="secondary">Последний маршрут</button>
@@ -686,6 +828,36 @@
           <div class="stat"><div class="label">Шаг</div><div class="value" id="replayStepMsText">700 мс</div></div>
           <div class="stat"><div class="label">Источник</div><div class="value" id="replaySourceText">Отфильтрованная история</div></div>
         </div>
+        <div class="card" style="margin-top:12px">
+          <h3>Replay + события</h3>
+          <p class="sub">Во время проигрывания здесь показываются события рядом с текущей точкой: GPS, sleep, live, geofence и проблемные логи.</p>
+          <div class="toolbar">
+            <label class="pill"><input id="replayEventsEnabledToggle" type="checkbox" checked style="width:auto;min-width:auto"/> Показывать события рядом</label>
+            <button id="replayBuildTimelineBtn" class="secondary">Обновить события</button>
+          </div>
+          <div style="overflow:auto;margin-top:12px">
+            <table>
+              <thead><tr><th>Разница</th><th>Время</th><th>Тип</th><th>Событие</th><th>Действие</th></tr></thead>
+              <tbody id="replayNearbyEventsTbody"><tr><td colspan="5">Запусти replay или нажми “Обновить события”.</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Timeline событий на карте</h2>
+        <p class="sub">Показывает GPS start/stop, sleep, live start/stop, geofence и плохие точки рядом с маршрутом. Клик по событию переносит карту к ближайшей точке.</p>
+        <div class="timelineToolbar">
+          <button id="buildRouteTimelineBtn" class="secondary">Показать timeline</button>
+          <button id="clearRouteTimelineBtn" class="secondary">Очистить timeline</button>
+          <label class="pill"><input id="timelineOnlyProblemsToggle" type="checkbox" style="width:auto;min-width:auto"/> Только проблемы</label>
+        </div>
+        <div style="overflow:auto;margin-top:12px">
+          <table>
+            <thead><tr><th>Время</th><th>Тип</th><th>Событие</th><th>Сообщение</th><th>Действие</th></tr></thead>
+            <tbody id="routeTimelineTbody"><tr><td colspan="5">Нажми “Показать timeline”.</td></tr></tbody>
+          </table>
+        </div>
       </div>
 
       <div class="card">
@@ -751,6 +923,22 @@
             <button id="safeCleanupBtn" class="warn" type="button">Запустить безопасную очистку</button>
           </div>
           <div id="safeCleanupResult" class="cleanupResult hidden">—</div>
+          <div class="card" style="margin-top:12px">
+            <h3>Автоочистка логов</h3>
+            <p class="sub">Настройки хранения. История маршрутов не удаляется.</p>
+            <div class="cleanupSettingsGrid">
+              <div class="cleanupSettingCard"><b>GPS лог, дней</b><input id="gpsLogsRetentionDaysInput" type="number" min="1" step="1" value="14"></div>
+              <div class="cleanupSettingCard"><b>Журнал events, дней</b><input id="eventsRetentionDaysInput" type="number" min="1" step="1" value="30"></div>
+              <div class="cleanupSettingCard"><b>Admin logs, дней</b><input id="adminLogsRetentionDaysInput" type="number" min="1" step="1" value="30"></div>
+              <div class="cleanupSettingCard"><b>Режим</b><span id="autoCleanupStatusText">Ручной запуск</span></div>
+            </div>
+            <div class="toolbar">
+              <button id="saveCleanupSettingsBtn" class="success" type="button">Сохранить сроки</button>
+              <button id="previewLogCleanupBtn" class="secondary" type="button">Проверить логи</button>
+              <button id="runLogCleanupBtn" class="warn" type="button">Очистить старые логи</button>
+            </div>
+            <div id="logCleanupResult" class="cleanupResult hidden">—</div>
+          </div>
         </div>
       </div>
     </div>
@@ -838,6 +1026,13 @@
 
       <div class="card">
         <h2>Управление live-сессиями</h2>
+        <div class="liveHealthGrid" id="liveHealthGrid">
+          <div class="liveHealthBox"><b>Активные</b><div id="liveHealthActive">—</div></div>
+          <div class="liveHealthBox"><b>LastPoint</b><div id="liveHealthLastPoint">—</div></div>
+          <div class="liveHealthBox"><b>Meta</b><div id="liveHealthMeta">—</div></div>
+          <div class="liveHealthBox"><b>Проблема</b><div id="liveHealthProblem">—</div></div>
+        </div>
+        <div class="toolbar"><button id="checkLiveHealthBtn" class="secondary" type="button">Проверить live</button></div>
         <div class="grid4">
           <div><div class="label">Поиск token</div><input id="sessionSearchInput" placeholder="Поиск"/></div>
           <div><div class="label">Статус</div><select id="sessionStatusFilter"><option value="all">Все</option><option value="active">Активные</option><option value="expired">Истёкшие</option><option value="ended">Завершённые</option></select></div>
@@ -913,6 +1108,12 @@
           <div class="card" style="margin:0">
             <h3 id="visibilitySelectedTitle">Кого видит пользователь</h3>
             <div class="smallMuted">Отметь пользователей, которые будут видны на карте в приложении.</div>
+            <div class="visibilityTools">
+              <input id="visibilitySearchInput" placeholder="Поиск пользователя"/>
+              <button id="visibilityTemplateAllBtn" class="secondary small" type="button">Шаблон: все видят всех</button>
+              <button id="visibilityTemplateNoneBtn" class="secondary small" type="button">Шаблон: никто никого</button>
+              <button id="visibilityTemplatePairBtn" class="secondary small" type="button">Шаблон: только выбранные пары</button>
+            </div>
             <div class="toolbar">
               <button id="visibilitySelectAllBtn" class="secondary">Выбрать всех</button>
               <button id="visibilityClearAllBtn" class="secondary">Очистить</button>
@@ -932,6 +1133,12 @@
           <div><div class="label">Широта</div><input id="geofenceLatInput" type="number" step="0.000001" placeholder="56.9496"></div>
           <div><div class="label">Долгота</div><input id="geofenceLonInput" type="number" step="0.000001" placeholder="24.1052"></div>
           <div><div class="label">Радиус, м</div><input id="geofenceRadiusInput" type="number" min="10" step="1" value="100"></div>
+        </div>
+        <div class="grid4" style="margin-top:12px">
+          <div class="stat"><div class="label">Состояние зоны</div><label class="pill"><input id="geofenceActiveInput" type="checkbox" checked style="width:auto;min-width:auto"/> Активна</label></div>
+          <div><div class="label">Цвет</div><input id="geofenceColorInput" type="color" value="#22c55e" style="min-width:80px;width:120px;height:46px"></div>
+          <div><div class="label">Антиспам, мин</div><input id="geofenceCooldownInput" type="number" min="0" step="1" value="5"></div>
+          <div><div class="label">Пользователи зоны</div><select id="geofenceUsersInput" multiple size="3"></select><div class="smallMuted">Пусто = все пользователи</div></div>
         </div>
         <div class="toolbar" style="margin-top:12px">
           <button id="useNowPointForGeofenceBtn" class="secondary">Взять текущую точку</button>
@@ -1042,6 +1249,49 @@
       </div>
     </div>
 
+
+
+    <div id="gpsLogPanel" class="hidden">
+      <div class="card">
+        <h2>GPS лог</h2>
+        <p class="sub">Такой же служебный журнал, как в MyGps: service/GPS, live stop/expire, Smart GPS sleep, профили и фильтр плохих точек. Новые записи появляются после обновления MyGps до fix_64.</p>
+        <div class="grid4">
+          <div>
+            <div class="label">Пользователь</div>
+            <select id="gpsLogUserFilter">
+              <option value="">Все пользователи</option>
+            </select>
+          </div>
+          <div>
+            <div class="label">Тип</div>
+            <select id="gpsLogTypeFilter">
+              <option value="">Все записи</option>
+              <option value="service">Service</option>
+              <option value="gps">GPS</option>
+              <option value="live">Live</option>
+              <option value="sleep">Smart sleep</option>
+              <option value="filter">Фильтр точек</option>
+            </select>
+          </div>
+          <div class="stat"><div class="label">Записей</div><div class="value" id="gpsLogCount">0</div></div>
+          <div class="stat"><div class="label">Источник</div><div class="value">gpsServiceLogs</div></div>
+        </div>
+        <div class="notice" id="gpsLogStopReasonBox"><strong>Почему GPS выключился:</strong> <span id="gpsLogStopReason">—</span></div>
+        <div class="toolbar">
+          <label class="gpsLogProblemToggle"><input id="gpsLogProblemsOnly" type="checkbox" style="width:auto;min-width:auto"/> Только проблемы</label>
+          <button id="refreshGpsLogBtn" class="secondary">Обновить GPS лог</button>
+          <button id="clearSelectedGpsLogBtn" class="warn">Очистить выбранного</button>
+        </div>
+        <div class="notice smallMuted">Лог не управляет GPS и не трогает live/history. Это только диагностика.</div>
+        <div style="overflow:auto">
+          <table>
+            <thead><tr><th>Время</th><th>Тип</th><th>Событие</th><th>Сообщение</th><th>Кто</th><th>Источник</th></tr></thead>
+            <tbody id="gpsLogTbody"><tr><td colspan="6">Нажми “Обновить GPS лог”.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <div id="errorsPanel" class="hidden">
       <div class="card">
         <h2>Ошибки</h2>
@@ -1069,6 +1319,14 @@
           <div class="stat"><div class="label">Чтение</div><div class="value" id="checkReadSummary">—</div></div>
           <div class="stat"><div class="label">Запись</div><div class="value" id="checkWriteSummary">—</div></div>
         </div>
+
+        <div class="card" style="margin-top:12px">
+          <h3>Firebase Rules check</h3>
+          <p class="sub">Проверяет, разрешены ли нужные чтения/записи: users, history, live, liveSessions, gpsServiceLogs, geofences, events, adminLogs.</p>
+          <div class="toolbar"><button id="runRulesCheckBtn" class="secondary">Проверить Rules</button></div>
+          <div class="rulesCheckGrid" id="rulesCheckGrid"><div class="emptyState">Rules check ещё не запускался.</div></div>
+        </div>
+
         <div id="systemCheckRows" style="margin-top:12px">
           <div class="emptyState">Проверка ещё не запускалась.</div>
         </div>
@@ -1081,6 +1339,34 @@
     </div>
 
 
+
+
+    <div id="postUpdatePanel" class="hidden">
+      <div class="card">
+        <h2>После обновления</h2>
+        <p class="sub">Быстрая проверка, что новая версия админки установлена правильно и основные узлы Firebase доступны.</p>
+        <div class="toolbar">
+          <button id="runPostUpdateCheckBtn" class="success">Запустить проверку</button>
+          <button id="downloadPostUpdateDiagBtn" class="secondary">Скачать диагностику</button>
+        </div>
+        <div class="postUpdateGrid">
+          <div class="postUpdateCard"><b>Admin version</b><span id="postAdminVersion">fix_70</span></div>
+          <div class="postUpdateCard"><b>Auth</b><span id="postAuthStatus">—</span></div>
+          <div class="postUpdateCard"><b>Выбранный пользователь</b><span id="postSelectedUser">—</span></div>
+          <div class="postUpdateCard"><b>GPS лог</b><span id="postGpsLogStatus">—</span></div>
+          <div class="postUpdateCard"><b>LiveSessions</b><span id="postLiveStatus">—</span></div>
+          <div class="postUpdateCard"><b>Rules check</b><span id="postRulesStatus">—</span></div>
+          <div class="postUpdateCard"><b>Background GPS</b><span id="postBackgroundGpsStatus">по логам</span></div>
+          <div class="postUpdateCard"><b>Итог</b><span id="postUpdateSummary">Не запускалось</span></div>
+        </div>
+        <div style="overflow:auto;margin-top:12px">
+          <table>
+            <thead><tr><th>Проверка</th><th>Статус</th><th>Детали</th></tr></thead>
+            <tbody id="postUpdateTbody"><tr><td colspan="3">Нажми “Запустить проверку”.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
 
     <div id="adminLogsPanel" class="hidden">
       <div class="card">
@@ -1178,6 +1464,20 @@
           </div>
         </div>
 
+
+        <div class="card" style="margin-top:12px">
+          <h3>Настройки фильтра пробега</h3>
+          <p class="sub">Эти параметры управляют “чистым пробегом”, PDF/CSV отчётами и графиком пробега.</p>
+          <div class="routeFilterGrid">
+            <div class="routeFilterCard"><b>Макс. accuracy, м</b><input id="routeMaxAccuracyInput" type="number" min="1" step="1" value="100"></div>
+            <div class="routeFilterCard"><b>Макс. скорость сегмента, км/ч</b><input id="routeMaxSpeedInput" type="number" min="20" step="1" value="250"></div>
+            <div class="routeFilterCard"><b>Макс. разрыв, мин</b><input id="routeMaxGapMinInput" type="number" min="1" step="1" value="5"></div>
+            <div class="routeFilterCard"><b>Мин. сегмент, м</b><input id="routeMinSegmentInput" type="number" min="0" step="1" value="8"></div>
+            <div class="routeFilterCard"><b>Дрейф стоянки</b><label class="pill"><input id="routeIgnoreStopDriftInput" type="checkbox" checked style="width:auto;min-width:auto"/> Игнорировать</label></div>
+            <div class="routeFilterCard"><b>Сейчас</b><span id="routeFilterSummaryText">—</span></div>
+          </div>
+          <div class="toolbar"><button id="saveRouteFilterBtn" class="success">Сохранить фильтр пробега</button><button id="resetRouteFilterBtn" class="secondary">Баланс по умолчанию</button></div>
+        </div>
         <div class="settings-tools-layout">
           <div class="card gpsCardClean">
             <h3>Частота GPS</h3>
@@ -3231,7 +3531,7 @@ function updateReplaySeek(){
   seek.value = String(Math.min(replayState.index, Math.max(0, total - 1)));
 }
 
-function renderReplayPoint(centerMap = true){
+function renderReplayPoint(centerMap = false){
   ensureReplayLayers();
   const point = replayState.points[replayState.index] || null;
   setReplayInfo(point);
@@ -3252,12 +3552,10 @@ function renderReplayPoint(centerMap = true){
   if(replayTrail?.bringToFront) replayTrail.bringToFront();
   if(replayMarker?.bringToFront) replayMarker.bringToFront();
 
-  if(centerMap){
-    suppressHistoryMapInteraction = true;
-    historyMap.setView(latlng, Math.max(historyMap.getZoom(), 15));
-    setTimeout(()=>{ suppressHistoryMapInteraction = false; }, 250);
-  }
+  // Replay no longer auto-centers the map on every point.
+  // This keeps the map freely draggable while the route is playing.
 }
+
 
 function replayStopInternal(resetIndex = false){
   clearReplayTimer();
@@ -3277,7 +3575,7 @@ function replayTick(){
     return;
   }
   replayState.index += 1;
-  renderReplayPoint(true);
+  renderReplayPoint(false);
   replayState.timer = setTimeout(replayTick, replayState.stepMs);
 }
 
@@ -3305,7 +3603,7 @@ function replayStart(){
   }
   clearReplayTimer();
   replayState.playing = true;
-  renderReplayPoint(true);
+  renderReplayPoint(false);
   replayState.timer = setTimeout(replayTick, replayState.stepMs);
 }
 
@@ -3320,7 +3618,7 @@ function replayReset(){
   flashReplayButton("replayResetBtn");
   replayStopInternal(true);
   if(replayTrail) replayTrail.setLatLngs([]);
-  renderReplayPoint(true);
+  renderReplayPoint(false);
 }
 
 function replayFaster(){
@@ -5208,12 +5506,39 @@ async function deleteSession(token){
     showToast("Live-сессия удалена","success");
   }catch(e){ recordError("deleteSession", e); showToast("Удаление live-сессии: "+errText(e),"error",3600); }
 }
+function markSessionEndedLocally(token, endedAt = Date.now()){
+  if(!token) return;
+  if(!allSessions || typeof allSessions !== "object") allSessions = {};
+  const current = allSessions[token];
+  const root = getSessionRoot(current);
+  if(!current || typeof current !== "object" || (!root.meta && !root.public && !root.viewStats)){
+    allSessions[token] = { meta:{ active:false, status:"ended", endedAt, remainingMs:0 } };
+  }else{
+    if(!root.meta) root.meta = {};
+    root.meta.active = false;
+    root.meta.status = "ended";
+    root.meta.endedAt = endedAt;
+    root.meta.remainingMs = 0;
+    root.meta.paused = false;
+  }
+}
+function refreshSessionsUiAfterLocalChange(){
+  try{ renderSessions(); }catch(e){}
+  try{ updateActiveSessionNotice(); }catch(e){}
+  try{ updateActiveSessionToast(); }catch(e){}
+  try{ updateNowFromAvailableSources(); }catch(e){}
+  try{ adminFix66LiveHealth(); }catch(e){}
+  try{ fix68BuildAlerts(); }catch(e){}
+}
 async function endSession(token){
   if(!confirm(`Завершить live-сессию ${token}?`)) return;
+  const endedAt = Date.now();
   try{
-    await update(ref(db, `liveSessions/${token}/meta`), { active:false, endedAt:Date.now() });
+    await update(ref(db, `liveSessions/${token}/meta`), { active:false, status:"ended", endedAt, remainingMs:0, paused:false });
+    markSessionEndedLocally(token, endedAt);
+    refreshSessionsUiAfterLocalChange();
     await logAction("session_end", `Завершена live-сессия ${token}`);
-    await loadSessions();
+    loadSessions().catch(e=>recordError("loadSessionsAfterEndSession", e));
     showToast("Сессия завершена","success");
   }catch(e){ recordError("endSession", e); showToast("Завершение live-сессии: "+errText(e),"error",3600); }
 }
@@ -5236,9 +5561,14 @@ async function endAllActiveSessions(){
   if(!activeTokens.length) return showToast("Активных live-сессий нет.","warn");
   if(!confirm(`Остановить ${activeTokens.length} активных сессий?`)) return;
   try{
-    for(const token of activeTokens) await update(ref(db,`liveSessions/${token}/meta`),{active:false,endedAt:Date.now()});
+    const endedAt = Date.now();
+    for(const token of activeTokens){
+      await update(ref(db,`liveSessions/${token}/meta`),{active:false,status:"ended",endedAt,remainingMs:0,paused:false});
+      markSessionEndedLocally(token, endedAt);
+    }
+    refreshSessionsUiAfterLocalChange();
     await logAction("session_end_all", `Остановлено активных сессий: ${activeTokens.length}`);
-    await loadSessions();
+    loadSessions().catch(e=>recordError("loadSessionsAfterEndAllSessions", e));
     showToast("Активные сессии остановлены","success");
   }catch(e){ recordError("endAllActiveSessions", e); showToast("Остановка всех активных: "+errText(e),"error",3600); }
 }
@@ -5957,6 +6287,14 @@ async function exportPdfReport(){
     .actions{display:none}
     .block,.head{box-shadow:none;border:1px solid #e5e7eb}
   }
+
+
+    /* GPS service log panel */
+    .gpsLogTypeBadge{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:999px;border:1px solid #166534;background:rgba(22,163,74,.22);color:#bbf7d0;font-weight:900;font-size:12px}
+    .gpsLogRowStop{background:rgba(185,28,28,.10)}
+    .gpsLogRowSleep{background:rgba(180,83,9,.09)}
+    .gpsLogRowGood{background:rgba(22,163,74,.07)}
+
 </style>
 </head>
 <body>
@@ -6658,7 +6996,7 @@ if (qs("replaySeekRange")) {
   seek.onchange = () => {
     if(!replayState.points.length) replayLoad(false);
     replayState.index = Number(seek.value || 0);
-    renderReplayPoint(true);
+    renderReplayPoint(false);
   };
 }
 setReplayActiveButton("");
@@ -9545,6 +9883,526 @@ setInterval(() => {
   requireDeleteWord = function(){ return true; };
 })();
 
+/* === GPS service log panel fix_64 === */
+let gpsServiceLogs = [];
+
+function gpsLogEscape(v){
+  return String(v ?? "").replace(/[&<>'"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[ch]));
+}
+function gpsLogKind(item){
+  const text = `${item.title || ""} ${item.message || ""} ${item.type || ""}`.toLowerCase();
+  if(text.includes("sleep") || text.includes("сон") || text.includes("smart")) return "sleep";
+  if(text.includes("live")) return "live";
+  if(text.includes("фильтр") || text.includes("плох") || text.includes("отклон")) return "filter";
+  if(text.includes("gps")) return "gps";
+  return "service";
+}
+function gpsLogKindLabel(kind){
+  return ({service:"Service", gps:"GPS", live:"Live", sleep:"Smart sleep", filter:"Фильтр"})[kind] || kind || "Service";
+}
+function gpsLogRowClass(item){
+  const text = `${item.title || ""} ${item.message || ""}`.toLowerCase();
+  if(text.includes("выключ") || text.includes("stop") || text.includes("останов")) return "gpsLogRowStop";
+  if(text.includes("sleep") || text.includes("сон") || text.includes("smart")) return "gpsLogRowSleep";
+  if(text.includes("запущ") || text.includes("включ") || text.includes("актив")) return "gpsLogRowGood";
+  return "";
+}
+function gpsLogCurrentFilterUid(){
+  const explicit = qs("gpsLogUserFilter")?.value || "";
+  if(explicit) return explicit;
+  return selectedUid || "";
+}
+function gpsLogPopulateUsers(){
+  const sel = qs("gpsLogUserFilter");
+  if(!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = `<option value="">Все пользователи</option>`;
+  (allUsers || []).forEach(uid => {
+    const opt = document.createElement("option");
+    opt.value = uid;
+    opt.textContent = getDisplayName(uid) || uid;
+    sel.appendChild(opt);
+  });
+  if(prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
+  else if(selectedUid && [...sel.options].some(o => o.value === selectedUid)) sel.value = selectedUid;
+}
+async function loadGpsServiceLogs(){
+  gpsLogPopulateUsers();
+  const filterUid = gpsLogCurrentFilterUid();
+  const rows = [];
+  try{
+    if(filterUid){
+      const snap = await get(query(ref(db, `gpsServiceLogs/${filterUid}`), limitToLast(250)));
+      Object.entries(snap.val() || {}).forEach(([id, item]) => rows.push({...item, id, uid: item?.uid || filterUid}));
+    }else{
+      const snap = await get(ref(db, "gpsServiceLogs"));
+      Object.entries(snap.val() || {}).forEach(([uid, items]) => {
+        Object.entries(items || {}).forEach(([id, item]) => rows.push({...item, id, uid: item?.uid || uid}));
+      });
+    }
+  }catch(e){
+    recordError("loadGpsServiceLogs", e);
+    throw e;
+  }
+  gpsServiceLogs = rows.sort((a,b)=>Number(b.ts || b.timestamp || 0)-Number(a.ts || a.timestamp || 0)).slice(0,500);
+  renderGpsServiceLogs();
+}
+function renderGpsServiceLogs(){
+  const tbody = qs("gpsLogTbody");
+  if(!tbody) return;
+  const typeFilter = qs("gpsLogTypeFilter")?.value || "";
+  const uidFilter = qs("gpsLogUserFilter")?.value || "";
+  let rows = gpsServiceLogs.slice();
+  if(uidFilter) rows = rows.filter(x => x.uid === uidFilter);
+  if(typeFilter) rows = rows.filter(x => gpsLogKind(x) === typeFilter);
+  if(qs("gpsLogCount")) qs("gpsLogCount").textContent = String(rows.length);
+  tbody.innerHTML = "";
+  if(!rows.length){
+    tbody.innerHTML = `<tr><td colspan="6">GPS лог пока пуст. После установки MyGps fix_64 новые service/GPS события начнут появляться здесь.</td></tr>`;
+    return;
+  }
+  rows.forEach(item => {
+    const kind = gpsLogKind(item);
+    const tr = document.createElement("tr");
+    const ts = Number(item.ts || item.timestamp || 0);
+    tr.className = gpsLogRowClass(item);
+    tr.innerHTML = `<td>${fmtTime(ts)}</td><td><span class="gpsLogTypeBadge">${gpsLogKindLabel(kind)}</span></td><td>${gpsLogEscape(item.title || item.type || "—")}</td><td>${gpsLogEscape(item.message || "—")}</td><td>${gpsLogEscape(getDisplayName(item.uid) || item.uid || "—")}</td><td>${gpsLogEscape(item.source || "android_service")}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+async function clearSelectedGpsLog(){
+  const uid = qs("gpsLogUserFilter")?.value || selectedUid || "";
+  if(!uid) return showToast("Выбери пользователя для очистки GPS лога", "warn");
+  if(!confirm(`Очистить GPS лог пользователя ${getDisplayName(uid) || uid}?`)) return;
+  try{
+    await remove(ref(db, `gpsServiceLogs/${uid}`));
+    gpsServiceLogs = gpsServiceLogs.filter(x => x.uid !== uid);
+    renderGpsServiceLogs();
+    showToast("GPS лог очищен", "success");
+  }catch(e){
+    recordError("clearSelectedGpsLog", e);
+    showToast("Ошибка очистки GPS лога: " + errText(e), "error", 4200);
+  }
+}
+function installGpsLogPanel(){
+  gpsLogPopulateUsers();
+  const refreshBtn = qs("refreshGpsLogBtn");
+  if(refreshBtn && !refreshBtn.dataset.bound){
+    refreshBtn.dataset.bound = "1";
+    refreshBtn.onclick = async () => {
+      try{ await loadGpsServiceLogs(); showToast("GPS лог обновлён", "success"); }
+      catch(e){ showToast("Ошибка GPS лога: " + errText(e), "error", 4200); }
+    };
+  }
+  const clearBtn = qs("clearSelectedGpsLogBtn");
+  if(clearBtn && !clearBtn.dataset.bound){
+    clearBtn.dataset.bound = "1";
+    clearBtn.onclick = clearSelectedGpsLog;
+  }
+  ["gpsLogUserFilter","gpsLogTypeFilter"].forEach(id => {
+    const el = qs(id);
+    if(el && !el.dataset.bound){
+      el.dataset.bound = "1";
+      el.addEventListener("change", () => {
+        if(id === "gpsLogUserFilter") loadGpsServiceLogs().catch(e=>recordError("gpsLogFilterLoad", e));
+        else renderGpsServiceLogs();
+      });
+    }
+  });
+}
+function gpsLogStrictShowPanel(selectedId){
+  const ids = ["nowPanel","historyPanel","reportsPanel","usagePanel","trafficPanel","sessionsPanel","usersPanel","visibilityPanel","geofencesPanel","journalPanel","gpsLogPanel","errorsPanel","systemCheckPanel","adminLogsPanel","settingsPanel"];
+  ids.forEach(id => { const el = qs(id); if(el) el.classList.toggle("hidden", id !== selectedId); });
+  document.querySelectorAll(".tab-btn[data-tab]").forEach(btn => btn.classList.toggle("active", btn.dataset.tab === selectedId));
+  if(selectedId === "gpsLogPanel") setTimeout(()=>loadGpsServiceLogs().catch(e=>recordError("loadGpsServiceLogs", e)), 0);
+}
+document.addEventListener("click", (ev) => {
+  const btn = ev.target && ev.target.closest ? ev.target.closest(".tab-btn[data-tab]") : null;
+  if(!btn) return;
+  setTimeout(()=>gpsLogStrictShowPanel(btn.dataset.tab), 20);
+}, true);
+window.addEventListener("load", () => {
+  installGpsLogPanel();
+  setTimeout(installGpsLogPanel, 1200);
+});
+
+
+/* === Admin diagnostics upgrade fix_66 === */
+const ADMIN_FIX66_MAX_CLEAN_ACCURACY_M = 75;
+const ADMIN_FIX66_MAX_SEGMENT_SPEED_KMH = 180;
+const ADMIN_FIX66_MAX_SEGMENT_SECONDS = 20 * 60;
+let adminDistanceMode = localStorage.getItem("mygps_admin_distance_mode") || "clean";
+let adminShowRejectedSegments = localStorage.getItem("mygps_admin_show_rejected") === "1";
+let rejectedSegmentLayer = null;
+
+function adminFix66SetText(id, value){ const el = qs(id); if(el) el.textContent = value; }
+function adminFix66Escape(v){ return String(v ?? "").replace(/[&<>'"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[ch])); }
+function adminFix66PointTs(p){ return Number(p?.timestamp ?? p?.ts ?? p?.time ?? 0); }
+function adminFix66IsValidPoint(p){
+  const lat = Number(p?.latitude ?? p?.lat), lon = Number(p?.longitude ?? p?.lon);
+  return Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180 && !(Math.abs(lat) < 0.000001 && Math.abs(lon) < 0.000001);
+}
+function adminFix66Accuracy(p){ return Number(p?.accuracy ?? p?.accuracyM ?? 0); }
+function adminFix66Speed(p){ return Number(p?.speed ?? p?.speedKmh ?? 0); }
+function adminFix66NormalizePoint(p){ return {...p, latitude:Number(p?.latitude ?? p?.lat), longitude:Number(p?.longitude ?? p?.lon), timestamp:adminFix66PointTs(p)}; }
+function adminFix66Sorted(points){ return (points||[]).filter(adminFix66IsValidPoint).map(adminFix66NormalizePoint).sort((a,b)=>adminFix66PointTs(a)-adminFix66PointTs(b)); }
+function adminFix66SegmentDecision(prev, cur){
+  if(!prev || !cur) return {ok:false, reason:"нет точки"};
+  if(!adminFix66IsValidPoint(prev) || !adminFix66IsValidPoint(cur)) return {ok:false, reason:"invalid coordinates"};
+  const accA = adminFix66Accuracy(prev), accB = adminFix66Accuracy(cur);
+  const maxAcc = Number(adminSettings?.junkAccuracyMeters || adminSettings?.gpsAccuracyMax || ADMIN_FIX66_MAX_CLEAN_ACCURACY_M);
+  if((accA && accA > maxAcc) || (accB && accB > maxAcc)) return {ok:false, reason:`плохая точность > ${maxAcc}м`};
+  const tA = adminFix66PointTs(prev), tB = adminFix66PointTs(cur);
+  const dt = Math.max(0, (tB-tA)/1000);
+  if(!dt || dt > ADMIN_FIX66_MAX_SEGMENT_SECONDS) return {ok:false, reason:"большой разрыв времени"};
+  const meters = distanceMeters(prev, cur);
+  const calcKmh = meters / Math.max(1, dt) * 3.6;
+  const impossible = Number(adminSettings?.impossibleSpeedKmh || adminSettings?.gpsImpossibleSpeed || ADMIN_FIX66_MAX_SEGMENT_SPEED_KMH);
+  if(calcKmh > impossible) return {ok:false, reason:`невозможный скачок ${calcKmh.toFixed(0)} км/ч`};
+  const spA = adminFix66Speed(prev), spB = adminFix66Speed(cur);
+  if(meters < 8 && Math.max(spA, spB) < 3) return {ok:false, reason:"дрейф на стоянке"};
+  if(Math.max(spA, spB) < 1.2 && calcKmh > 12) return {ok:false, reason:"дрейф без движения"};
+  return {ok:true, meters, calcKmh, reason:"ok"};
+}
+function adminFix66CleanDistance(points){
+  const pts = adminFix66Sorted(points);
+  let meters = 0, rejected = [];
+  for(let i=1;i<pts.length;i++){
+    const d = adminFix66SegmentDecision(pts[i-1], pts[i]);
+    if(d.ok) meters += d.meters;
+    else rejected.push({from:pts[i-1], to:pts[i], reason:d.reason});
+  }
+  return {meters, km:meters/1000, rejected, sorted:pts};
+}
+const adminFix66OriginalComputeSummary = computeSummary;
+computeSummary = function(points){
+  const pts = adminFix66Sorted(points);
+  if(!pts.length) return {count:0,km:0,avgSpeed:0,maxSpeed:0,rejected:0,mode:adminDistanceMode};
+  let km = 0, rejected = 0;
+  if(adminDistanceMode === "raw"){
+    let meters = 0;
+    for(let i=1;i<pts.length;i++) meters += distanceMeters(pts[i-1], pts[i]);
+    km = meters/1000;
+  }else{
+    const clean = adminFix66CleanDistance(pts);
+    km = clean.km; rejected = clean.rejected.length;
+  }
+  const speeds = pts.map(p=>adminFix66Speed(p)).filter(v=>Number.isFinite(v)&&v>0);
+  return { count:pts.length, km, avgSpeed:speeds.length ? speeds.reduce((a,b)=>a+b,0)/speeds.length : 0, maxSpeed:speeds.length ? Math.max(...speeds) : 0, rejected, mode:adminDistanceMode };
+};
+
+const adminFix66OriginalUpdateCharts = updateCharts;
+updateCharts = function(points){
+  const pts = adminFix66Sorted(points);
+  const speedLabels=pts.slice(-100).map(p=>new Date(Number(p.timestamp||0)).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"}));
+  const speedData=pts.slice(-100).map(p=>Number(p.speed||0));
+  if(speedChart) speedChart.destroy();
+  speedChart = new Chart(qs("speedChart"), { type:"line", data:{ labels:speedLabels, datasets:[{ data:speedData, tension:.25 }] }, options:{ responsive:true, plugins:{ legend:{display:false}}, scales:{ y:{beginAtZero:true}} }});
+  const byDay={};
+  pts.forEach(p=>{ const day=new Date(Number(p.timestamp||0)).toLocaleDateString("ru-RU"); byDay[day]=byDay[day]||{points:[],dist:0,count:0,max:0,sum:0}; byDay[day].points.push(p); const sp=Number(p.speed||0); byDay[day].count++; byDay[day].sum+=sp; byDay[day].max=Math.max(byDay[day].max, sp); });
+  Object.keys(byDay).forEach(day=>{ byDay[day].dist = (adminDistanceMode === "raw" ? adminFix66OriginalComputeSummary(byDay[day].points).km : adminFix66CleanDistance(byDay[day].points).km); });
+  const labels=Object.keys(byDay), vals=labels.map(d=>Number(byDay[d].dist.toFixed(2)));
+  if(distanceChart) distanceChart.destroy();
+  distanceChart = new Chart(qs("distanceChart"), { type:"bar", data:{ labels, datasets:[{ data:vals }] }, options:{ responsive:true, plugins:{ legend:{display:false}}, scales:{ y:{beginAtZero:true}} }});
+  const tbody=qs("dailyStatsTbody"); if(!tbody) return; tbody.innerHTML="";
+  labels.forEach(d=>{ const item=byDay[d], tr=document.createElement("tr"); tr.innerHTML=`<td>${d}</td><td>${item.dist.toFixed(2)} км</td><td>${(item.sum/Math.max(1,item.count)).toFixed(1)} км/ч</td><td>${item.max.toFixed(1)} км/ч</td><td>${item.count}</td>`; tbody.appendChild(tr); });
+};
+
+function adminFix66UpdateDistanceModeUi(){
+  const clean = qs("distanceModeCleanBtn"), raw = qs("distanceModeRawBtn"), rejected = qs("showRejectedSegmentsToggle");
+  if(clean) clean.classList.toggle("active", adminDistanceMode === "clean");
+  if(raw) raw.classList.toggle("active", adminDistanceMode === "raw");
+  if(rejected) rejected.checked = adminShowRejectedSegments;
+  const n = qs("cleanDistanceNotice");
+  if(n) n.textContent = adminDistanceMode === "clean" ? "Чистый пробег: стоянка, плохая точность и невозможные скачки не добавляют лишние километры." : "Сырой пробег: складываются все соседние точки. Может завышать путь из-за GPS-дрейфа.";
+}
+function adminFix66RenderRejectedSegments(){
+  try{
+    if(!historyMap) return;
+    if(!rejectedSegmentLayer) rejectedSegmentLayer = L.layerGroup().addTo(historyMap);
+    rejectedSegmentLayer.clearLayers();
+    if(!adminShowRejectedSegments || adminDistanceMode !== "clean") return;
+    const clean = adminFix66CleanDistance(currentFiltered || filteredHistory?.() || []);
+    clean.rejected.slice(0,300).forEach(seg=>{
+      if(!seg.from || !seg.to) return;
+      L.polyline([[seg.from.latitude,seg.from.longitude],[seg.to.latitude,seg.to.longitude]], {color:'#ef4444',weight:3,opacity:.55,dashArray:'6,8'}).bindTooltip(seg.reason || 'отброшено').addTo(rejectedSegmentLayer);
+    });
+  }catch(e){ recordError("adminFix66RenderRejectedSegments", e); }
+}
+const adminFix66OriginalRenderHistory = renderHistory;
+renderHistory = async function(){
+  await adminFix66OriginalRenderHistory.apply(this, arguments);
+  adminFix66UpdateDistanceModeUi();
+  adminFix66RenderRejectedSegments();
+};
+function adminFix66InstallHistoryMode(){
+  adminFix66UpdateDistanceModeUi();
+  const clean = qs("distanceModeCleanBtn"), raw = qs("distanceModeRawBtn"), rejected = qs("showRejectedSegmentsToggle");
+  if(clean && !clean.dataset.fix66){ clean.dataset.fix66="1"; clean.onclick=()=>{ adminDistanceMode="clean"; localStorage.setItem("mygps_admin_distance_mode", adminDistanceMode); renderHistory(); updateCharts(currentFiltered||[]); }; }
+  if(raw && !raw.dataset.fix66){ raw.dataset.fix66="1"; raw.onclick=()=>{ adminDistanceMode="raw"; localStorage.setItem("mygps_admin_distance_mode", adminDistanceMode); renderHistory(); updateCharts(currentFiltered||[]); }; }
+  if(rejected && !rejected.dataset.fix66){ rejected.dataset.fix66="1"; rejected.onchange=()=>{ adminShowRejectedSegments=!!rejected.checked; localStorage.setItem("mygps_admin_show_rejected", adminShowRejectedSegments?'1':'0'); adminFix66RenderRejectedSegments(); }; }
+}
+
+function gpsLogIsProblem(item){
+  const text = `${item.title || ""} ${item.message || ""} ${item.type || ""}`.toLowerCase();
+  return /(ошиб|error|permission|denied|выключ|отключ|stop|останов|kill|force|нет сигнала|no signal|bad|плох|watchdog|restart)/i.test(text);
+}
+function gpsLogStopReasonText(item){
+  if(!item) return "—";
+  const text = `${item.title || ""} ${item.message || ""}`.toLowerCase();
+  if(text.includes("swipe") || text.includes("recent")) return "закрытие свайпом из Recent Apps";
+  if(text.includes("logout") || text.includes("выход")) return "выход из аккаунта";
+  if(text.includes("stop all") || text.includes("откл")) return "явная команда отключения GPS";
+  if(text.includes("permission") || text.includes("denied")) return "нет разрешения на GPS лог / Firebase rules";
+  if(text.includes("sleep")) return "Smart GPS sleep, это не должно выключать GPS";
+  if(text.includes("live")) return "live stop/expire, основной GPS не должен выключаться";
+  if(text.includes("kill") || text.includes("force")) return "Android/OEM убил приложение";
+  return item.message || item.title || "последняя проблемная запись";
+}
+const adminFix66OriginalGpsLogRowClass = gpsLogRowClass;
+gpsLogRowClass = function(item){
+  const base = adminFix66OriginalGpsLogRowClass(item) || "";
+  const text = `${item.title || ""} ${item.message || ""}`.toLowerCase();
+  if(/ошиб|error|permission|denied|выключ|отключ|kill|force/.test(text)) return `${base} gpsLogRowError`.trim();
+  if(/watchdog|sleep|фильтр|плох|bad/.test(text)) return `${base} gpsLogRowWarn`.trim();
+  return base;
+};
+const adminFix66OriginalRenderGpsServiceLogs = renderGpsServiceLogs;
+renderGpsServiceLogs = function(){
+  const tbody = qs("gpsLogTbody");
+  if(!tbody) return;
+  const typeFilter = qs("gpsLogTypeFilter")?.value || "";
+  const uidFilter = qs("gpsLogUserFilter")?.value || "";
+  const onlyProblems = !!qs("gpsLogProblemsOnly")?.checked;
+  let rows = gpsServiceLogs.slice();
+  if(uidFilter) rows = rows.filter(x => x.uid === uidFilter);
+  if(typeFilter) rows = rows.filter(x => gpsLogKind(x) === typeFilter);
+  if(onlyProblems) rows = rows.filter(gpsLogIsProblem);
+  if(qs("gpsLogCount")) qs("gpsLogCount").textContent = String(rows.length);
+  const lastProblem = rows.find(gpsLogIsProblem) || gpsServiceLogs.find(gpsLogIsProblem);
+  adminFix66SetText("gpsLogStopReason", gpsLogStopReasonText(lastProblem));
+  tbody.innerHTML = "";
+  if(!rows.length){ tbody.innerHTML = `<tr><td colspan="6">GPS лог пуст по выбранному фильтру.</td></tr>`; adminFix66UpdateNowGpsStatus(); return; }
+  rows.forEach(item => {
+    const kind = gpsLogKind(item);
+    const tr = document.createElement("tr");
+    const ts = Number(item.ts || item.timestamp || 0);
+    tr.className = gpsLogRowClass(item);
+    tr.innerHTML = `<td>${fmtTime(ts)}</td><td><span class="gpsLogTypeBadge ${kind}">${gpsLogKindLabel(kind)}</span></td><td>${adminFix66Escape(item.title || item.type || "—")}</td><td>${adminFix66Escape(item.message || "—")}</td><td>${adminFix66Escape(getDisplayName(item.uid) || item.uid || "—")}</td><td>${adminFix66Escape(item.source || "android_service")}</td>`;
+    tbody.appendChild(tr);
+  });
+  adminFix66UpdateNowGpsStatus();
+};
+const adminFix66OriginalInstallGpsLogPanel = installGpsLogPanel;
+installGpsLogPanel = function(){
+  adminFix66OriginalInstallGpsLogPanel.apply(this, arguments);
+  const cb = qs("gpsLogProblemsOnly");
+  if(cb && !cb.dataset.fix66){ cb.dataset.fix66="1"; cb.addEventListener("change", renderGpsServiceLogs); }
+};
+
+function adminFix66UpdateNowGpsStatus(){
+  const uid = selectedUid || qs("gpsLogUserFilter")?.value || "";
+  const logs = gpsServiceLogs.filter(x => !uid || x.uid === uid).sort((a,b)=>Number(b.ts||b.timestamp||0)-Number(a.ts||a.timestamp||0));
+  const latest = logs[0];
+  const latestGps = logs.find(x => gpsLogKind(x) === "gps" || /gps/i.test(`${x.title||""} ${x.message||""}`));
+  const latestService = logs.find(x => gpsLogKind(x) === "service" || /service|сервис/i.test(`${x.title||""} ${x.message||""}`));
+  const latestSleep = logs.find(x => gpsLogKind(x) === "sleep");
+  const lastProblem = logs.find(gpsLogIsProblem);
+  adminFix66SetText("nowGpsDiagState", latestGps ? `${latestGps.title || latestGps.type || "GPS"}: ${latestGps.message || "—"}` : "нет GPS лога");
+  adminFix66SetText("nowGpsDiagService", latestService ? `${latestService.title || latestService.type || "Service"}: ${fmtTime(latestService.ts || latestService.timestamp)}` : "нет service лога");
+  adminFix66SetText("nowGpsDiagSmart", latestSleep ? `${latestSleep.message || latestSleep.title || "sleep"}` : "active / нет sleep лога");
+  adminFix66SetText("nowGpsDiagLast", latest ? `${fmtTime(latest.ts || latest.timestamp)} — ${latest.message || latest.title || latest.type || "—"}` : "нет записей");
+  if(lastProblem) adminFix66SetText("gpsLogStopReason", gpsLogStopReasonText(lastProblem));
+}
+const adminFix66OriginalUpdateNow = updateNowFromAvailableSources;
+updateNowFromAvailableSources = function(){
+  const result = adminFix66OriginalUpdateNow.apply(this, arguments);
+  setTimeout(adminFix66UpdateNowGpsStatus, 0);
+  return result;
+};
+
+function adminFix66PopulateGeofenceUsers(){
+  const sel = qs("geofenceUsersInput"); if(!sel) return;
+  const prev = Array.from(sel.selectedOptions||[]).map(o=>o.value);
+  sel.innerHTML = "";
+  (getAllKnownUserIds ? getAllKnownUserIds() : (allUsers||[])).filter(Boolean).forEach(uid=>{
+    const opt=document.createElement("option"); opt.value=uid; opt.textContent=getDisplayName(uid)||uid; if(prev.includes(uid)) opt.selected=true; sel.appendChild(opt);
+  });
+}
+const adminFix66OriginalNormalizeGeofence = normalizeGeofence;
+normalizeGeofence = function(item, index=0){
+  const base = adminFix66OriginalNormalizeGeofence(item, index);
+  return {...base, active: item?.active !== false, color: String(item?.color || '#22c55e'), cooldownMinutes: Math.max(0, Number(item?.cooldownMinutes ?? item?.antiSpamMinutes ?? adminSettings?.geofenceNotifications?.cooldownMinutes ?? 5)), userUids: Array.isArray(item?.userUids) ? item.userUids.map(String) : []};
+};
+const adminFix66OriginalReadGeofenceForm = readGeofenceForm;
+readGeofenceForm = function(){
+  const item = adminFix66OriginalReadGeofenceForm();
+  const sel = qs("geofenceUsersInput");
+  return {...item, active: !!qs("geofenceActiveInput")?.checked, color: qs("geofenceColorInput")?.value || '#22c55e', cooldownMinutes: Math.max(0, Number(qs("geofenceCooldownInput")?.value || 5)), userUids: sel ? Array.from(sel.selectedOptions).map(o=>o.value).filter(Boolean) : []};
+};
+const adminFix66OriginalResetGeofenceForm = resetGeofenceForm;
+resetGeofenceForm = function(){
+  adminFix66OriginalResetGeofenceForm.apply(this, arguments);
+  if(qs("geofenceActiveInput")) qs("geofenceActiveInput").checked = true;
+  if(qs("geofenceColorInput")) qs("geofenceColorInput").value = '#22c55e';
+  if(qs("geofenceCooldownInput")) qs("geofenceCooldownInput").value = '5';
+  if(qs("geofenceUsersInput")) Array.from(qs("geofenceUsersInput").options).forEach(o=>o.selected=false);
+};
+const adminFix66OriginalRenderGeofences = renderGeofences;
+renderGeofences = function(){
+  adminFix66PopulateGeofenceUsers();
+  adminSettings.geofences = normalizeGeofencesShape(adminSettings.geofences);
+  const tbody = qs("geofencesTbody");
+  if(!tbody) return;
+  const items = adminSettings.geofences;
+  tbody.innerHTML = items.length ? "" : `<tr><td colspan="4" class="smallMuted">Геозон пока нет.</td></tr>`;
+  items.forEach(item => {
+    const tr = document.createElement("tr");
+    const usersText = item.userUids?.length ? item.userUids.map(uid=>getDisplayName(uid)||uid).join(", ") : "все";
+    tr.innerHTML = `<td><span class="geofenceMiniBadge ${item.active!==false?'on':'off'}">${item.active!==false?'вкл':'выкл'}</span> ${adminFix66Escape(item.name)}<div class="smallMuted">Пользователи: ${adminFix66Escape(usersText)} · антиспам ${Number(item.cooldownMinutes||0)} мин</div></td><td class="mono">${Number(item.lat).toFixed(5)}, ${Number(item.lon).toFixed(5)}</td><td>${item.radiusM} м<br><span style="display:inline-block;width:34px;height:10px;border-radius:999px;background:${adminFix66Escape(item.color||'#22c55e')}"></span></td><td><div class="row"><button class="secondary small" data-geofence-toggle="${item.id}">${item.active!==false?'Выключить':'Включить'}</button><button class="secondary small" data-geofence-edit="${item.id}">Изменить</button><button class="secondary small" data-geofence-maps="${item.id}">Maps</button><button class="danger small" data-geofence-delete="${item.id}">Удалить</button></div></td>`;
+    tbody.appendChild(tr);
+  });
+  tbody.querySelectorAll("[data-geofence-toggle]").forEach(btn=>btn.onclick=async()=>{ const item=adminSettings.geofences.find(x=>x.id===btn.dataset.geofenceToggle); if(!item) return; item.active = item.active === false; await update(ref(db,"adminSettings/config"), { geofences: adminSettings.geofences }); await publishGeofencesToDevices(adminSettings.geofences); renderGeofences(); showToast(item.active!==false?'Геозона включена':'Геозона выключена','success'); });
+  tbody.querySelectorAll("[data-geofence-edit]").forEach(btn => btn.onclick = () => { const item = adminSettings.geofences.find(x => x.id === btn.dataset.geofenceEdit); if(!item) return; window.__editingGeofenceId = item.id; if(qs("geofenceNameInput")) qs("geofenceNameInput").value = item.name; if(qs("geofenceLatInput")) qs("geofenceLatInput").value = String(item.lat); if(qs("geofenceLonInput")) qs("geofenceLonInput").value = String(item.lon); if(qs("geofenceRadiusInput")) qs("geofenceRadiusInput").value = String(item.radiusM); if(qs("geofenceActiveInput")) qs("geofenceActiveInput").checked = item.active !== false; if(qs("geofenceColorInput")) qs("geofenceColorInput").value = item.color || '#22c55e'; if(qs("geofenceCooldownInput")) qs("geofenceCooldownInput").value = String(item.cooldownMinutes ?? 5); adminFix66PopulateGeofenceUsers(); if(qs("geofenceUsersInput")) Array.from(qs("geofenceUsersInput").options).forEach(o=>o.selected = (item.userUids||[]).includes(o.value)); updateGeofencePreviewFromForm(); if(qs("geofenceFormStatus")) qs("geofenceFormStatus").textContent = `Редактирование: ${item.name}`; });
+  tbody.querySelectorAll("[data-geofence-delete]").forEach(btn => btn.onclick = async () => { const id = btn.dataset.geofenceDelete; const item = adminSettings.geofences.find(x => x.id === id); if(!item) return; if(!confirm(`Удалить геозону «${item.name}»?`)) return; adminSettings.geofences = adminSettings.geofences.filter(x => x.id !== id); await update(ref(db, "adminSettings/config"), { geofences: adminSettings.geofences }); await publishGeofencesToDevices(adminSettings.geofences); await logAction("geofence_delete", `Удалена геозона ${item.name}`); renderGeofences(); resetGeofenceForm(); showToast("Геозона удалена", "success"); });
+  tbody.querySelectorAll("[data-geofence-maps]").forEach(btn => btn.onclick = () => { const item = adminSettings.geofences.find(x => x.id === btn.dataset.geofenceMaps); if(!item) return; window.open(`https://maps.google.com/?q=${encodeURIComponent(item.lat + "," + item.lon)}`, "_blank", "noopener,noreferrer"); });
+  renderGeofenceCirclesOnMap();
+};
+const adminFix66OriginalRenderGeofenceCirclesOnMap = renderGeofenceCirclesOnMap;
+renderGeofenceCirclesOnMap = function(){
+  geofenceSavedLayer.clearLayers();
+  const items = normalizeGeofencesShape(adminSettings.geofences);
+  const latlngs = [];
+  items.forEach(item=>{ if(!Number.isFinite(item.lat)||!Number.isFinite(item.lon)) return; const circle=L.circle([item.lat,item.lon], {radius:item.radiusM,color:item.active!==false?(item.color||'#22c55e'):'#64748b',fillColor:item.active!==false?(item.color||'#22c55e'):'#64748b',fillOpacity:item.active!==false?.13:.05,weight:2,dashArray:item.active!==false?null:'5,7'}).bindPopup(`${item.name}<br>${item.active!==false?'Активна':'Выключена'}<br>${item.radiusM} м`).addTo(geofenceSavedLayer); latlngs.push([item.lat,item.lon]); });
+  if(latlngs.length===1) geofenceMap.setView(latlngs[0], 15); else if(latlngs.length>1) geofenceMap.fitBounds(L.latLngBounds(latlngs), {padding:[30,30]});
+};
+const adminFix66GeofenceLastNotify = {};
+handleGeofenceTransitions = async function(point){
+  ensureGeofenceNotificationSettings();
+  const ts = Number(point?.timestamp || 0);
+  if(!point || !Number.isFinite(ts) || (Date.now() - ts) > getNowOfflineMs()) return;
+  const entityKey = selectedUid || "all";
+  const zones = normalizeGeofencesShape(adminSettings.geofences);
+  for(const zone of zones){
+    if(zone.active === false) continue;
+    if(zone.userUids?.length && selectedUid && !zone.userUids.includes(selectedUid)) continue;
+    const key = `${entityKey}:${zone.id}`;
+    const insideNow = pointInsideGeofence(point, zone);
+    if(!(key in geofenceTransitionState)){ geofenceTransitionState[key] = insideNow; continue; }
+    const insidePrev = geofenceTransitionState[key];
+    if(insidePrev === insideNow) continue;
+    geofenceTransitionState[key] = insideNow;
+    const action = insideNow ? "enter" : "exit";
+    const cooldownMs = Math.max(0, Number(zone.cooldownMinutes ?? adminSettings.geofenceNotifications?.cooldownMinutes ?? 5)) * 60 * 1000;
+    const spamKey = `${key}:${action}`;
+    if(cooldownMs && adminFix66GeofenceLastNotify[spamKey] && Date.now() - adminFix66GeofenceLastNotify[spamKey] < cooldownMs) continue;
+    adminFix66GeofenceLastNotify[spamKey] = Date.now();
+    const text = insideNow ? `Вход в геозону: ${zone.name}` : `Выход из геозоны: ${zone.name}`;
+    const notifyThisAction = action === "enter" ? adminSettings.geofenceNotifications.notifyEnterEnabled : adminSettings.geofenceNotifications.notifyExitEnabled;
+    if(!notifyThisAction) continue;
+    if(adminSettings.geofenceNotifications.toastEnabled) showToast(`📍 ${text}`, insideNow ? "success" : "warn", 4200);
+    if(adminSettings.geofenceNotifications.journalEnabled) await logDeviceEvent(`geofence_${action}`, text, { geofenceId: zone.id, geofenceName: zone.name, action, cooldownMinutes: zone.cooldownMinutes || 0 });
+    await maybeShowBrowserNotification("MyGps", text);
+  }
+};
+
+function adminFix66LiveHealth(){
+  const entries = Object.entries(allSessions || {}).map(([token, session]) => [token, getSessionRoot ? getSessionRoot(session) : session]).filter(([,s])=>s);
+  const now = Date.now();
+  let active=0, stale=0, metaBad=0, lastPointOk=0;
+  entries.forEach(([token, s])=>{ const meta=s.meta||{}, p=s.public?.lastPoint; const isActive=meta.active===true && Number(meta.expiresAt||0)>now; if(isActive){ active++; if(!meta.ownerUid || !meta.expiresAt) metaBad++; const age=p? now-Number(p.timestamp||p.ts||0):Infinity; if(p && age < 120000) lastPointOk++; else stale++; }});
+  adminFix66SetText("liveHealthActive", `${active}`);
+  adminFix66SetText("liveHealthLastPoint", active ? `${lastPointOk}/${active} свежие` : "нет активных");
+  adminFix66SetText("liveHealthMeta", metaBad ? `проблем: ${metaBad}` : "OK");
+  adminFix66SetText("liveHealthProblem", stale ? `нет свежей точки: ${stale}` : (metaBad ? "meta требует проверки" : "OK"));
+}
+const adminFix66OriginalRenderSessions = renderSessions;
+renderSessions = function(){ const r = adminFix66OriginalRenderSessions.apply(this, arguments); setTimeout(adminFix66LiveHealth, 0); return r; };
+function adminFix66InstallLiveHealth(){ const btn=qs("checkLiveHealthBtn"); if(btn && !btn.dataset.fix66){ btn.dataset.fix66="1"; btn.onclick=()=>{ adminFix66LiveHealth(); showToast("Live проверен", "success"); }; } }
+
+let adminFix66VisibilitySearch = "";
+const adminFix66OriginalRenderVisibilityPanel = renderVisibilityPanel;
+renderVisibilityPanel = function(){
+  const usersList = qs("visibilityUsersList"), targetsList = qs("visibilityTargetsList");
+  if(!usersList || !targetsList) return;
+  const query = adminFix66VisibilitySearch.toLowerCase();
+  const uids = getAllKnownUserIds().filter(uid => uid && uid !== "default");
+  if(!uids.length){ usersList.innerHTML=`<div class="emptyState">Пользователей пока нет.</div>`; targetsList.innerHTML=`<div class="emptyState">Некого настраивать.</div>`; return; }
+  if(!selectedVisibilityUid || !uids.includes(selectedVisibilityUid)) selectedVisibilityUid = selectedUid && uids.includes(selectedUid) ? selectedUid : uids[0];
+  const userRows = uids.filter(uid => !query || (getDisplayName(uid)||uid).toLowerCase().includes(query) || uid.toLowerCase().includes(query));
+  usersList.innerHTML = userRows.map(uid => { const lp=liveByUid?.[uid] || {}; const ts=Number(lp.timestamp||lp.ts||0); const online=ts && Date.now()-ts<getNowOfflineMs(); return `<button class="visibilityUserBtn ${uid===selectedVisibilityUid?'active':''}" data-visibility-user="${uid}"><div><span class="onlineDot ${online?'online':''}"></span><b>${adminFix66Escape(getDisplayName(uid))}</b></div><div class="smallMuted mono">${adminFix66Escape(uid)}</div></button>`; }).join("") || `<div class="emptyState">Ничего не найдено.</div>`;
+  const selectedName = getDisplayName(selectedVisibilityUid);
+  qs("visibilitySelectedTitle").textContent = `Кого видит: ${selectedName}`;
+  const visibleMap = userVisibility?.[selectedVisibilityUid] || {};
+  const targets = uids.filter(uid => uid !== selectedVisibilityUid && (!query || (getDisplayName(uid)||uid).toLowerCase().includes(query) || uid.toLowerCase().includes(query)));
+  targetsList.innerHTML = targets.length ? targets.map(uid=>{ const checked=visibleMap?.[uid]===true?'checked':''; const lp=liveByUid?.[uid]||{}; const online=Number(lp.timestamp||lp.ts||0) && Date.now()-Number(lp.timestamp||lp.ts||0)<getNowOfflineMs(); return `<div class="visibilityTargetRow"><label><input type="checkbox" data-visibility-target="${uid}" ${checked}><span><div class="visibilityTargetName"><span class="onlineDot ${online?'online':''}"></span>${adminFix66Escape(getDisplayName(uid))}</div><div class="visibilityTargetUid mono">${adminFix66Escape(uid)}</div></span></label></div>`; }).join("") : `<div class="emptyState">Нет пользователей по фильтру.</div>`;
+  usersList.querySelectorAll("[data-visibility-user]").forEach(btn=>btn.onclick=()=>{ selectedVisibilityUid=btn.dataset.visibilityUser; renderVisibilityPanel(); });
+  adminFix66InstallVisibilityTools();
+};
+function adminFix66InstallVisibilityTools(){
+  const search = qs("visibilitySearchInput");
+  if(search && !search.dataset.fix66){ search.dataset.fix66="1"; search.addEventListener("input", ()=>{ adminFix66VisibilitySearch=search.value||""; renderVisibilityPanel(); }); }
+  const allBtn=qs("visibilityTemplateAllBtn"), noneBtn=qs("visibilityTemplateNoneBtn"), pairBtn=qs("visibilityTemplatePairBtn");
+  if(allBtn && !allBtn.dataset.fix66){ allBtn.dataset.fix66="1"; allBtn.onclick=async()=>{ if(!confirm("Сделать так, чтобы все пользователи видели всех?")) return; const uids=getAllKnownUserIds().filter(uid=>uid&&uid!=="default"); const next={}; uids.forEach(uid=>{ next[uid]={}; uids.filter(t=>t!==uid).forEach(t=>next[uid][t]=true); }); await set(ref(db,"userVisibility"), next); userVisibility = next; renderVisibilityPanel(); showToast("Шаблон применён", "success"); }; }
+  if(noneBtn && !noneBtn.dataset.fix66){ noneBtn.dataset.fix66="1"; noneBtn.onclick=async()=>{ if(!confirm("Очистить видимость для всех пользователей?")) return; await remove(ref(db,"userVisibility")); userVisibility={}; renderVisibilityPanel(); showToast("Видимость очищена", "success"); }; }
+  if(pairBtn && !pairBtn.dataset.fix66){ pairBtn.dataset.fix66="1"; pairBtn.onclick=()=>showToast("Выбери пользователя, отметь нужные пары и нажми Сохранить", "warn", 4200); }
+}
+
+function adminFix66Install(){
+  adminFix66InstallHistoryMode();
+  installGpsLogPanel();
+  adminFix66PopulateGeofenceUsers();
+  adminFix66InstallLiveHealth();
+  adminFix66InstallVisibilityTools();
+  setTimeout(()=>{ try{ adminFix66UpdateNowGpsStatus(); adminFix66LiveHealth(); }catch(e){} }, 600);
+}
+window.addEventListener("load", () => { adminFix66Install(); setTimeout(adminFix66Install, 1500); });
+document.addEventListener("click", ev=>{ const btn=ev.target?.closest?.(".tab-btn[data-tab]"); if(btn) setTimeout(adminFix66Install, 60); }, true);
+/* === /Admin diagnostics upgrade fix_66 === */
+
+/* === /GPS service log panel fix_64 === */
+
+
+
+/* === Admin alert center + health + rules + timeline fix_68 === */
+const ADMIN_FIX68_ALERT_KEY = "mygps_admin_alert_settings_fix68";
+let adminFix68Alerts = [];
+let adminFix68LastCriticalSig = "";
+let adminFix68TimelineLayer = null;
+let adminFix68TimelineEvents = [];
+function fix68Qs(id){ return document.getElementById(id); }
+function fix68Esc(v){ return String(v ?? "").replace(/[&<>'"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'\"':"&quot;"}[ch])); }
+function fix68Ts(v){ const n=Number(v||0); return Number.isFinite(n)&&n>0?n:0; }
+function fix68AgeText(ts){ const t=fix68Ts(ts); if(!t) return "—"; const s=Math.max(0, Math.round((Date.now()-t)/1000)); if(s<60) return `${s} сек назад`; if(s<3600) return `${Math.round(s/60)} мин назад`; if(s<86400) return `${Math.round(s/3600)} ч назад`; return `${Math.round(s/86400)} дн назад`; }
+function fix68PointLat(p){ return Number(p?.latitude ?? p?.lat); }
+function fix68PointLng(p){ return Number(p?.longitude ?? p?.lng ?? p?.lon); }
+function fix68ValidLatLng(p){ const lat=fix68PointLat(p), lng=fix68PointLng(p); return Number.isFinite(lat)&&Number.isFinite(lng)&&Math.abs(lat)<=90&&Math.abs(lng)<=180; }
+function fix68DisplayUid(uid){ return getDisplayName?.(uid) || uid || "—"; }
+function fix68SeverityBadge(sev){ const cls=sev==='danger'?'danger':sev==='warn'?'warn':sev==='ok'?'ok':'info'; const label=({danger:'Критично',warn:'Внимание',ok:'OK',info:'Инфо'})[cls]; return `<span class="alertBadge ${cls}">${label}</span>`; }
+function fix68ReadAlertSettings(){ try{return JSON.parse(localStorage.getItem(ADMIN_FIX68_ALERT_KEY)||'{}')||{};}catch(e){return{};} }
+function fix68SaveAlertSettings(){ const s={sound:!!fix68Qs('adminSoundAlertsToggle')?.checked,push:!!fix68Qs('adminBrowserPushToggle')?.checked}; localStorage.setItem(ADMIN_FIX68_ALERT_KEY, JSON.stringify(s)); }
+function fix68ApplyAlertSettings(){ const s=fix68ReadAlertSettings(); if(fix68Qs('adminSoundAlertsToggle')) fix68Qs('adminSoundAlertsToggle').checked=!!s.sound; if(fix68Qs('adminBrowserPushToggle')) fix68Qs('adminBrowserPushToggle').checked=!!s.push; }
+function fix68Beep(){ try{ const C=window.AudioContext||window.webkitAudioContext; const ctx=new C(); const osc=ctx.createOscillator(); const gain=ctx.createGain(); osc.frequency.value=880; gain.gain.value=.05; osc.connect(gain); gain.connect(ctx.destination); osc.start(); setTimeout(()=>{try{osc.stop();ctx.close();}catch(e){}},220); }catch(e){} }
+function fix68Notify(title, body){ const st=fix68ReadAlertSettings(); if(st.sound) fix68Beep(); if(st.push && 'Notification' in window && Notification.permission==='granted'){ try{ new Notification(title,{body,tag:'mygps-admin-alert'}); }catch(e){} } }
+async function fix68LatestGpsLogs(uid, limit=80){ const out=[]; try{ if(uid){ const snap=await get(query(ref(db,`gpsServiceLogs/${uid}`), limitToLast(limit))); Object.entries(snap.val()||{}).forEach(([id,item])=>out.push({...item,id,uid:item?.uid||uid})); } else { const snap=await get(ref(db,'gpsServiceLogs')); Object.entries(snap.val()||{}).forEach(([u,items])=>Object.entries(items||{}).forEach(([id,item])=>out.push({...item,id,uid:item?.uid||u}))); } }catch(e){ recordError?.('fix68LatestGpsLogs', e); } return out.sort((a,b)=>fix68Ts(b.ts||b.timestamp)-fix68Ts(a.ts||a.timestamp)).slice(0,limit); }
+function fix68LastGpsStopReason(logs){ const hit=(logs||[]).find(x=>{ const t=`${x.title||''} ${x.message||''} ${x.type||''}`.toLowerCase(); return t.includes('выключ')||t.includes('gps stop')||t.includes('stop all')||t.includes('swipe')||t.includes('logout')||t.includes('останов'); }); if(!hit) return 'Нет GPS stop в последних логах'; return `${hit.title||hit.type||'GPS stop'} — ${hit.message||''} (${fix68AgeText(hit.ts||hit.timestamp)})`; }
+function fix68SelectedLiveSession(uid){ const entries=Object.entries(allSessions||{}).map(([token,raw])=>[token, getSessionRoot?.(raw)||raw||{}]); const now=Date.now(); return entries.find(([token,s])=>s?.meta?.ownerUid===uid && s?.meta?.active===true && Number(s?.meta?.expiresAt||0)>now) || entries.find(([token,s])=>s?.meta?.ownerUid===uid) || null; }
+function fix68LatestGeofenceForUid(uid){ return '—'; }
+async function fix68UpdateUserHealth(){ const uid=selectedUid || fix68Qs('userSelect')?.value || ''; if(!uid) return; const point=liveByUid?.[uid] || currentLivePoint || latestLivePoint || null; const pTs=fix68Ts(point?.timestamp||point?.ts||point?.time); const ageMs=pTs ? Date.now()-pTs : Infinity; const logs=await fix68LatestGpsLogs(uid,60); const lastLog=logs[0]; const lastText=`${lastLog?.title||''} ${lastLog?.message||''}`.toLowerCase(); const serviceAlive=lastText.includes('service') && (lastText.includes('запущ')||lastText.includes('running')||lastText.includes('start')) ? 'service alive' : (lastText.includes('service') && (lastText.includes('stop')||lastText.includes('останов')) ? 'service stopped' : 'по логам — неизвестно'); const gpsState=ageMs<90000?'GPS обновляется':(ageMs<600000?'GPS давно не обновлялся':'GPS offline'); const smart=lastText.includes('sleep')||lastText.includes('smart') ? (lastLog?.message||lastLog?.title||'Smart GPS') : '—'; const live=fix68SelectedLiveSession(uid); const meta=live ? live[1]?.meta||{} : null; const battery=point?.batteryLevel ?? point?.battery ?? '—'; if(fix68Qs('userHealthOnline')) fix68Qs('userHealthOnline').innerHTML=ageMs<120000?'<span class="alertBadge ok">Online</span>':'<span class="alertBadge warn">Offline/idle</span>'; if(fix68Qs('userHealthGpsService')) fix68Qs('userHealthGpsService').textContent=`${gpsState}; ${serviceAlive}`; if(fix68Qs('userHealthSmart')) fix68Qs('userHealthSmart').textContent=smart; if(fix68Qs('userHealthLive')) fix68Qs('userHealthLive').textContent=meta ? `${meta.active?'active':'stopped'} / expires ${fmtTime(meta.expiresAt)}` : 'нет live'; if(fix68Qs('userHealthLastPoint')) fix68Qs('userHealthLastPoint').textContent=pTs ? `${fix68AgeText(pTs)}; ${fix68ValidLatLng(point)?fix68PointLat(point).toFixed(5)+', '+fix68PointLng(point).toFixed(5):'нет координат'}` : 'нет точки'; if(fix68Qs('userHealthBattery')) fix68Qs('userHealthBattery').textContent=battery==='—'?'—':`${battery}%${point?.isCharging?' / зарядка':''}`; if(fix68Qs('userHealthStopReason')) fix68Qs('userHealthStopReason').textContent=fix68LastGpsStopReason(logs); if(fix68Qs('userHealthGeofence')) fix68Qs('userHealthGeofence').textContent=fix68LatestGeofenceForUid(uid); }
+async function fix68BuildAlerts(){ const alerts=[]; const uid=selectedUid||fix68Qs('userSelect')?.value||''; const now=Date.now(); const users=uid?[uid]:(allUsers||[]).slice(0,50); for(const u of users){ const point=liveByUid?.[u] || (u===uid ? (currentLivePoint||latestLivePoint) : null); const pTs=fix68Ts(point?.timestamp||point?.ts||point?.time); const age=pTs?now-pTs:Infinity; if(!pTs) alerts.push({sev:'warn',source:'GPS',title:'Нет последней точки',uid:u,ts:now,action:'Проверить MyGps/GPS лог'}); else if(age>600000) alerts.push({sev:'danger',source:'GPS',title:`GPS не обновлялся ${fix68AgeText(pTs)}`,uid:u,ts:pTs,action:'Открыть GPS лог'}); else if(age>120000) alerts.push({sev:'warn',source:'GPS',title:`Старая точка: ${fix68AgeText(pTs)}`,uid:u,ts:pTs,action:'Проверить background'}); const bat=Number(point?.batteryLevel ?? point?.battery ?? NaN); if(Number.isFinite(bat)&&bat<=15) alerts.push({sev:'danger',source:'Батарея',title:`Низкая батарея ${bat}%`,uid:u,ts:pTs||now,action:'Зарядить телефон'}); const acc=Number(point?.accuracy ?? NaN); if(Number.isFinite(acc)&&acc>100) alerts.push({sev:'warn',source:'GPS',title:`Плохая точность ${acc.toFixed(0)} м`,uid:u,ts:pTs||now,action:'Проверить сигнал GPS'}); const live=fix68SelectedLiveSession(u); if(live){ const [token,s]=live; const meta=s?.meta||{}; const lp=s?.public?.lastPoint||{}; const lpTs=fix68Ts(lp.timestamp||lp.ts||lp.time); if(meta.active && Number(meta.expiresAt||0)>now){ if(Number(meta.expiresAt)-now<300000) alerts.push({sev:'warn',source:'Live',title:'Live скоро истекает',uid:u,ts:now,action:'Продлить/создать новую'}); if(!lpTs || now-lpTs>120000) alerts.push({sev:'danger',source:'Live',title:'Live active, но lastPoint старый',uid:u,ts:lpTs||now,action:'Проверить liveSessions/public'}); } } } const logs=await fix68LatestGpsLogs(uid,100); const lastStop=logs.find(x=>{ const t=`${x.title||''} ${x.message||''}`.toLowerCase(); return t.includes('permission')||t.includes('denied')||t.includes('ошиб')||t.includes('error')||t.includes('убит')||t.includes('killed'); }); if(lastStop) alerts.unshift({sev:'danger',source:'Service',title:lastStop.message||lastStop.title||'Ошибка GPS service',uid:lastStop.uid,ts:lastStop.ts||lastStop.timestamp,action:'Открыть GPS лог'}); if(!alerts.length) alerts.push({sev:'ok',source:'Система',title:'Критических тревог нет',uid:uid||'',ts:now,action:'—'}); adminFix68Alerts=alerts.sort((a,b)=>({danger:0,warn:1,info:2,ok:3}[a.sev]-{danger:0,warn:1,info:2,ok:3}[b.sev]) || fix68Ts(b.ts)-fix68Ts(a.ts)); fix68RenderAlerts(); await fix68UpdateUserHealth(); }
+function fix68RenderAlerts(){ const tbody=fix68Qs('alertCenterTbody'); if(!tbody) return; const crit=adminFix68Alerts.filter(a=>a.sev==='danger').length, warn=adminFix68Alerts.filter(a=>a.sev==='warn').length; if(fix68Qs('alertCriticalCount')) fix68Qs('alertCriticalCount').innerHTML=`<span class="alertBadge ${crit?'danger':'ok'}">${crit}</span>`; if(fix68Qs('alertWarnCount')) fix68Qs('alertWarnCount').innerHTML=`<span class="alertBadge ${warn?'warn':'ok'}">${warn}</span>`; if(fix68Qs('alertSelectedUser')) fix68Qs('alertSelectedUser').textContent=fix68DisplayUid(selectedUid||fix68Qs('userSelect')?.value||''); if(fix68Qs('alertLastCheck')) fix68Qs('alertLastCheck').textContent=fmtTime(Date.now()); tbody.innerHTML=''; adminFix68Alerts.forEach(a=>{ const tr=document.createElement('tr'); tr.className=a.sev==='danger'?'alertDangerRow':(a.sev==='warn'?'alertWarnRow':'alertOkRow'); tr.innerHTML=`<td>${fix68SeverityBadge(a.sev)}</td><td>${fix68Esc(a.source)}</td><td>${fix68Esc(a.title)}</td><td>${fix68Esc(fix68DisplayUid(a.uid))}</td><td>${fmtTime(a.ts)}</td><td>${fix68Esc(a.action||'—')}</td>`; tbody.appendChild(tr); }); const sig=adminFix68Alerts.filter(a=>a.sev==='danger').map(a=>`${a.source}:${a.uid}:${a.title}`).join('|'); if(sig && sig!==adminFix68LastCriticalSig){ adminFix68LastCriticalSig=sig; const first=adminFix68Alerts.find(a=>a.sev==='danger'); if(first) fix68Notify('MyGps Admin: критическая тревога', `${first.source}: ${first.title}`); } }
+async function fix68RunRulesCheck(){ const grid=fix68Qs('rulesCheckGrid'); if(!grid) return; grid.innerHTML='<div class="emptyState">Проверяю rules…</div>'; const uid=auth?.currentUser?.uid || selectedUid || 'test'; const temp=`__rulesCheck_${Date.now()}`; const checks=[ ['admins read', async()=>get(ref(db,`admins/${auth.currentUser.uid}`))], ['users read', async()=>get(ref(db,'users'))], ['history read', async()=>get(query(ref(db,`history/${selectedUid||uid}`), limitToLast(1)))], ['live read', async()=>get(ref(db,`live/${selectedUid||uid}`))], ['liveSessions read', async()=>get(query(ref(db,'liveSessions'), limitToLast(1)))], ['gpsServiceLogs read', async()=>get(query(ref(db,`gpsServiceLogs/${selectedUid||uid}`), limitToLast(1)))], ['geofences read', async()=>get(ref(db,`geofences/${selectedUid||uid}`))], ['events read', async()=>get(query(ref(db,`events/${selectedUid||uid}`), limitToLast(1)))], ['adminLogs write', async()=>{ const r=ref(db,`adminLogs/${temp}`); await set(r,{timestamp:Date.now(),type:'rules_check',adminUid:auth.currentUser.uid}); await remove(r); }], ['gpsServiceLogs write', async()=>{ const r=ref(db,`gpsServiceLogs/${auth.currentUser.uid}/${temp}`); await set(r,{ts:Date.now(),type:'rules_check',message:'admin rules check'}); await remove(r); }] ]; const results=[]; for(const [name,fn] of checks){ try{ await fn(); results.push({name,ok:true,msg:'OK'}); }catch(e){ results.push({name,ok:false,msg:errText?.(e)||String(e)}); } } grid.innerHTML=''; results.forEach(r=>{ const div=document.createElement('div'); div.className=`rulesCard ${r.ok?'ok':'err'}`; div.innerHTML=`<b>${fix68Esc(r.name)}</b><span>${r.ok?'<span class="alertBadge ok">OK</span>':'<span class="alertBadge danger">DENIED</span>'}</span><div class="smallMuted" style="margin-top:6px">${fix68Esc(r.msg)}</div>`; grid.appendChild(div); }); }
+async function fix68CheckLiveLink(){ const uid=selectedUid||fix68Qs('userSelect')?.value||''; if(!uid) return showToast?.('Выбери пользователя','warn'); try{ const ownerSnap=await get(ref(db,`liveOwners/${uid}/activeSessionId`)); const token=ownerSnap.val(); let msg=[]; if(!token) msg.push('liveOwners: нет activeSessionId'); else msg.push(`activeSessionId: ${token}`); const sSnap=token? await get(ref(db,`liveSessions/${token}`)) : null; const s=sSnap?.val()||null; if(!s) msg.push('liveSessions/meta: нет сессии'); else { const meta=s.meta||{}, lp=s.public?.lastPoint||{}; msg.push(`meta active=${!!meta.active}, status=${meta.status||'—'}, expires=${fmtTime(meta.expiresAt)}`); msg.push(`public/lastPoint: ${lp.timestamp?fix68AgeText(lp.timestamp):'нет точки'}`); } alert('Диагностика live-ссылки\n\n'+msg.join('\n')); }catch(e){ showToast?.('Ошибка проверки live: '+(errText?.(e)||e),'error',4500); } }
+function fix68TimelineKind(item){ const t=`${item.type||''} ${item.title||''} ${item.message||''}`.toLowerCase(); if(t.includes('geofence')) return 'geofence'; if(t.includes('live')) return 'live'; if(t.includes('gps')||t.includes('sleep')||t.includes('service')) return 'gps'; return 'alert'; }
+function fix68NearestPoint(ts){ const pts=(typeof filteredHistory==='function'?filteredHistory():[]).filter(fix68ValidLatLng); if(!pts.length) return null; let best=pts[0], bd=Math.abs(fix68Ts(pts[0].timestamp||pts[0].ts)-ts); for(const p of pts){ const d=Math.abs(fix68Ts(p.timestamp||p.ts)-ts); if(d<bd){bd=d; best=p;} } return best; }
+async function fix68BuildRouteTimeline(){ const uid=selectedUid||fix68Qs('userSelect')?.value||''; const fromDate=fix68Qs('fromDate')?.value||''; const toDate=fix68Qs('toDate')?.value||''; const from=fromDate?new Date(`${fromDate}T00:00:00`).getTime():0; const to=toDate?new Date(`${toDate}T23:59:59`).getTime():Date.now(); const onlyProblems=!!fix68Qs('timelineOnlyProblemsToggle')?.checked; const rows=[]; const logs=await fix68LatestGpsLogs(uid,300); logs.forEach(x=>{ const ts=fix68Ts(x.ts||x.timestamp); if(ts>=from&&ts<=to) rows.push({ts,kind:fix68TimelineKind(x),title:x.title||x.type||'GPS log',message:x.message||'',raw:x}); }); try{ const snap=uid?await get(query(ref(db,`events/${uid}`), limitToLast(300))):await get(ref(db,'events')); const val=snap.val()||{}; const add=(u,id,e)=>{ const ts=fix68Ts(e.timestamp||e.ts); if(ts>=from&&ts<=to) rows.push({ts,kind:fix68TimelineKind(e),title:e.type||'event',message:e.message||e.geofenceName||'',raw:{...e,uid:u,id}}); }; if(uid) Object.entries(val).forEach(([id,e])=>add(uid,id,e)); else Object.entries(val).forEach(([u,items])=>Object.entries(items||{}).forEach(([id,e])=>add(u,id,e))); }catch(e){} let filtered=rows.sort((a,b)=>a.ts-b.ts); if(onlyProblems) filtered=filtered.filter(e=>{ const t=`${e.title} ${e.message}`.toLowerCase(); return t.includes('stop')||t.includes('ошиб')||t.includes('error')||t.includes('выключ')||t.includes('bad')||t.includes('плох')||t.includes('offline'); }); adminFix68TimelineEvents=filtered; fix68RenderTimeline(); }
+function fix68RenderTimeline(){ const tbody=fix68Qs('routeTimelineTbody'); if(!tbody) return; tbody.innerHTML=''; if(adminFix68TimelineLayer){ try{historyMap.removeLayer(adminFix68TimelineLayer);}catch(e){} adminFix68TimelineLayer=null; } adminFix68TimelineLayer=L.layerGroup().addTo(historyMap); if(!adminFix68TimelineEvents.length){ tbody.innerHTML='<tr><td colspan="5">Событий для выбранного периода нет.</td></tr>'; return; } adminFix68TimelineEvents.slice(0,300).forEach((ev,idx)=>{ const p=fix68NearestPoint(ev.ts); const tr=document.createElement('tr'); tr.innerHTML=`<td>${fmtTime(ev.ts)}</td><td><span class="timelineBadge ${fix68TimelineKind(ev)}">${fix68Esc(fix68TimelineKind(ev))}</span></td><td>${fix68Esc(ev.title)}</td><td>${fix68Esc(ev.message||'—')}</td><td><button class="secondary small" data-timeline-index="${idx}">К точке</button></td>`; tbody.appendChild(tr); if(p&&fix68ValidLatLng(p)){ const lat=fix68PointLat(p),lng=fix68PointLng(p); const color=ev.kind==='live'?'#60a5fa':(ev.kind==='geofence'?'#f59e0b':(String(ev.title).toLowerCase().includes('stop')?'#ef4444':'#22c55e')); const marker=L.circleMarker([lat,lng],{radius:7,weight:2,color,fillOpacity:.85}).bindPopup(`<b>${fix68Esc(ev.title)}</b><br>${fix68Esc(ev.message||'')}<br>${fmtTime(ev.ts)}`); marker.addTo(adminFix68TimelineLayer); ev._latlng=[lat,lng]; } }); tbody.querySelectorAll('[data-timeline-index]').forEach(btn=>btn.onclick=()=>{ const ev=adminFix68TimelineEvents[Number(btn.dataset.timelineIndex)]; if(ev?._latlng){ historyMap.setView(ev._latlng, Math.max(historyMap.getZoom(),15)); } else showToast?.('Нет ближайшей точки на маршруте','warn'); }); }
+function fix68ClearTimeline(){ if(adminFix68TimelineLayer){ try{historyMap.removeLayer(adminFix68TimelineLayer);}catch(e){} adminFix68TimelineLayer=null; } adminFix68TimelineEvents=[]; if(fix68Qs('routeTimelineTbody')) fix68Qs('routeTimelineTbody').innerHTML='<tr><td colspan="5">Timeline очищен.</td></tr>'; }
+function fix68ShowPanel(selectedId){ const ids=['alertCenterPanel','nowPanel','historyPanel','reportsPanel','usagePanel','trafficPanel','sessionsPanel','usersPanel','visibilityPanel','geofencesPanel','journalPanel','gpsLogPanel','errorsPanel','systemCheckPanel','adminLogsPanel','settingsPanel']; ids.forEach(id=>{ const el=fix68Qs(id); if(el) el.classList.toggle('hidden', id!==selectedId); }); document.querySelectorAll('.tab-btn[data-tab]').forEach(btn=>btn.classList.toggle('active', btn.dataset.tab===selectedId)); if(selectedId==='alertCenterPanel') setTimeout(()=>fix68BuildAlerts().catch(e=>recordError?.('fix68BuildAlerts',e)),0); if(selectedId==='nowPanel') setTimeout(()=>fix68UpdateUserHealth().catch(e=>recordError?.('fix68UpdateUserHealth',e)),0); if(selectedId==='systemCheckPanel') setTimeout(()=>fix68RunRulesCheck().catch(e=>recordError?.('fix68RunRulesCheck',e)),250); }
+function fix68Install(){ fix68ApplyAlertSettings(); ['adminSoundAlertsToggle','adminBrowserPushToggle'].forEach(id=>{ const el=fix68Qs(id); if(el&&!el.dataset.fix68){ el.dataset.fix68='1'; el.addEventListener('change', fix68SaveAlertSettings); }}); const req=fix68Qs('requestAdminPushBtn'); if(req&&!req.dataset.fix68){ req.dataset.fix68='1'; req.onclick=async()=>{ if(!('Notification' in window)) return showToast?.('Браузер не поддерживает push','warn'); const r=await Notification.requestPermission(); showToast?.('Push: '+r, r==='granted'?'success':'warn'); }; } const refresh=fix68Qs('refreshAlertsBtn'); if(refresh&&!refresh.dataset.fix68){ refresh.dataset.fix68='1'; refresh.onclick=()=>fix68BuildAlerts().then(()=>showToast?.('Тревоги обновлены','success')).catch(e=>showToast?.('Ошибка тревог: '+(errText?.(e)||e),'error')); } const rules=fix68Qs('runRulesCheckBtn'); if(rules&&!rules.dataset.fix68){ rules.dataset.fix68='1'; rules.onclick=()=>fix68RunRulesCheck(); } const liveBtn=fix68Qs('checkLiveHealthBtn'); if(liveBtn&&!liveBtn.dataset.fix68live){ liveBtn.dataset.fix68live='1'; liveBtn.title='Левый клик — проверка live health, Ctrl/Alt+клик — диагностика live-ссылки'; liveBtn.addEventListener('click', e=>{ if(e.ctrlKey||e.altKey) fix68CheckLiveLink(); }, true); } const build=fix68Qs('buildRouteTimelineBtn'); if(build&&!build.dataset.fix68){ build.dataset.fix68='1'; build.onclick=()=>fix68BuildRouteTimeline().catch(e=>showToast?.('Ошибка timeline: '+(errText?.(e)||e),'error')); } const clear=fix68Qs('clearRouteTimelineBtn'); if(clear&&!clear.dataset.fix68){ clear.dataset.fix68='1'; clear.onclick=fix68ClearTimeline; } }
+document.addEventListener('click', ev=>{ const btn=ev.target?.closest?.('.tab-btn[data-tab]'); if(btn) setTimeout(()=>fix68ShowPanel(btn.dataset.tab),35); }, true);
+window.addEventListener('load', ()=>{ fix68Install(); setTimeout(fix68Install,1500); setTimeout(()=>fix68UpdateUserHealth().catch(()=>{}),2500); });
+/* === /Admin alert center + health + rules + timeline fix_68 === */
 </script>
 
 
@@ -9822,6 +10680,178 @@ function startLiveSessionsRealtimeSync(){
   }catch(e){ recordError('startLiveSessionsRealtimeSync', e); }
 }
 window.addEventListener('load', ()=>{ mygpsLivePatchInstallUi(); setTimeout(()=>{ try{ startLiveSessionsRealtimeSync(); }catch(e){} }, 1800); });
+
+
+/* === Admin fix_70: update check, route filter, diagnostics, replay events, cleanup === */
+const ADMIN_FIX70_VERSION = "fix_70";
+function fix70Qs(id){ return document.getElementById(id); }
+function fix70Esc(v){ return String(v ?? "").replace(/[&<>'"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c])); }
+function fix70Badge(text, kind="ok"){ return `<span class="postUpdateBadge ${kind}">${fix70Esc(text)}</span>`; }
+function fix70Ts(v){ const n=Number(v||0); return Number.isFinite(n)?n:0; }
+function fix70RouteFilter(){
+  const rf = adminSettings.routeFilter || {};
+  return {
+    maxAccuracyM: Number(rf.maxAccuracyM ?? adminSettings.junkAccuracyMeters ?? adminSettings.gpsAccuracyMax ?? 100),
+    maxSpeedKmh: Number(rf.maxSpeedKmh ?? adminSettings.impossibleSpeedKmh ?? adminSettings.gpsImpossibleSpeed ?? 250),
+    maxGapMinutes: Number(rf.maxGapMinutes ?? 5),
+    minSegmentM: Number(rf.minSegmentM ?? 8),
+    ignoreStopDrift: rf.ignoreStopDrift !== false
+  };
+}
+function fix70ApplyRouteFilterUi(){
+  const rf=fix70RouteFilter();
+  if(fix70Qs('routeMaxAccuracyInput')) fix70Qs('routeMaxAccuracyInput').value=String(rf.maxAccuracyM);
+  if(fix70Qs('routeMaxSpeedInput')) fix70Qs('routeMaxSpeedInput').value=String(rf.maxSpeedKmh);
+  if(fix70Qs('routeMaxGapMinInput')) fix70Qs('routeMaxGapMinInput').value=String(rf.maxGapMinutes);
+  if(fix70Qs('routeMinSegmentInput')) fix70Qs('routeMinSegmentInput').value=String(rf.minSegmentM);
+  if(fix70Qs('routeIgnoreStopDriftInput')) fix70Qs('routeIgnoreStopDriftInput').checked=!!rf.ignoreStopDrift;
+  if(fix70Qs('routeFilterSummaryText')) fix70Qs('routeFilterSummaryText').textContent=`accuracy ≤ ${rf.maxAccuracyM}м · speed ≤ ${rf.maxSpeedKmh}км/ч · gap ≤ ${rf.maxGapMinutes}мин · min ${rf.minSegmentM}м`;
+}
+function fix70ReadRouteFilterUi(){
+  return {
+    maxAccuracyM: Number(fix70Qs('routeMaxAccuracyInput')?.value || 100),
+    maxSpeedKmh: Number(fix70Qs('routeMaxSpeedInput')?.value || 250),
+    maxGapMinutes: Number(fix70Qs('routeMaxGapMinInput')?.value || 5),
+    minSegmentM: Number(fix70Qs('routeMinSegmentInput')?.value || 8),
+    ignoreStopDrift: !!fix70Qs('routeIgnoreStopDriftInput')?.checked
+  };
+}
+const fix70OldSegmentDecision = typeof adminFix66SegmentDecision === 'function' ? adminFix66SegmentDecision : null;
+if(typeof adminFix66SegmentDecision === 'function'){
+  adminFix66SegmentDecision = function(prev, cur){
+    const rf=fix70RouteFilter();
+    if(!prev || !cur) return {ok:false, reason:'нет точки'};
+    if(!adminFix66IsValidPoint(prev) || !adminFix66IsValidPoint(cur)) return {ok:false, reason:'invalid coordinates'};
+    const accA=adminFix66Accuracy(prev), accB=adminFix66Accuracy(cur);
+    if((accA && accA>rf.maxAccuracyM) || (accB && accB>rf.maxAccuracyM)) return {ok:false, reason:`плохая точность > ${rf.maxAccuracyM}м`};
+    const tA=adminFix66PointTs(prev), tB=adminFix66PointTs(cur);
+    const dt=Math.max(0,(tB-tA)/1000);
+    if(!dt || dt>rf.maxGapMinutes*60) return {ok:false, reason:`разрыв > ${rf.maxGapMinutes} мин`};
+    const meters=distanceMeters(prev,cur);
+    const calcKmh=meters/Math.max(1,dt)*3.6;
+    if(calcKmh>rf.maxSpeedKmh) return {ok:false, reason:`скачок ${calcKmh.toFixed(0)} км/ч`};
+    const spA=adminFix66Speed(prev), spB=adminFix66Speed(cur);
+    if(rf.ignoreStopDrift && meters<rf.minSegmentM && Math.max(spA,spB)<3) return {ok:false, reason:'дрейф на стоянке'};
+    if(rf.ignoreStopDrift && Math.max(spA,spB)<1.2 && calcKmh>12) return {ok:false, reason:'дрейф без движения'};
+    return {ok:true, meters, calcKmh, reason:'ok'};
+  };
+}
+async function fix70SaveRouteFilter(defaults=false){
+  const routeFilter = defaults ? {maxAccuracyM:100,maxSpeedKmh:250,maxGapMinutes:5,minSegmentM:8,ignoreStopDrift:true} : fix70ReadRouteFilterUi();
+  adminSettings.routeFilter = routeFilter;
+  await update(ref(db,'adminSettings/config'), {routeFilter});
+  fix70ApplyRouteFilterUi();
+  try{ await renderHistory(); }catch(e){}
+  showToast?.('Фильтр пробега сохранён','success');
+}
+function fix70Retention(){ const r=adminSettings.logRetention||{}; return {gpsDays:Number(r.gpsDays??14),eventsDays:Number(r.eventsDays??30),adminLogsDays:Number(r.adminLogsDays??30)}; }
+function fix70ApplyRetentionUi(){ const r=fix70Retention(); if(fix70Qs('gpsLogsRetentionDaysInput')) fix70Qs('gpsLogsRetentionDaysInput').value=r.gpsDays; if(fix70Qs('eventsRetentionDaysInput')) fix70Qs('eventsRetentionDaysInput').value=r.eventsDays; if(fix70Qs('adminLogsRetentionDaysInput')) fix70Qs('adminLogsRetentionDaysInput').value=r.adminLogsDays; if(fix70Qs('autoCleanupStatusText')) fix70Qs('autoCleanupStatusText').textContent=`GPS ${r.gpsDays}д · events ${r.eventsDays}д · admin ${r.adminLogsDays}д`; }
+function fix70ReadRetentionUi(){ return {gpsDays:Number(fix70Qs('gpsLogsRetentionDaysInput')?.value||14), eventsDays:Number(fix70Qs('eventsRetentionDaysInput')?.value||30), adminLogsDays:Number(fix70Qs('adminLogsRetentionDaysInput')?.value||30)}; }
+function fix70CountOldGpsLogs(rootVal, cutoff){ let count=0; Object.entries(rootVal||{}).forEach(([uid,logs])=>Object.entries(logs||{}).forEach(([id,item])=>{ if(fix70Ts(item?.ts||item?.timestamp)<cutoff) count++; })); return count; }
+function fix70CountOldEvents(rootVal, cutoff){ let count=0; Object.entries(rootVal||{}).forEach(([uid,logs])=>Object.entries(logs||{}).forEach(([id,item])=>{ if(fix70Ts(item?.timestamp||item?.ts)<cutoff) count++; })); return count; }
+function fix70CountOldFlat(rootVal, cutoff){ let count=0; Object.entries(rootVal||{}).forEach(([id,item])=>{ if(fix70Ts(item?.timestamp||item?.ts||item?.createdAt)<cutoff) count++; }); return count; }
+async function fix70PreviewOrRunLogCleanup(run=false){
+  const r=fix70ReadRetentionUi(); const now=Date.now();
+  const [gpsSnap,eventsSnap,adminSnap]=await Promise.all([get(ref(db,'gpsServiceLogs')).catch(()=>({val:()=>({})})), get(ref(db,'events')).catch(()=>({val:()=>({})})), get(ref(db,'adminLogs')).catch(()=>({val:()=>({})}))]);
+  const gpsVal=gpsSnap.val()||{}, eventsVal=eventsSnap.val()||{}, adminVal=adminSnap.val()||{};
+  const gpsCut=now-r.gpsDays*86400000, evCut=now-r.eventsDays*86400000, admCut=now-r.adminLogsDays*86400000;
+  const updates={}; let gps=0, ev=0, adm=0;
+  Object.entries(gpsVal).forEach(([uid,logs])=>Object.entries(logs||{}).forEach(([id,item])=>{ if(fix70Ts(item?.ts||item?.timestamp)<gpsCut){ gps++; if(run) updates[`gpsServiceLogs/${uid}/${id}`]=null; }}));
+  Object.entries(eventsVal).forEach(([uid,logs])=>Object.entries(logs||{}).forEach(([id,item])=>{ if(fix70Ts(item?.timestamp||item?.ts)<evCut){ ev++; if(run) updates[`events/${uid}/${id}`]=null; }}));
+  Object.entries(adminVal).forEach(([id,item])=>{ if(fix70Ts(item?.timestamp||item?.ts||item?.createdAt)<admCut){ adm++; if(run) updates[`adminLogs/${id}`]=null; }});
+  if(run && Object.keys(updates).length){ await update(ref(db), updates); try{ await logAction('log_cleanup', `Удалено логов: GPS ${gps}, events ${ev}, admin ${adm}`); }catch(e){} }
+  const res=`${run?'Удалено':'Будет удалено'}:\nGPS logs: ${gps}\nevents: ${ev}\nadminLogs: ${adm}`;
+  const box=fix70Qs('logCleanupResult'); if(box){ box.classList.remove('hidden'); box.textContent=res; }
+  showToast?.(run?'Старые логи очищены':'Проверка логов готова', run?'success':'info');
+}
+async function fix70SaveRetention(){ const logRetention=fix70ReadRetentionUi(); adminSettings.logRetention=logRetention; await update(ref(db,'adminSettings/config'), {logRetention}); fix70ApplyRetentionUi(); showToast?.('Сроки хранения сохранены','success'); }
+async function fix70CollectDiagnostics(){
+  const uid=selectedUid||fix70Qs('userSelect')?.value||'';
+  const out={version:ADMIN_FIX70_VERSION, exportedAt:new Date().toISOString(), selectedUid:uid, selectedUser:uid?{uid,name:getDisplayName(uid),meta:usersMeta?.[uid]||null}:null, adminSettings};
+  const safe=async(path, lim=0)=>{ try{ const r=lim?query(ref(db,path),limitToLast(lim)):ref(db,path); const s=await get(r); return s.val()||null; }catch(e){ return {error:errText?.(e)||String(e)}; } };
+  out.live = uid ? await safe(`live/${uid}`) : await safe('live');
+  out.liveOwner = uid ? await safe(`liveOwners/${uid}`) : null;
+  out.liveSessions = await safe('liveSessions',80);
+  out.gpsServiceLogs = uid ? await safe(`gpsServiceLogs/${uid}`,120) : await safe('gpsServiceLogs');
+  out.events = uid ? await safe(`events/${uid}`,120) : await safe('events');
+  out.eventJournal = uid ? await safe(`eventJournal/${uid}`,80) : null;
+  out.adminLogs = await safe('adminLogs',120);
+  out.errors = (errorLogs||[]).slice(-80);
+  out.lastHistoryPoints = uid ? await safe(`history/${uid}`,80) : null;
+  return out;
+}
+function fix70DownloadJson(obj, name){ const blob=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(url); a.remove();},1000); }
+async function fix70DownloadDiagnostics(){ const data=await fix70CollectDiagnostics(); fix70DownloadJson(data, `mygps_diagnostics_${selectedUid||'all'}_${new Date().toISOString().replace(/[:.]/g,'-')}.json`); showToast?.('Диагностика скачана','success'); }
+function fix70SetPost(id, html){ const el=fix70Qs(id); if(el) el.innerHTML=html; }
+async function fix70RunPostUpdateCheck(){
+  const tbody=fix70Qs('postUpdateTbody'); if(tbody) tbody.innerHTML='';
+  const rows=[]; const add=(name,ok,details)=>rows.push({name,ok,details});
+  const user=auth?.currentUser||null; add('Auth',!!user,user?user.email||user.uid:'нет входа');
+  add('Выбранный пользователь',!!selectedUid,selectedUid?`${getDisplayName(selectedUid)} · ${selectedUid}`:'не выбран');
+  let gpsOk=false, liveOk=false, rulesOk=true;
+  try{ const s=selectedUid?await get(query(ref(db,`gpsServiceLogs/${selectedUid}`),limitToLast(1))):await get(ref(db,'gpsServiceLogs')); gpsOk=s.exists(); add('gpsServiceLogs read',true,gpsOk?'доступ есть, записи найдены':'доступ есть, записей пока нет'); }catch(e){ add('gpsServiceLogs read',false,errText?.(e)||e); rulesOk=false; }
+  try{ const s=await get(query(ref(db,'liveSessions'),limitToLast(1))); liveOk=true; add('liveSessions read',true,s.exists()?'доступ есть':'доступ есть, сессий нет'); }catch(e){ add('liveSessions read',false,errText?.(e)||e); rulesOk=false; }
+  try{ await get(ref(db,'adminSettings/config')); add('adminSettings read',true,'OK'); }catch(e){ add('adminSettings read',false,errText?.(e)||e); rulesOk=false; }
+  const latestLog=(gpsServiceLogs||[]).filter(x=>!selectedUid||x.uid===selectedUid).sort((a,b)=>fix70Ts(b.ts||b.timestamp)-fix70Ts(a.ts||a.timestamp))[0];
+  add('Background GPS по последнему логу',!!latestLog, latestLog?`${fmtTime(latestLog.ts||latestLog.timestamp)} · ${latestLog.title||latestLog.type||''} · ${latestLog.message||''}`:'нет GPS логов');
+  if(tbody){ tbody.innerHTML=rows.map(r=>`<tr><td>${fix70Esc(r.name)}</td><td>${fix70Badge(r.ok?'OK':'Проблема',r.ok?'ok':'err')}</td><td>${fix70Esc(r.details)}</td></tr>`).join(''); }
+  fix70SetPost('postAuthStatus',fix70Badge(user?'OK':'Нет входа',user?'ok':'err'));
+  fix70SetPost('postSelectedUser',selectedUid?fix70Esc(getDisplayName(selectedUid)||selectedUid):fix70Badge('не выбран','warn'));
+  fix70SetPost('postGpsLogStatus',fix70Badge(gpsOk?'OK':'пусто/нет',gpsOk?'ok':'warn'));
+  fix70SetPost('postLiveStatus',fix70Badge(liveOk?'OK':'ошибка',liveOk?'ok':'err'));
+  fix70SetPost('postRulesStatus',fix70Badge(rulesOk?'OK':'есть ошибки',rulesOk?'ok':'err'));
+  fix70SetPost('postBackgroundGpsStatus',latestLog?fix70Esc(gpsLogStopReasonText?.(latestLog)||latestLog.message||'есть лог'):fix70Badge('нет логов','warn'));
+  fix70SetPost('postUpdateSummary',fix70Badge(rows.every(r=>r.ok)?'OK':'Проверь строки',rows.every(r=>r.ok)?'ok':'warn'));
+  showToast?.('Проверка после обновления готова', rows.every(r=>r.ok)?'success':'warn');
+}
+function fix70EnsurePostUpdateTab(){
+  document.querySelectorAll('.tab-btn[data-tab="postUpdatePanel"]').forEach(btn=>{
+    if(btn.dataset.fix70) return; btn.dataset.fix70='1';
+    btn.addEventListener('click',()=>{
+      document.querySelectorAll('.tab-btn[data-tab]').forEach(b=>b.classList.toggle('active',b===btn));
+      document.querySelectorAll('#adminPanel > div[id$="Panel"], #nowPanel, #historyPanel, #reportsPanel, #usagePanel, #trafficPanel, #sessionsPanel, #usersPanel, #visibilityPanel, #geofencesPanel, #journalPanel, #gpsLogPanel, #alertsPanel, #errorsPanel, #systemCheckPanel, #postUpdatePanel, #adminLogsPanel, #settingsPanel').forEach(p=>p.classList.add('hidden'));
+      fix70Qs('postUpdatePanel')?.classList.remove('hidden');
+    }, true);
+  });
+}
+function fix70NearestReplayEvents(point){
+  if(!point || !fix70Qs('replayEventsEnabledToggle')?.checked) return [];
+  const ts=fix70Ts(point.timestamp||point.ts); if(!ts) return [];
+  const events=(typeof adminFix68TimelineEvents!=='undefined' && Array.isArray(adminFix68TimelineEvents)) ? adminFix68TimelineEvents : [];
+  return events.map((ev,i)=>({...ev,_idx:i,_diff:Math.abs(fix70Ts(ev.ts)-ts)})).filter(ev=>ev._diff<=2*60*1000).sort((a,b)=>a._diff-b._diff).slice(0,8);
+}
+function fix70RenderReplayNearbyEvents(point){
+  const tbody=fix70Qs('replayNearbyEventsTbody'); if(!tbody) return;
+  const events=fix70NearestReplayEvents(point);
+  if(!point){ tbody.innerHTML='<tr><td colspan="5">Нет текущей точки replay.</td></tr>'; return; }
+  if(!events.length){ tbody.innerHTML='<tr><td colspan="5">Рядом с текущей точкой событий нет. Нажми “Обновить события”, если timeline ещё не построен.</td></tr>'; return; }
+  tbody.innerHTML=events.map(ev=>{ const diff=Math.round(ev._diff/1000); const kind=fix68TimelineKind?.(ev)||ev.kind||'event'; return `<tr class="${diff<=20?'replayEventNow':''}"><td>${diff} сек</td><td>${fmtTime(ev.ts)}</td><td><span class="timelineBadge ${fix70Esc(kind)}">${fix70Esc(kind)}</span></td><td>${fix70Esc(ev.title||'event')}<div class="smallMuted">${fix70Esc(ev.message||'')}</div></td><td><button class="secondary small" data-replay-event="${ev._idx}">К событию</button></td></tr>`; }).join('');
+  tbody.querySelectorAll('[data-replay-event]').forEach(btn=>btn.onclick=()=>{ const ev=adminFix68TimelineEvents[Number(btn.dataset.replayEvent)]; if(ev?._latlng) historyMap.setView(ev._latlng,Math.max(historyMap.getZoom(),15)); });
+}
+const fix70OldSetReplayInfo = typeof setReplayInfo === 'function' ? setReplayInfo : null;
+if(fix70OldSetReplayInfo){ setReplayInfo = function(point){ fix70OldSetReplayInfo.apply(this,arguments); try{ fix70RenderReplayNearbyEvents(point); }catch(e){} }; }
+function fix70Install(){
+  fix70EnsurePostUpdateTab();
+  fix70ApplyRouteFilterUi(); fix70ApplyRetentionUi();
+  const saveRf=fix70Qs('saveRouteFilterBtn'); if(saveRf&&!saveRf.dataset.fix70){ saveRf.dataset.fix70='1'; saveRf.onclick=()=>fix70SaveRouteFilter(false).catch(e=>showToast?.('Ошибка фильтра: '+(errText?.(e)||e),'error')); }
+  const resetRf=fix70Qs('resetRouteFilterBtn'); if(resetRf&&!resetRf.dataset.fix70){ resetRf.dataset.fix70='1'; resetRf.onclick=()=>fix70SaveRouteFilter(true).catch(e=>showToast?.('Ошибка фильтра: '+(errText?.(e)||e),'error')); }
+  const saveRet=fix70Qs('saveCleanupSettingsBtn'); if(saveRet&&!saveRet.dataset.fix70){ saveRet.dataset.fix70='1'; saveRet.onclick=()=>fix70SaveRetention().catch(e=>showToast?.('Ошибка хранения: '+(errText?.(e)||e),'error')); }
+  const prev=fix70Qs('previewLogCleanupBtn'); if(prev&&!prev.dataset.fix70){ prev.dataset.fix70='1'; prev.onclick=()=>fix70PreviewOrRunLogCleanup(false).catch(e=>showToast?.('Ошибка проверки логов: '+(errText?.(e)||e),'error')); }
+  const run=fix70Qs('runLogCleanupBtn'); if(run&&!run.dataset.fix70){ run.dataset.fix70='1'; run.onclick=()=>{ if(confirm('Очистить старые GPS/events/admin логи по настройкам хранения? История маршрутов не трогается.')) fix70PreviewOrRunLogCleanup(true).catch(e=>showToast?.('Ошибка очистки логов: '+(errText?.(e)||e),'error')); }; }
+  ['downloadDiagBtn','downloadPostUpdateDiagBtn'].forEach(id=>{ const b=fix70Qs(id); if(b&&!b.dataset.fix70){ b.dataset.fix70='1'; b.onclick=()=>fix70DownloadDiagnostics().catch(e=>showToast?.('Ошибка диагностики: '+(errText?.(e)||e),'error')); }});
+  const post=fix70Qs('runPostUpdateCheckBtn'); if(post&&!post.dataset.fix70){ post.dataset.fix70='1'; post.onclick=()=>fix70RunPostUpdateCheck().catch(e=>showToast?.('Ошибка проверки: '+(errText?.(e)||e),'error')); }
+  const rb=fix70Qs('replayBuildTimelineBtn'); if(rb&&!rb.dataset.fix70){ rb.dataset.fix70='1'; rb.onclick=()=>{ if(typeof fix68BuildRouteTimeline==='function') fix68BuildRouteTimeline().then(()=>{ fix70RenderReplayNearbyEvents(replayState?.points?.[replayState?.index]); showToast?.('События для replay обновлены','success'); }).catch(e=>showToast?.('Ошибка событий: '+(errText?.(e)||e),'error')); }; }
+  const rt=fix70Qs('replayEventsEnabledToggle'); if(rt&&!rt.dataset.fix70){ rt.dataset.fix70='1'; rt.onchange=()=>fix70RenderReplayNearbyEvents(replayState?.points?.[replayState?.index]); }
+}
+const fix70OldLoadAdminSettings = typeof loadAdminSettings === 'function' ? loadAdminSettings : null;
+if(fix70OldLoadAdminSettings){ loadAdminSettings = async function(){ await fix70OldLoadAdminSettings.apply(this,arguments); try{ fix70ApplyRouteFilterUi(); fix70ApplyRetentionUi(); }catch(e){} }; }
+window.addEventListener('load',()=>setTimeout(fix70Install,1200));
+setTimeout(fix70Install,2500);
+/* === /Admin fix_70 === */
+
+
+
+
 /* === /MyGps live view details + realtime sync final patch === */
 </script>
 
