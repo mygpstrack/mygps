@@ -829,6 +829,17 @@ body.admin-normal-mode .adminModeHint::after{content:" Обычный режим
           <button id="applyFiltersBtn" class="secondary">Применить</button>
           <button id="resetFiltersBtn" class="secondary">Сбросить</button>
         </div>
+        <div class="historySearchBox">
+          <strong>Поиск места в истории</strong>
+          <div class="smallMuted">Можно ввести адрес или координаты. Админка найдёт ближайшую точку маршрута и покажет её на карте.</div>
+          <div class="toolbar">
+            <input id="historyPlaceSearchInput" placeholder="Адрес или координаты: 56.9496, 24.1052" style="min-width:320px;flex:1"/>
+            <button id="historyPlaceSearchBtn" class="secondary" type="button">Найти на маршруте</button>
+            <button id="historyPlaceClearBtn" class="secondary" type="button">Очистить поиск</button>
+          </div>
+          <div id="historyPlaceSearchResult" class="historySearchResult">Поиск будет работать по загруженной истории.</div>
+        </div>
+
         <div class="historyModeBox">
           <span class="smallMuted">Расчёт пробега:</span>
           <button id="distanceModeCleanBtn" class="small active" type="button">Чистый пробег</button>
@@ -836,6 +847,17 @@ body.admin-normal-mode .adminModeHint::after{content:" Обычный режим
           <label class="pill"><input id="showRejectedSegmentsToggle" type="checkbox" style="width:auto;min-width:auto"/> Показывать отброшенные сегменты</label>
         </div>
         <div id="cleanDistanceNotice" class="notice cleanDistanceHint smallMuted">Чистый пробег не считает GPS-дрейф на стоянке, плохую точность и невозможные скачки.</div>
+        <div class="historyProblemLayerBox">
+          <strong>Слой проблемных точек</strong>
+          <div class="smallMuted">Показывает плохую точность, невозможные скачки и GPS-дрейф на карте истории.</div>
+          <div class="toolbar">
+            <label class="pill"><input id="showProblemPointsToggle" type="checkbox" style="width:auto;min-width:auto"/> Показать проблемные точки</label>
+            <button id="refreshProblemLayerBtn" class="secondary" type="button">Обновить слой</button>
+            <button id="clearProblemLayerBtn" class="secondary" type="button">Скрыть слой</button>
+            <span id="problemLayerSummary" class="smallMuted">Слой выключен.</span>
+          </div>
+        </div>
+
         <div class="toolbar">
           <button id="fitRouteBtn" class="secondary">Центрировать маршрут</button>
           <button id="lastRouteBtn" class="secondary">Последний маршрут</button>
@@ -904,10 +926,14 @@ body.admin-normal-mode .adminModeHint::after{content:" Обычный режим
         <div class="stopsListBox">
           <strong>Список стоянок</strong>
           <div class="smallMuted">Стоянки считаются по низкой скорости и малому радиусу движения. Кнопка “К точке” переносит карту к месту стоянки.</div>
+          <div class="toolbar">
+            <button id="exportStopsCsvBtn" class="secondary" type="button">Экспорт стоянок CSV</button>
+            <button id="resetIgnoredStopsBtn" class="secondary" type="button">Вернуть скрытые стоянки</button>
+          </div>
           <div style="overflow:auto;margin-top:10px">
             <table>
-              <thead><tr><th>Начало</th><th>Конец</th><th>Длительность</th><th>Радиус</th><th>Координаты</th><th>Действие</th></tr></thead>
-              <tbody id="historyStopsTbody"><tr><td colspan="6">Стоянки будут показаны после обновления истории.</td></tr></tbody>
+              <thead><tr><th>Начало</th><th>Конец</th><th>Длительность</th><th>Радиус</th><th>Адрес</th><th>Повторы</th><th>Координаты</th><th>Действие</th></tr></thead>
+              <tbody id="historyStopsTbody"><tr><td colspan="8">Стоянки будут показаны после обновления истории.</td></tr></tbody>
             </table>
           </div>
         </div>
@@ -1477,7 +1503,7 @@ body.admin-normal-mode .adminModeHint::after{content:" Обычный режим
           <button id="downloadPostUpdateDiagBtn" class="secondary">Скачать диагностику</button>
         </div>
         <div class="postUpdateGrid">
-          <div class="postUpdateCard"><b>Admin version</b><span id="postAdminVersion">fix_79</span></div>
+          <div class="postUpdateCard"><b>Admin version</b><span id="postAdminVersion">fix_80</span></div>
           <div class="postUpdateCard"><b>Auth</b><span id="postAuthStatus">—</span></div>
           <div class="postUpdateCard"><b>Выбранный пользователь</b><span id="postSelectedUser">—</span></div>
           <div class="postUpdateCard"><b>GPS лог</b><span id="postGpsLogStatus">—</span></div>
@@ -10780,7 +10806,7 @@ window.addEventListener('load', ()=>{ mygpsLivePatchInstallUi(); setTimeout(()=>
 
 
 /* === Admin fix_72: update check, route filter, diagnostics, replay events, cleanup === */
-const ADMIN_FIX70_VERSION = "fix_79";
+const ADMIN_FIX70_VERSION = "fix_80";
 function fix70Qs(id){ return document.getElementById(id); }
 function fix70Esc(v){ return String(v ?? "").replace(/[&<>'"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c])); }
 function fix70Badge(text, kind="ok"){ return `<span class="postUpdateBadge ${kind}">${fix70Esc(text)}</span>`; }
@@ -11048,7 +11074,7 @@ setTimeout(fix73Install,2600);
 
 
 /* === Admin fix_75: app versions + safe auto-refresh in Сейчас === */
-const ADMIN_FIX75_VERSION = "fix_79";
+const ADMIN_FIX75_VERSION = "fix_80";
 let adminFix75AutoTimer = null;
 let adminFix75Refreshing = false;
 function fix75Qs(id){ return document.getElementById(id); }
@@ -11199,7 +11225,7 @@ setTimeout(fix75Install,2800);
 
 
 /* === Admin fix_79: alert hints, selected user check, live garbage, stops list, clean exports === */
-const ADMIN_FIX79_VERSION = "fix_79";
+const ADMIN_FIX79_VERSION = "fix_80";
 function fix79Esc(v){ return String(v ?? "").replace(/[&<>'"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[ch])); }
 function fix79Ts(v){ const n=Number(v||0); return Number.isFinite(n) && n>0 ? n : 0; }
 function fix79PointLat(p){ return Number(p?.latitude ?? p?.lat); }
@@ -11444,6 +11470,194 @@ function fix79Install(){
 window.addEventListener("load",()=>setTimeout(fix79Install,1200));
 setTimeout(fix79Install,2500);
 /* === /Admin fix_79 === */
+
+
+/* === Admin fix_80: history search, improved stops, problem layers === */
+const ADMIN_FIX80_VERSION = "fix_80";
+let fix80ProblemLayer = null;
+let fix80StopCircleLayer = null;
+let fix80SearchMarker = null;
+function fix80Q(id){ return document.getElementById(id); }
+function fix80Pts(){
+  try{ return (typeof filteredHistory === "function" ? filteredHistory() : (currentFiltered || [])).filter(fix79ValidPoint).sort((a,b)=>fix79Ts(a.timestamp||a.ts)-fix79Ts(b.timestamp||b.ts)); }catch(e){ return []; }
+}
+function fix80StopKey(stop){
+  const lat=Number(stop?.center?.latitude||0).toFixed(4), lon=Number(stop?.center?.longitude||0).toFixed(4);
+  const t=Math.floor(fix79Ts(stop?.start?.timestamp||stop?.start?.ts)/600000);
+  return `${lat}:${lon}:${t}`;
+}
+function fix80IgnoredStops(){ try{return new Set(JSON.parse(localStorage.getItem("mygps_admin_ignored_stops")||"[]"));}catch(e){return new Set();} }
+function fix80SaveIgnoredStops(set){ try{localStorage.setItem("mygps_admin_ignored_stops", JSON.stringify([...set]));}catch(e){} }
+function fix80StopRepeatCount(stop, stops){
+  if(!stop?.center) return 1;
+  return stops.filter(s=>s?.center && distanceMeters(stop.center, s.center) <= 120).length;
+}
+function fix80ClassifySegment(prev, cur){
+  if(typeof adminFix66SegmentDecision === "function"){
+    const d=adminFix66SegmentDecision(prev, cur);
+    if(!d.ok){
+      const reason=String(d.reason||"").toLowerCase();
+      if(/точност|accuracy|invalid|плох/.test(reason)) return {type:"bad", reason:d.reason||"плохая точка"};
+      if(/скач|speed|невозмож/.test(reason)) return {type:"jump", reason:d.reason||"скачок"};
+      if(/дрейф|стоян/.test(reason)) return {type:"drift", reason:d.reason||"дрейф"};
+      return {type:"bad", reason:d.reason||"отброшено"};
+    }
+    return null;
+  }
+  if(looksJunk?.(prev, cur)) return {type:"bad", reason:"мусорная точка"};
+  return null;
+}
+function fix80EnsureLayers(){
+  if(!historyMap) return;
+  if(!fix80ProblemLayer) fix80ProblemLayer = L.layerGroup().addTo(historyMap);
+  if(!fix80StopCircleLayer) fix80StopCircleLayer = L.layerGroup().addTo(historyMap);
+}
+function fix80ClearProblemLayer(){
+  if(fix80ProblemLayer) fix80ProblemLayer.clearLayers();
+  const sum=fix80Q("problemLayerSummary"); if(sum) sum.textContent="Слой выключен.";
+  const t=fix80Q("showProblemPointsToggle"); if(t) t.checked=false;
+}
+function fix80RenderProblemLayer(force=false){
+  const toggle=fix80Q("showProblemPointsToggle");
+  const enabled=force || !!toggle?.checked;
+  fix80EnsureLayers();
+  if(!fix80ProblemLayer) return;
+  fix80ProblemLayer.clearLayers();
+  if(!enabled){ const sum=fix80Q("problemLayerSummary"); if(sum) sum.textContent="Слой выключен."; return; }
+  if(toggle) toggle.checked=true;
+  const pts=fix80Pts();
+  let bad=0, jump=0, drift=0;
+  for(let i=1;i<pts.length;i++){
+    const cls=fix80ClassifySegment(pts[i-1], pts[i]);
+    if(!cls) continue;
+    if(cls.type==="jump") jump++; else if(cls.type==="drift") drift++; else bad++;
+    const color=cls.type==="jump"?"#eab308":(cls.type==="drift"?"#60a5fa":"#ef4444");
+    L.polyline([[fix79PointLat(pts[i-1]),fix79PointLon(pts[i-1])],[fix79PointLat(pts[i]),fix79PointLon(pts[i])]], {color,weight:3,opacity:.72,dashArray:"5,7"}).bindTooltip(cls.reason).addTo(fix80ProblemLayer);
+    L.circleMarker([fix79PointLat(pts[i]),fix79PointLon(pts[i])], {radius:5,color,fillColor:color,fillOpacity:.85,weight:1}).bindTooltip(`${cls.reason}<br>${fmtTime(pts[i].timestamp||pts[i].ts)}`).addTo(fix80ProblemLayer);
+  }
+  const sum=fix80Q("problemLayerSummary");
+  if(sum) sum.innerHTML=`<span class="problemLayerBadge bad">плохие ${bad}</span> <span class="problemLayerBadge jump">скачки ${jump}</span> <span class="problemLayerBadge drift">дрейф ${drift}</span>`;
+}
+function fix80ParseCoords(text){
+  const m=String(text||"").trim().match(/(-?\d+(?:[\.,]\d+)?)\s*[,;\s]\s*(-?\d+(?:[\.,]\d+)?)/);
+  if(!m) return null;
+  const lat=Number(m[1].replace(",",".")), lon=Number(m[2].replace(",","."));
+  if(Number.isFinite(lat)&&Number.isFinite(lon)&&Math.abs(lat)<=90&&Math.abs(lon)<=180) return {lat,lon,label:`${lat.toFixed(5)}, ${lon.toFixed(5)}`};
+  return null;
+}
+async function fix80GeocodeSearch(query){
+  const coord=fix80ParseCoords(query);
+  if(coord) return coord;
+  const url=`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&accept-language=ru&q=${encodeURIComponent(query)}`;
+  const res=await fetch(url,{headers:{"Accept":"application/json"}});
+  if(!res.ok) throw new Error("geocode failed");
+  const arr=await res.json();
+  const first=arr?.[0];
+  if(!first) throw new Error("адрес не найден");
+  return {lat:Number(first.lat),lon:Number(first.lon),label:first.display_name||query};
+}
+function fix80NearestPoint(lat, lon, pts){
+  const target={latitude:lat, longitude:lon};
+  let best=null, bestD=Infinity;
+  pts.forEach(p=>{ const d=distanceMeters(target,{latitude:fix79PointLat(p),longitude:fix79PointLon(p)}); if(d<bestD){best=p;bestD=d;} });
+  return {point:best, meters:bestD};
+}
+async function fix80SearchHistoryPlace(){
+  const input=fix80Q("historyPlaceSearchInput"), out=fix80Q("historyPlaceSearchResult");
+  const q=input?.value?.trim()||"";
+  if(!q) return showToast?.("Введи адрес или координаты", "warn");
+  const pts=fix80Pts();
+  if(!pts.length) return showToast?.("Сначала загрузи историю", "warn");
+  if(out) out.textContent="Ищу место…";
+  try{
+    const geo=await fix80GeocodeSearch(q);
+    const nearest=fix80NearestPoint(geo.lat, geo.lon, pts);
+    if(!nearest.point) throw new Error("нет ближайшей точки");
+    const lat=fix79PointLat(nearest.point), lon=fix79PointLon(nearest.point);
+    if(fix80SearchMarker) historyMap.removeLayer(fix80SearchMarker);
+    fix80SearchMarker=L.circleMarker([lat,lon],{radius:8,color:"#a855f7",fillColor:"#a855f7",fillOpacity:.9,weight:2}).bindTooltip(`Ближайшая точка к поиску<br>${Math.round(nearest.meters)} м`).addTo(historyMap);
+    historyMap.setView([lat,lon], Math.max(historyMap.getZoom(),16));
+    try{ await selectHistoryPoint(nearest.point); }catch(e){}
+    if(out) out.innerHTML=`Найдено: <b>${fix79Esc(geo.label)}</b><br>Ближайшая точка маршрута: ${Math.round(nearest.meters)} м, ${fmtTime(nearest.point.timestamp||nearest.point.ts)}`;
+    showToast?.("Место найдено на маршруте", "success");
+  }catch(e){ if(out) out.textContent=`Не найдено: ${errText?.(e)||e}`; showToast?.("Место не найдено", "warn"); }
+}
+function fix80ClearHistorySearch(){
+  const input=fix80Q("historyPlaceSearchInput"), out=fix80Q("historyPlaceSearchResult");
+  if(input) input.value=""; if(out) out.textContent="Поиск будет работать по загруженной истории.";
+  if(fix80SearchMarker){ try{historyMap.removeLayer(fix80SearchMarker);}catch(e){} fix80SearchMarker=null; }
+}
+function fix80BuildImprovedStops(points){
+  const all = typeof fix79BuildStops === "function" ? fix79BuildStops(points) : [];
+  const ignored=fix80IgnoredStops();
+  return all.filter(s=>!ignored.has(fix80StopKey(s))).map(s=>({...s, repeatCount:fix80StopRepeatCount(s, all), key:fix80StopKey(s)}));
+}
+async function fix80FillStopAddresses(stops){
+  for(const s of stops.slice(0,30)){
+    const cell=document.querySelector(`[data-stop-address="${s.key}"]`);
+    if(!cell || cell.dataset.loaded) continue;
+    cell.dataset.loaded="1";
+    try{ cell.textContent=await reverseGeocode(s.center.latitude, s.center.longitude); }
+    catch(e){ cell.textContent="адрес недоступен"; }
+  }
+}
+function fix80RenderStopsList(){
+  const tbody=fix80Q("historyStopsTbody"); if(!tbody) return;
+  const pts=fix80Pts();
+  const stops=fix80BuildImprovedStops(pts);
+  if(!stops.length){ tbody.innerHTML='<tr><td colspan="8">Стоянок не найдено.</td></tr>'; return; }
+  tbody.innerHTML=stops.slice(0,80).map((s,i)=>`<tr><td>${fmtTime(s.start.timestamp||s.start.ts)}</td><td>${fmtTime(s.end.timestamp||s.end.ts)}</td><td>${formatDuration(s.duration)}</td><td>${Math.round(s.radius)} м</td><td data-stop-address="${fix79Esc(s.key)}">поиск адреса…</td><td>${s.repeatCount} раз</td><td class="mono">${s.center.latitude.toFixed(5)}, ${s.center.longitude.toFixed(5)}</td><td><div class="historyStopsActions"><button class="small secondary" type="button" data-stop-go="${i}">К точке</button><button class="small secondary" type="button" data-stop-hide="${i}">Скрыть</button></div></td></tr>`).join("");
+  tbody.querySelectorAll("[data-stop-go]").forEach(btn=>btn.onclick=()=>{
+    const st=stops[Number(btn.dataset.stopGo)]; if(!st||!historyMap) return;
+    fix80EnsureLayers(); if(fix80StopCircleLayer) fix80StopCircleLayer.clearLayers();
+    historyMap.setView([st.center.latitude,st.center.longitude], Math.max(historyMap.getZoom(),16));
+    L.circle([st.center.latitude,st.center.longitude], {radius:Math.max(15,st.radius), color:'#eab308', weight:2, fillOpacity:.12}).addTo(fix80StopCircleLayer);
+  });
+  tbody.querySelectorAll("[data-stop-hide]").forEach(btn=>btn.onclick=()=>{
+    const st=stops[Number(btn.dataset.stopHide)]; if(!st) return;
+    const ignored=fix80IgnoredStops(); ignored.add(st.key); fix80SaveIgnoredStops(ignored); fix80RenderStopsList(); showToast?.("Стоянка скрыта из отчёта", "info");
+  });
+  fix80FillStopAddresses(stops).catch(e=>recordError?.("fix80FillStopAddresses",e));
+}
+function fix80ExportStopsCsv(){
+  const stops=fix80BuildImprovedStops(fix80Pts());
+  if(!stops.length) return showToast?.("Стоянок нет для экспорта", "warn");
+  const rows=[["start","end","duration_min","radius_m","repeat_count","lat","lon"]];
+  stops.forEach(s=>rows.push([new Date(fix79Ts(s.start.timestamp||s.start.ts)).toISOString(), new Date(fix79Ts(s.end.timestamp||s.end.ts)).toISOString(), (s.duration/60000).toFixed(1), Math.round(s.radius), s.repeatCount, s.center.latitude.toFixed(6), s.center.longitude.toFixed(6)]));
+  const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("
+");
+  downloadText(`${exportBaseName?.()||"history"}_stops.csv`, csv, "text/csv");
+  showToast?.("Стоянки экспортированы", "success");
+}
+function fix80ResetIgnoredStops(){
+  localStorage.removeItem("mygps_admin_ignored_stops");
+  fix80RenderStopsList();
+  showToast?.("Скрытые стоянки возвращены", "success");
+}
+const fix80OldRenderHistory = typeof renderHistory === "function" ? renderHistory : null;
+if(fix80OldRenderHistory){
+  renderHistory = async function(){
+    const res=await fix80OldRenderHistory.apply(this, arguments);
+    try{ fix80RenderStopsList(); fix80RenderProblemLayer(false); }catch(e){ recordError?.("fix80 render history extras", e); }
+    return res;
+  };
+}
+function fix80Install(){
+  const bind=(id,fn)=>{ const el=fix80Q(id); if(el && !el.dataset.fix80){ el.dataset.fix80="1"; el.addEventListener("click",ev=>{ev.preventDefault(); try{ const r=fn(); r?.catch?.(e=>{recordError?.(`fix80 ${id}`,e);showToast?.(errText?.(e)||String(e),"error",4500);}); }catch(e){recordError?.(`fix80 ${id}`,e);showToast?.(errText?.(e)||String(e),"error",4500);} }); } };
+  bind("historyPlaceSearchBtn", fix80SearchHistoryPlace);
+  bind("historyPlaceClearBtn", fix80ClearHistorySearch);
+  bind("refreshProblemLayerBtn", ()=>fix80RenderProblemLayer(true));
+  bind("clearProblemLayerBtn", fix80ClearProblemLayer);
+  bind("exportStopsCsvBtn", fix80ExportStopsCsv);
+  bind("resetIgnoredStopsBtn", fix80ResetIgnoredStops);
+  const t=fix80Q("showProblemPointsToggle"); if(t && !t.dataset.fix80){ t.dataset.fix80="1"; t.addEventListener("change",()=>fix80RenderProblemLayer(false)); }
+  const inp=fix80Q("historyPlaceSearchInput"); if(inp && !inp.dataset.fix80){ inp.dataset.fix80="1"; inp.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); fix80SearchHistoryPlace(); }}); }
+  if(fix80Q("postAdminVersion")) fix80Q("postAdminVersion").textContent=ADMIN_FIX80_VERSION;
+  try{ fix80RenderStopsList(); }catch(e){}
+}
+window.addEventListener("load",()=>setTimeout(fix80Install,1400));
+setTimeout(fix80Install,2800);
+/* === /Admin fix_80 === */
 
 
 /* === /Admin fix_72 integrated === */
