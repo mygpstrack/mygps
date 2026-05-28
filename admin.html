@@ -829,17 +829,6 @@ body.admin-normal-mode .adminModeHint::after{content:" Обычный режим
           <button id="applyFiltersBtn" class="secondary">Применить</button>
           <button id="resetFiltersBtn" class="secondary">Сбросить</button>
         </div>
-        <div class="historySearchBox">
-          <strong>Поиск места в истории</strong>
-          <div class="smallMuted">Можно ввести адрес или координаты. Админка найдёт ближайшую точку маршрута и покажет её на карте.</div>
-          <div class="toolbar">
-            <input id="historyPlaceSearchInput" placeholder="Адрес или координаты: 56.9496, 24.1052" style="min-width:320px;flex:1"/>
-            <button id="historyPlaceSearchBtn" class="secondary" type="button">Найти на маршруте</button>
-            <button id="historyPlaceClearBtn" class="secondary" type="button">Очистить поиск</button>
-          </div>
-          <div id="historyPlaceSearchResult" class="historySearchResult">Поиск будет работать по загруженной истории.</div>
-        </div>
-
         <div class="historyModeBox">
           <span class="smallMuted">Расчёт пробега:</span>
           <button id="distanceModeCleanBtn" class="small active" type="button">Чистый пробег</button>
@@ -1503,7 +1492,7 @@ body.admin-normal-mode .adminModeHint::after{content:" Обычный режим
           <button id="downloadPostUpdateDiagBtn" class="secondary">Скачать диагностику</button>
         </div>
         <div class="postUpdateGrid">
-          <div class="postUpdateCard"><b>Admin version</b><span id="postAdminVersion">fix_81</span></div>
+          <div class="postUpdateCard"><b>Admin version</b><span id="postAdminVersion">fix_82</span></div>
           <div class="postUpdateCard"><b>Auth</b><span id="postAuthStatus">—</span></div>
           <div class="postUpdateCard"><b>Выбранный пользователь</b><span id="postSelectedUser">—</span></div>
           <div class="postUpdateCard"><b>GPS лог</b><span id="postGpsLogStatus">—</span></div>
@@ -10806,7 +10795,7 @@ window.addEventListener('load', ()=>{ mygpsLivePatchInstallUi(); setTimeout(()=>
 
 
 /* === Admin fix_72: update check, route filter, diagnostics, replay events, cleanup === */
-const ADMIN_FIX70_VERSION = "fix_81";
+const ADMIN_FIX70_VERSION = "fix_82";
 function fix70Qs(id){ return document.getElementById(id); }
 function fix70Esc(v){ return String(v ?? "").replace(/[&<>'"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c])); }
 function fix70Badge(text, kind="ok"){ return `<span class="postUpdateBadge ${kind}">${fix70Esc(text)}</span>`; }
@@ -11074,7 +11063,7 @@ setTimeout(fix73Install,2600);
 
 
 /* === Admin fix_75: app versions + safe auto-refresh in Сейчас === */
-const ADMIN_FIX75_VERSION = "fix_81";
+const ADMIN_FIX75_VERSION = "fix_82";
 let adminFix75AutoTimer = null;
 let adminFix75Refreshing = false;
 function fix75Qs(id){ return document.getElementById(id); }
@@ -11225,7 +11214,7 @@ setTimeout(fix75Install,2800);
 
 
 /* === Admin fix_79: alert hints, selected user check, live garbage, stops list, clean exports === */
-const ADMIN_FIX79_VERSION = "fix_81";
+const ADMIN_FIX79_VERSION = "fix_82";
 function fix79Esc(v){ return String(v ?? "").replace(/[&<>'"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[ch])); }
 function fix79Ts(v){ const n=Number(v||0); return Number.isFinite(n) && n>0 ? n : 0; }
 function fix79PointLat(p){ return Number(p?.latitude ?? p?.lat); }
@@ -11472,8 +11461,8 @@ setTimeout(fix79Install,2500);
 /* === /Admin fix_79 === */
 
 
-/* === Admin fix_81: history search, improved stops, problem layers === */
-const ADMIN_FIX80_VERSION = "fix_81";
+/* === Admin fix_82: history search, improved stops, problem layers === */
+const ADMIN_FIX80_VERSION = "fix_82";
 let fix80ProblemLayer = null;
 let fix80StopCircleLayer = null;
 let fix80SearchMarker = null;
@@ -11656,7 +11645,7 @@ function fix80Install(){
 }
 window.addEventListener("load",()=>setTimeout(fix80Install,1400));
 setTimeout(fix80Install,2800);
-/* === /Admin fix_81 === */
+/* === /Admin fix_82 === */
 
 
 /* === /Admin fix_72 integrated === */
