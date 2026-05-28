@@ -603,11 +603,24 @@ body.admin-normal-mode .adminModeHint::after{content:" Обычный режим
 /* === /Admin fix_79 === */
 
 
-/* Admin fix_85: map settings */
+/* Admin fix_87: map settings */
 .mapSettingsGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:12px}
 .mapSettingCard{padding:12px 14px;border-radius:14px;border:1px solid var(--border);background:rgba(255,255,255,.03);line-height:1.45}
 .mapSettingCard b{display:block;margin-bottom:8px}
 @media(max-width:900px){.mapSettingsGrid{grid-template-columns:1fr}}
+
+
+/* Admin fix_87: audit + read-only mode */
+.readOnlyBanner{display:none;margin-top:12px;padding:12px 14px;border-radius:14px;border:1px solid rgba(234,179,8,.45);background:rgba(180,83,9,.18);color:#fde68a;font-weight:800;line-height:1.45}
+body.admin-readonly-mode .readOnlyBanner{display:block}
+body.admin-readonly-mode button.adminWriteDisabled,
+body.admin-readonly-mode input.adminWriteDisabled,
+body.admin-readonly-mode select.adminWriteDisabled,
+body.admin-readonly-mode textarea.adminWriteDisabled{opacity:.45!important;cursor:not-allowed!important;filter:saturate(.55)}
+.roleBadge{display:inline-flex;align-items:center;gap:6px;padding:5px 9px;border-radius:999px;border:1px solid var(--border);font-size:12px;font-weight:900}
+.roleBadge.admin{background:rgba(22,163,74,.22);border-color:#166534;color:#bbf7d0}
+.roleBadge.viewer{background:rgba(59,130,246,.20);border-color:#1d4ed8;color:#bfdbfe}
+.roleBadge.user{background:rgba(100,116,139,.18);border-color:#475569;color:#cbd5e1}
 
 </style>
 </head>
@@ -1533,7 +1546,7 @@ body.admin-normal-mode .adminModeHint::after{content:" Обычный режим
           <button id="downloadPostUpdateDiagBtn" class="secondary">Скачать диагностику</button>
         </div>
         <div class="postUpdateGrid">
-          <div class="postUpdateCard"><b>Admin version</b><span id="postAdminVersion">fix_86</span></div>
+          <div class="postUpdateCard"><b>Admin version</b><span id="postAdminVersion">fix_87</span></div>
           <div class="postUpdateCard"><b>Auth</b><span id="postAuthStatus">—</span></div>
           <div class="postUpdateCard"><b>Выбранный пользователь</b><span id="postSelectedUser">—</span></div>
           <div class="postUpdateCard"><b>GPS лог</b><span id="postGpsLogStatus">—</span></div>
@@ -2188,6 +2201,8 @@ let currentFiltered = [], deletionsLog = [], actionLogs = [], appEventLogs = [],
 let liveAutoCenter = true, createdShareUrl = "", speedChart = null, distanceChart = null, currentNowSourceLabel = "—";
 let usersMeta = {};
 let adminsMap = {};
+let adminViewersMap = {};
+let currentAdminRole = "";
 let userVisibility = {};
 let selectedVisibilityUid = "";
 let adminSettings = {
@@ -2322,6 +2337,7 @@ function renderUserSelect(){
     ...Object.keys(usersMeta || {}),
     ...Object.keys(liveByUid || {}),
     ...Object.keys(adminsMap || {}),
+    ...Object.keys(adminViewersMap || {}),
     ...Object.keys(userVisibility || {}),
     ...Object.keys(historyByUid || {})
   ]);
@@ -3556,7 +3572,7 @@ document.querySelectorAll(".tab-btn").forEach(btn=>{
 
 
 
-/* === Admin fix_85: Firebase structure check === */
+/* === Admin fix_87: Firebase structure check === */
 let fix84LastDbStructureReport = null;
 
 function fix84Val(v, fallback="—"){
@@ -3795,7 +3811,7 @@ window.fix84RunDbStructureCheck = fix84RunDbStructureCheck;
 
 window.fix84DownloadDbStructureReport = fix84DownloadDbStructureReport;
 
-/* === Admin fix_85: clean stable + safe Firebase repair === */
+/* === Admin fix_87: clean stable + safe Firebase repair === */
 let fix85LastSafeRepairPlan = null;
 function fix85RepairLine(text, path){
   return `<div><b>${escapeHtml(text)}</b><br><span class="mono smallMuted">${escapeHtml(path || "—")}</span></div>`;
@@ -4043,14 +4059,14 @@ async function fix85RunSafeRepair(){
 window.fix85PreviewSafeRepair = fix85PreviewSafeRepair;
 window.fix85RunSafeRepair = fix85RunSafeRepair;
 window.fix86UndoLastSafeRepair = fix86UndoLastSafeRepair;
-/* === /Admin fix_85 === */
+/* === /Admin fix_87 === */
 
 qs("runDbStructureCheckBtn")?.addEventListener("click", ()=>fix84RunDbStructureCheck());
 qs("previewDbSafeRepairBtn")?.addEventListener("click", ()=>fix85PreviewSafeRepair());
 qs("runDbSafeRepairBtn")?.addEventListener("click", ()=>fix85RunSafeRepair());
 qs("undoDbSafeRepairBtn")?.addEventListener("click", ()=>fix86UndoLastSafeRepair());
 qs("downloadDbStructureReportBtn")?.addEventListener("click", ()=>fix84DownloadDbStructureReport());
-/* === /Admin fix_85 === */
+/* === /Admin fix_87 === */
 
 async function reverseGeocode(lat, lon){
   const latNum = Number(lat), lonNum = Number(lon);
@@ -4397,11 +4413,12 @@ async function loadUsers(){
     }
   };
 
-  const [liveSnap, usersSnap, visibilitySnap, adminsSnap, liveOwnersSnap, sessionsSnap] = await Promise.all([
+  const [liveSnap, usersSnap, visibilitySnap, adminsSnap, viewersSnap, liveOwnersSnap, sessionsSnap] = await Promise.all([
     safeGet("live"),
     safeGet("users"),
     safeGet("userVisibility"),
     safeGet("admins"),
+    safeGet("adminViewers"),
     safeGet("liveOwners"),
     get(query(ref(db, "liveSessions"), limitToLast(ADMIN_SESSIONS_LIMIT))).catch(e => {
       recordError("loadUsers/liveSessions", e);
@@ -4414,6 +4431,7 @@ async function loadUsers(){
   liveByUid = liveVal;
   userVisibility = visibilitySnap.val() || {};
   adminsMap = adminsSnap.val() || {};
+  adminViewersMap = viewersSnap.val() || {};
   const liveOwners = liveOwnersSnap.val() || {};
   const sessionsVal = sessionsSnap.val() || {};
 
@@ -5994,15 +6012,22 @@ async function importDataFile(){
     showToast("Поддерживаются только JSON и CSV","warn");
   }
 }
-async function logAction(kind, description){
-  const entryRef = push(ref(db, "adminLogs/actions"));
-  await set(entryRef, {
-    ts: Date.now(),
-    kind,
-    description,
-    uid: auth.currentUser?.uid || null,
-    email: auth.currentUser?.email || null
-  });
+async function logAction(kind, description, extra = {}){
+  try{
+    const entryRef = push(ref(db, "adminLogs/actions"));
+    await set(entryRef, {
+      ts: Date.now(),
+      kind,
+      description,
+      uid: auth.currentUser?.uid || null,
+      email: auth.currentUser?.email || null,
+      selectedUid: selectedUid || null,
+      role: currentAdminRole || null,
+      ...extra
+    });
+  }catch(e){
+    console.warn("logAction error", e);
+  }
 }
 
 async function logDeviceEvent(kind, description, extra = {}){
@@ -7237,22 +7262,27 @@ function renderUsersManagement(){
     const name = meta.name || meta.displayName || "—";
     const email = meta.email || "—";
     const isAdmin = adminsMap?.[uid] === true;
+    const isViewer = adminViewersMap?.[uid] === true;
     const currentUserUid = auth.currentUser?.uid || "";
-    const roleText = isAdmin ? "Админ" : "Пользователь";
-    const roleClass = isAdmin ? "success" : "secondary";
-    const roleButton = isAdmin
+    const roleText = isAdmin ? "Админ" : (isViewer ? "Просмотр" : "Пользователь");
+    const roleClass = isAdmin ? "admin" : (isViewer ? "viewer" : "user");
+    const adminButton = isAdmin
       ? `<button class="danger small" data-admin-remove="${uid}" ${uid === currentUserUid ? "data-self-admin='true'" : ""}>Забрать админа</button>`
       : `<button class="success small" data-admin-add="${uid}">Дать админа</button>`;
+    const viewerButton = isViewer
+      ? `<button class="warn small" data-viewer-remove="${uid}">Убрать просмотр</button>`
+      : `<button class="secondary small" data-viewer-add="${uid}">Только просмотр</button>`;
 
     return `<tr>
       <td>${name}</td>
       <td>${email}</td>
       <td class="mono">${uid}</td>
-      <td><span class="pill ${roleClass}">${roleText}</span></td>
+      <td><span class="roleBadge ${roleClass}">${roleText}</span></td>
       <td>
         <div class="row">
           <button class="secondary small" data-user-rename="${uid}">Переименовать</button>
-          ${roleButton}
+          ${adminButton}
+          ${viewerButton}
           <button class="danger small" data-user-delete="${uid}">Удалить</button>
         </div>
       </td>
@@ -7295,6 +7325,38 @@ function renderUsersManagement(){
     }catch(e){
       recordError("admin_role_remove", e);
       showToast("Ошибка прав админа: "+errText(e), "error", 3600);
+    }
+  });
+
+  tbody.querySelectorAll("[data-viewer-add]").forEach(btn=>btn.onclick=async()=>{
+    const uid = btn.dataset.viewerAdd;
+    if(!uid) return;
+    if(!confirm(`Дать пользователю ${getDisplayName(uid)} доступ только для просмотра?`)) return;
+    try{
+      await set(ref(db, `adminViewers/${uid}`), true);
+      adminViewersMap[uid] = true;
+      await logAction("viewer_role_add", `Выдан доступ только просмотр: ${uid}`);
+      renderUsersManagement();
+      showToast("Доступ только просмотр выдан", "success");
+    }catch(e){
+      recordError("viewer_role_add", e);
+      showToast("Ошибка выдачи просмотра: "+errText(e), "error", 3600);
+    }
+  });
+
+  tbody.querySelectorAll("[data-viewer-remove]").forEach(btn=>btn.onclick=async()=>{
+    const uid = btn.dataset.viewerRemove;
+    if(!uid) return;
+    if(!confirm(`Убрать доступ только для просмотра у ${getDisplayName(uid)}?`)) return;
+    try{
+      await remove(ref(db, `adminViewers/${uid}`));
+      delete adminViewersMap[uid];
+      await logAction("viewer_role_remove", `Убран доступ только просмотр: ${uid}`);
+      renderUsersManagement();
+      showToast("Доступ просмотр убран", "success");
+    }catch(e){
+      recordError("viewer_role_remove", e);
+      showToast("Ошибка снятия просмотра: "+errText(e), "error", 3600);
     }
   });
 
@@ -7783,13 +7845,19 @@ onAuthStateChanged(auth, async user => {
     if(qs("topUserBar")) qs("topUserBar").classList.add("hidden");
     return;
   }
-  const adminSnap = await get(ref(db, `admins/${user.uid}`));
-  const allowed = adminSnap.val() === true;
+  const [adminSnap, viewerSnap] = await Promise.all([
+    get(ref(db, `admins/${user.uid}`)).catch(()=>({val:()=>false})),
+    get(ref(db, `adminViewers/${user.uid}`)).catch(()=>({val:()=>false}))
+  ]);
+  const allowedFullAdmin = adminSnap.val() === true;
+  const allowedViewer = viewerSnap.val() === true;
+  const allowed = allowedFullAdmin || allowedViewer;
+  currentAdminRole = allowedFullAdmin ? "admin" : (allowedViewer ? "viewer" : "");
   if(!allowed){
     qs("authCard").classList.remove("hidden");
     qs("adminPanel").classList.add("hidden");
     if(qs("topUserBar")) qs("topUserBar").classList.add("hidden");
-    qs("authMessage").innerHTML = `Ты вошёл, но ещё не добавлен как админ.<br><br><span class="mono">admins/${user.uid} = true</span>`;
+    qs("authMessage").innerHTML = `Ты вошёл, но ещё не добавлен как админ или просмотрщик.<br><br><span class="mono">admins/${user.uid} = true</span><br><span class="mono">или adminViewers/${user.uid} = true</span>`;
     return;
   }
 
@@ -7797,7 +7865,8 @@ onAuthStateChanged(auth, async user => {
   qs("adminPanel").classList.remove("hidden");
   if(qs("topUserBar")) qs("topUserBar").classList.remove("hidden");
   qs("userInfo").textContent = user.email || "Google user";
-  if(qs("userInfoTop")) qs("userInfoTop").textContent = user.email || "Google user";
+  if(qs("userInfoTop")) qs("userInfoTop").textContent = `${user.email || "Google user"}${currentAdminRole === "viewer" ? " · только просмотр" : ""}`;
+  applyReadOnlyMode?.();
   if(qs("userUidText")) qs("userUidText").closest(".pill")?.remove();
   setDefaultPeriodToday();
   await ensureUserMeta(user);
@@ -11341,7 +11410,7 @@ window.addEventListener('load', ()=>{ mygpsLivePatchInstallUi(); setTimeout(()=>
 
 
 /* === Admin fix_72: update check, route filter, diagnostics, replay events, cleanup === */
-const ADMIN_FIX70_VERSION = "fix_86";
+const ADMIN_FIX70_VERSION = "fix_87";
 function fix70Qs(id){ return document.getElementById(id); }
 function fix70Esc(v){ return String(v ?? "").replace(/[&<>'"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c])); }
 function fix70Badge(text, kind="ok"){ return `<span class="postUpdateBadge ${kind}">${fix70Esc(text)}</span>`; }
@@ -11609,7 +11678,7 @@ setTimeout(fix73Install,2600);
 
 
 /* === Admin fix_75: app versions + safe auto-refresh in Сейчас === */
-const ADMIN_FIX75_VERSION = "fix_86";
+const ADMIN_FIX75_VERSION = "fix_87";
 let adminFix75AutoTimer = null;
 let adminFix75Refreshing = false;
 function fix75Qs(id){ return document.getElementById(id); }
@@ -11760,7 +11829,7 @@ setTimeout(fix75Install,2800);
 
 
 /* === Admin fix_79: alert hints, selected user check, live garbage, stops list, clean exports === */
-const ADMIN_FIX79_VERSION = "fix_86";
+const ADMIN_FIX79_VERSION = "fix_87";
 function fix79Esc(v){ return String(v ?? "").replace(/[&<>'"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[ch])); }
 function fix79Ts(v){ const n=Number(v||0); return Number.isFinite(n) && n>0 ? n : 0; }
 function fix79PointLat(p){ return Number(p?.latitude ?? p?.lat); }
@@ -12007,8 +12076,8 @@ setTimeout(fix79Install,2500);
 /* === /Admin fix_79 === */
 
 
-/* === Admin fix_85: history search, improved stops, problem layers === */
-const ADMIN_FIX80_VERSION = "fix_86";
+/* === Admin fix_87: history search, improved stops, problem layers === */
+const ADMIN_FIX80_VERSION = "fix_87";
 let fix80ProblemLayer = null;
 let fix80StopCircleLayer = null;
 let fix80SearchMarker = null;
@@ -12073,7 +12142,7 @@ function fix80RenderProblemLayer(force=false){
   const sum=fix80Q("problemLayerSummary");
   if(sum) sum.innerHTML=`<span class="problemLayerBadge bad">плохие ${bad}</span> <span class="problemLayerBadge jump">скачки ${jump}</span> <span class="problemLayerBadge drift">дрейф ${drift}</span>`;
 }
-/* fix_85 cleanup: removed unused history place search code. */
+/* fix_87 cleanup: removed unused history place search code. */
 function fix80BuildImprovedStops(points){
   const all = typeof fix79BuildStops === "function" ? fix79BuildStops(points) : [];
   const ignored=fix80IgnoredStops();
@@ -12140,14 +12209,14 @@ function fix80Install(){
 }
 window.addEventListener("load",()=>setTimeout(fix80Install,1400));
 setTimeout(fix80Install,2800);
-/* === /Admin fix_85 === */
+/* === /Admin fix_87 === */
 
 
 /* === /Admin fix_72 integrated === */
 
 
-/* === Admin fix_85: saved map settings === */
-const ADMIN_FIX83_VERSION = "fix_86";
+/* === Admin fix_87: saved map settings === */
+const ADMIN_FIX83_VERSION = "fix_87";
 const ADMIN_FIX83_MAP_KEY = "mygps_admin_map_settings";
 function fix83Qs(id){ return document.getElementById(id); }
 function fix83ReadMapSettings(){
@@ -12338,7 +12407,7 @@ function fix83InitMapSettings(){
     fix83BindMapSettings();
     fix83HookExistingMapControls();
     fix83ApplyMapSettings({render:false, move:true});
-    const v=fix83Qs("postUpdateAdminVersion"); if(v) v.textContent="fix_86";
+    const v=fix83Qs("postUpdateAdminVersion"); if(v) v.textContent="fix_87";
   }catch(e){ console.warn("fix83InitMapSettings", e); }
 }
 setTimeout(fix83InitMapSettings, 350);
@@ -12425,6 +12494,119 @@ document.addEventListener("click", ev=>{
   // Expose manual helper for existing code if needed.
   window.fixAdminMapsLayout = scheduleMapResize;
 })();
+
+
+// === Admin fix_87: audit log + read-only role ===
+function isReadOnlyAdmin(){ return currentAdminRole === "viewer"; }
+
+const ADMIN_FIX_87_WRITE_BUTTON_IDS = new Set([
+  "createShareBtn","endAllActiveSessionsBtn","cleanupSessionsBtn","cleanupEndedSessionsBtn","cleanupLiveGarbageBtn",
+  "deleteHistoryBtn","deleteLiveBtn","deleteAllDbBtn","deleteSelectedPointsBtn","deleteRangeBtn","deleteEmptyProfilesBtn",
+  "createTabUserBtn","renameUserBtn","visibilitySaveBtn","visibilityTemplateAllBtn","visibilityTemplateNoneBtn","visibilityTemplatePairBtn",
+  "saveGeofenceBtn","clearGeofenceFormBtn","saveGeofenceNotifySettingsBtn",
+  "gpsPresetFastBtn","gpsPresetBalancedBtn","gpsPresetEcoBtn","saveGpsSettingsBtn","gpsResetDefaultsBtn",
+  "backupNowBtn","restoreBackupBtn","importDataBtn","safeCleanupBtn",
+  "saveAdminUiSettingsBtn","saveCleanupSettingsBtn","saveRouteFilterBtn","resetRouteFilterBtn",
+  "runDbSafeRepairBtn","undoDbSafeRepairBtn","runLogCleanupBtn",
+  "clearOldEventsBtn","clearSelectedGpsLogBtn",
+  "saveMapSettingsBtn","resetMapSettingsBtn"
+]);
+
+const ADMIN_FIX_87_AUDIT_BUTTON_IDS = new Set([
+  "createShareBtn","endAllActiveSessionsBtn","cleanupSessionsBtn","cleanupEndedSessionsBtn","cleanupLiveGarbageBtn",
+  "deleteHistoryBtn","deleteLiveBtn","deleteAllDbBtn","deleteSelectedPointsBtn","deleteRangeBtn","deleteEmptyProfilesBtn",
+  "createTabUserBtn","renameUserBtn","visibilitySaveBtn",
+  "saveGeofenceBtn","saveGeofenceNotifySettingsBtn",
+  "gpsPresetFastBtn","gpsPresetBalancedBtn","gpsPresetEcoBtn","saveGpsSettingsBtn","gpsResetDefaultsBtn",
+  "backupNowBtn","restoreBackupBtn","importDataBtn","safeCleanupBtn",
+  "runDbSafeRepairBtn","undoDbSafeRepairBtn","runLogCleanupBtn",
+  "runDbStructureCheckBtn","downloadDbStructureReportBtn",
+  "openSelectedLiveBtn","downloadDiagBtn","downloadPostUpdateDiagBtn"
+]);
+
+function adminFix87ActivePanel(){
+  const active = document.querySelector('.tab-btn.active[data-tab]');
+  return active?.dataset?.tab || "";
+}
+
+function adminFix87IsWriteElement(el){
+  if(!el) return false;
+  const id = el.id || "";
+  const text = (el.textContent || "").trim().toLowerCase();
+  if(ADMIN_FIX_87_WRITE_BUTTON_IDS.has(id)) return true;
+  if(el.matches?.('[data-admin-add],[data-admin-remove],[data-viewer-add],[data-viewer-remove],[data-user-delete],[data-user-rename]')) return true;
+  if(el.matches?.('[data-geofence-delete],[data-geofence-toggle]')) return true;
+  if(el.matches?.('[data-session-end],[data-session-delete],[data-session-cleanup]')) return true;
+  if(text.includes('удалить') || text.includes('очистить') || text.includes('сохранить') || text.includes('создать') || text.includes('исправить') || text.includes('восстановить') || text.includes('импорт')) return true;
+  return false;
+}
+
+function applyReadOnlyMode(){
+  const readonly = isReadOnlyAdmin();
+  document.body.classList.toggle('admin-readonly-mode', readonly);
+  const panel = qs('adminPanel');
+  if(panel && !document.getElementById('readOnlyBanner')){
+    const banner = document.createElement('div');
+    banner.id = 'readOnlyBanner';
+    banner.className = 'readOnlyBanner';
+    banner.textContent = 'Режим только просмотр: данные можно смотреть и экспортировать, но нельзя менять Firebase, live, пользователей, геозоны, history и настройки.';
+    panel.prepend(banner);
+  }
+  document.querySelectorAll('button,input,select,textarea').forEach(el=>{
+    const isWrite = el.tagName === 'BUTTON' ? adminFix87IsWriteElement(el) : false;
+    if(readonly && isWrite){
+      el.classList.add('adminWriteDisabled');
+      el.setAttribute('aria-disabled','true');
+      el.title = 'Недоступно в режиме только просмотр';
+    }else{
+      el.classList.remove('adminWriteDisabled');
+      if(el.getAttribute('aria-disabled') === 'true') el.removeAttribute('aria-disabled');
+      if(el.title === 'Недоступно в режиме только просмотр') el.removeAttribute('title');
+    }
+  });
+}
+
+async function auditAdminButton(btn, actionStatus = 'clicked'){
+  try{
+    if(!btn) return;
+    const id = btn.id || btn.getAttribute('data-audit-id') || '';
+    const text = (btn.textContent || btn.value || id || 'button').trim().replace(/\s+/g, ' ').slice(0, 120);
+    if(!id && !text) return;
+    await logAction('admin_button_' + actionStatus, text, {
+      buttonId: id || null,
+      panel: adminFix87ActivePanel(),
+      selectedUid: selectedUid || null,
+      source: 'admin_fix_87'
+    });
+  }catch(e){
+    console.warn('auditAdminButton error', e);
+  }
+}
+
+document.addEventListener('click', (ev)=>{
+  const btn = ev.target && ev.target.closest ? ev.target.closest('button') : null;
+  if(!btn) return;
+
+  const shouldAudit = ADMIN_FIX_87_AUDIT_BUTTON_IDS.has(btn.id || '') ||
+    btn.matches?.('[data-admin-add],[data-admin-remove],[data-viewer-add],[data-viewer-remove],[data-user-delete],[data-geofence-delete],[data-geofence-toggle]');
+
+  if(isReadOnlyAdmin() && adminFix87IsWriteElement(btn)){
+    ev.preventDefault();
+    ev.stopImmediatePropagation();
+    ev.stopPropagation();
+    showToast('Режим только просмотр: изменение данных запрещено', 'warn', 3200);
+    auditAdminButton(btn, 'blocked');
+    return false;
+  }
+
+  if(shouldAudit){
+    setTimeout(()=>auditAdminButton(btn, 'clicked'), 0);
+  }
+}, true);
+
+setInterval(applyReadOnlyMode, 3000);
+window.applyReadOnlyMode = applyReadOnlyMode;
+// === /Admin fix_87 ===
 
 
 
