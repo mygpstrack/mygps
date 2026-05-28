@@ -496,7 +496,7 @@ tr.gpsLogRowStop,tr.gpsLogRowError{background:rgba(185,28,28,.13)}
 
 
 
-/* === Admin fix_70: update check, route filter, diagnostics, replay events, cleanup === */
+/* === Admin fix_71: update check, route filter, diagnostics, replay events, cleanup === */
 .postUpdateGrid,.routeFilterGrid,.cleanupSettingsGrid,.diagGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:12px}
 .postUpdateCard,.routeFilterCard,.cleanupSettingCard,.replayEventCard{padding:12px 14px;border-radius:16px;border:1px solid var(--border);background:rgba(255,255,255,.035);line-height:1.45}
 .postUpdateCard b,.routeFilterCard b,.cleanupSettingCard b,.replayEventCard b{display:block;margin-bottom:5px;color:#fff}
@@ -508,7 +508,7 @@ tr.gpsLogRowStop,tr.gpsLogRowError{background:rgba(185,28,28,.13)}
 #replayNearbyEventsTbody tr:hover{background:rgba(96,165,250,.10)}
 .replayEventNow{background:rgba(245,158,11,.12)!important}
 @media(max-width:900px){.postUpdateGrid,.routeFilterGrid,.cleanupSettingsGrid,.diagGrid{grid-template-columns:1fr}}
-/* === /Admin fix_70 === */
+/* === /Admin fix_71 === */
 
 </style>
 </head>
@@ -1350,7 +1350,7 @@ tr.gpsLogRowStop,tr.gpsLogRowError{background:rgba(185,28,28,.13)}
           <button id="downloadPostUpdateDiagBtn" class="secondary">Скачать диагностику</button>
         </div>
         <div class="postUpdateGrid">
-          <div class="postUpdateCard"><b>Admin version</b><span id="postAdminVersion">fix_70</span></div>
+          <div class="postUpdateCard"><b>Admin version</b><span id="postAdminVersion">fix_71</span></div>
           <div class="postUpdateCard"><b>Auth</b><span id="postAuthStatus">—</span></div>
           <div class="postUpdateCard"><b>Выбранный пользователь</b><span id="postSelectedUser">—</span></div>
           <div class="postUpdateCard"><b>GPS лог</b><span id="postGpsLogStatus">—</span></div>
@@ -1717,6 +1717,54 @@ window.addEventListener("load", () => {
 });
 
 
+
+
+
+
+/* === Admin fix_71: strict tabs + post-update buttons === */
+function fix71PanelIds(){
+  return ['alertCenterPanel','nowPanel','historyPanel','reportsPanel','usagePanel','trafficPanel','sessionsPanel','usersPanel','visibilityPanel','geofencesPanel','journalPanel','gpsLogPanel','errorsPanel','systemCheckPanel','postUpdatePanel','adminLogsPanel','settingsPanel'];
+}
+function fix71ShowOnlyPanel(selectedId){
+  const ids = fix71PanelIds();
+  ids.forEach(id=>{ const el=document.getElementById(id); if(el) el.classList.toggle('hidden', id!==selectedId); });
+  document.querySelectorAll('.tab-btn[data-tab]').forEach(btn=>btn.classList.toggle('active', btn.dataset.tab===selectedId));
+  try{
+    if(selectedId==='historyPanel') ensureHistoryLoaded?.().catch(e=>recordError?.('ensureHistoryLoaded',e));
+    if(selectedId==='journalPanel') window.loadLimitedEvents?.().catch(e=>recordError?.('loadLimitedEvents',e));
+    if(selectedId==='visibilityPanel') renderVisibilityPanel?.();
+    if(selectedId==='systemCheckPanel') setTimeout(()=>runSystemCheck?.().catch(e=>recordError?.('runSystemCheck',e)),0);
+    if(selectedId==='gpsLogPanel') setTimeout(()=>loadGpsServiceLogs?.().catch(e=>recordError?.('loadGpsServiceLogs',e)),0);
+    if(selectedId==='alertCenterPanel') setTimeout(()=>fix68BuildAlerts?.().catch(e=>recordError?.('fix68BuildAlerts',e)),0);
+    if(selectedId==='nowPanel') setTimeout(()=>fix68UpdateUserHealth?.().catch(e=>recordError?.('fix68UpdateUserHealth',e)),0);
+    if(selectedId==='postUpdatePanel') setTimeout(()=>fix70Install?.(),0);
+    setTimeout(()=>{ try{ historyMap?.invalidateSize(); liveMap?.invalidateSize(); sessionMap?.invalidateSize(); geofenceMap?.invalidateSize(); speedChart?.resize?.(); distanceChart?.resize?.(); }catch(e){} },80);
+  }catch(e){ recordError?.('fix71ShowOnlyPanel',e); }
+}
+function fix71BindPostUpdateButtons(){
+  const post=document.getElementById('runPostUpdateCheckBtn');
+  if(post){ post.onclick=()=>fix70RunPostUpdateCheck().catch(e=>showToast?.('Ошибка проверки: '+(errText?.(e)||e),'error')); }
+  const diag=document.getElementById('downloadPostUpdateDiagBtn');
+  if(diag){ diag.onclick=()=>fix70DownloadDiagnostics().catch(e=>showToast?.('Ошибка диагностики: '+(errText?.(e)||e),'error')); }
+}
+function fix71Install(){
+  fix71BindPostUpdateButtons();
+  document.querySelectorAll('.tab-btn[data-tab]').forEach(btn=>{
+    if(btn.dataset.fix71) return;
+    btn.dataset.fix71='1';
+    btn.addEventListener('click', ev=>{
+      const id=btn.dataset.tab;
+      if(!id) return;
+      setTimeout(()=>fix71ShowOnlyPanel(id),120);
+    }, true);
+  });
+  const active=document.querySelector('.tab-btn.active[data-tab]')?.dataset?.tab || 'nowPanel';
+  fix71ShowOnlyPanel(active);
+}
+window.addEventListener('load',()=>setTimeout(fix71Install,400));
+setTimeout(fix71Install,1800);
+setTimeout(fix71Install,3500);
+/* === /Admin fix_71 === */
 
 </script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js">
@@ -2871,7 +2919,7 @@ function restoreUiState(){
 
     if(state.activeTab){
       document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
-      document.querySelectorAll("#nowPanel,#historyPanel,#reportsPanel,#usagePanel,#sessionsPanel,#usersPanel,#visibilityPanel,#geofencesPanel,#journalPanel,#errorsPanel,#systemCheckPanel,#settingsPanel").forEach(p=>p.classList.add("hidden"));
+      document.querySelectorAll("#alertCenterPanel,#nowPanel,#historyPanel,#reportsPanel,#usagePanel,#trafficPanel,#sessionsPanel,#usersPanel,#visibilityPanel,#geofencesPanel,#journalPanel,#gpsLogPanel,#errorsPanel,#systemCheckPanel,#postUpdatePanel,#adminLogsPanel,#settingsPanel").forEach(p=>p.classList.add("hidden"));
       const btn = document.querySelector(`.tab-btn[data-tab="${state.activeTab}"]`);
       if(btn){
         btn.classList.add("active");
@@ -3312,7 +3360,7 @@ qs("runSystemCheckBtn")?.addEventListener("click", () => runSystemCheck().catch(
 document.querySelectorAll(".tab-btn").forEach(btn=>{
   btn.onclick=()=>{
     document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
-    document.querySelectorAll("#nowPanel,#historyPanel,#reportsPanel,#usagePanel,#sessionsPanel,#usersPanel,#visibilityPanel,#geofencesPanel,#journalPanel,#errorsPanel,#systemCheckPanel,#settingsPanel").forEach(p=>p.classList.add("hidden"));
+    document.querySelectorAll("#alertCenterPanel,#nowPanel,#historyPanel,#reportsPanel,#usagePanel,#trafficPanel,#sessionsPanel,#usersPanel,#visibilityPanel,#geofencesPanel,#journalPanel,#gpsLogPanel,#errorsPanel,#systemCheckPanel,#postUpdatePanel,#adminLogsPanel,#settingsPanel").forEach(p=>p.classList.add("hidden"));
     btn.classList.add("active");
     qs(btn.dataset.tab).classList.remove("hidden");
     if(btn.dataset.tab === "historyPanel") ensureHistoryLoaded().catch(e=>recordError("ensureHistoryLoaded", e));
@@ -10011,7 +10059,7 @@ function installGpsLogPanel(){
   });
 }
 function gpsLogStrictShowPanel(selectedId){
-  const ids = ["nowPanel","historyPanel","reportsPanel","usagePanel","trafficPanel","sessionsPanel","usersPanel","visibilityPanel","geofencesPanel","journalPanel","gpsLogPanel","errorsPanel","systemCheckPanel","adminLogsPanel","settingsPanel"];
+  const ids = ["alertCenterPanel","nowPanel","historyPanel","reportsPanel","usagePanel","trafficPanel","sessionsPanel","usersPanel","visibilityPanel","geofencesPanel","journalPanel","gpsLogPanel","errorsPanel","systemCheckPanel","postUpdatePanel","adminLogsPanel","settingsPanel"];
   ids.forEach(id => { const el = qs(id); if(el) el.classList.toggle("hidden", id !== selectedId); });
   document.querySelectorAll(".tab-btn[data-tab]").forEach(btn => btn.classList.toggle("active", btn.dataset.tab === selectedId));
   if(selectedId === "gpsLogPanel") setTimeout(()=>loadGpsServiceLogs().catch(e=>recordError("loadGpsServiceLogs", e)), 0);
@@ -10398,7 +10446,7 @@ function fix68NearestPoint(ts){ const pts=(typeof filteredHistory==='function'?f
 async function fix68BuildRouteTimeline(){ const uid=selectedUid||fix68Qs('userSelect')?.value||''; const fromDate=fix68Qs('fromDate')?.value||''; const toDate=fix68Qs('toDate')?.value||''; const from=fromDate?new Date(`${fromDate}T00:00:00`).getTime():0; const to=toDate?new Date(`${toDate}T23:59:59`).getTime():Date.now(); const onlyProblems=!!fix68Qs('timelineOnlyProblemsToggle')?.checked; const rows=[]; const logs=await fix68LatestGpsLogs(uid,300); logs.forEach(x=>{ const ts=fix68Ts(x.ts||x.timestamp); if(ts>=from&&ts<=to) rows.push({ts,kind:fix68TimelineKind(x),title:x.title||x.type||'GPS log',message:x.message||'',raw:x}); }); try{ const snap=uid?await get(query(ref(db,`events/${uid}`), limitToLast(300))):await get(ref(db,'events')); const val=snap.val()||{}; const add=(u,id,e)=>{ const ts=fix68Ts(e.timestamp||e.ts); if(ts>=from&&ts<=to) rows.push({ts,kind:fix68TimelineKind(e),title:e.type||'event',message:e.message||e.geofenceName||'',raw:{...e,uid:u,id}}); }; if(uid) Object.entries(val).forEach(([id,e])=>add(uid,id,e)); else Object.entries(val).forEach(([u,items])=>Object.entries(items||{}).forEach(([id,e])=>add(u,id,e))); }catch(e){} let filtered=rows.sort((a,b)=>a.ts-b.ts); if(onlyProblems) filtered=filtered.filter(e=>{ const t=`${e.title} ${e.message}`.toLowerCase(); return t.includes('stop')||t.includes('ошиб')||t.includes('error')||t.includes('выключ')||t.includes('bad')||t.includes('плох')||t.includes('offline'); }); adminFix68TimelineEvents=filtered; fix68RenderTimeline(); }
 function fix68RenderTimeline(){ const tbody=fix68Qs('routeTimelineTbody'); if(!tbody) return; tbody.innerHTML=''; if(adminFix68TimelineLayer){ try{historyMap.removeLayer(adminFix68TimelineLayer);}catch(e){} adminFix68TimelineLayer=null; } adminFix68TimelineLayer=L.layerGroup().addTo(historyMap); if(!adminFix68TimelineEvents.length){ tbody.innerHTML='<tr><td colspan="5">Событий для выбранного периода нет.</td></tr>'; return; } adminFix68TimelineEvents.slice(0,300).forEach((ev,idx)=>{ const p=fix68NearestPoint(ev.ts); const tr=document.createElement('tr'); tr.innerHTML=`<td>${fmtTime(ev.ts)}</td><td><span class="timelineBadge ${fix68TimelineKind(ev)}">${fix68Esc(fix68TimelineKind(ev))}</span></td><td>${fix68Esc(ev.title)}</td><td>${fix68Esc(ev.message||'—')}</td><td><button class="secondary small" data-timeline-index="${idx}">К точке</button></td>`; tbody.appendChild(tr); if(p&&fix68ValidLatLng(p)){ const lat=fix68PointLat(p),lng=fix68PointLng(p); const color=ev.kind==='live'?'#60a5fa':(ev.kind==='geofence'?'#f59e0b':(String(ev.title).toLowerCase().includes('stop')?'#ef4444':'#22c55e')); const marker=L.circleMarker([lat,lng],{radius:7,weight:2,color,fillOpacity:.85}).bindPopup(`<b>${fix68Esc(ev.title)}</b><br>${fix68Esc(ev.message||'')}<br>${fmtTime(ev.ts)}`); marker.addTo(adminFix68TimelineLayer); ev._latlng=[lat,lng]; } }); tbody.querySelectorAll('[data-timeline-index]').forEach(btn=>btn.onclick=()=>{ const ev=adminFix68TimelineEvents[Number(btn.dataset.timelineIndex)]; if(ev?._latlng){ historyMap.setView(ev._latlng, Math.max(historyMap.getZoom(),15)); } else showToast?.('Нет ближайшей точки на маршруте','warn'); }); }
 function fix68ClearTimeline(){ if(adminFix68TimelineLayer){ try{historyMap.removeLayer(adminFix68TimelineLayer);}catch(e){} adminFix68TimelineLayer=null; } adminFix68TimelineEvents=[]; if(fix68Qs('routeTimelineTbody')) fix68Qs('routeTimelineTbody').innerHTML='<tr><td colspan="5">Timeline очищен.</td></tr>'; }
-function fix68ShowPanel(selectedId){ const ids=['alertCenterPanel','nowPanel','historyPanel','reportsPanel','usagePanel','trafficPanel','sessionsPanel','usersPanel','visibilityPanel','geofencesPanel','journalPanel','gpsLogPanel','errorsPanel','systemCheckPanel','adminLogsPanel','settingsPanel']; ids.forEach(id=>{ const el=fix68Qs(id); if(el) el.classList.toggle('hidden', id!==selectedId); }); document.querySelectorAll('.tab-btn[data-tab]').forEach(btn=>btn.classList.toggle('active', btn.dataset.tab===selectedId)); if(selectedId==='alertCenterPanel') setTimeout(()=>fix68BuildAlerts().catch(e=>recordError?.('fix68BuildAlerts',e)),0); if(selectedId==='nowPanel') setTimeout(()=>fix68UpdateUserHealth().catch(e=>recordError?.('fix68UpdateUserHealth',e)),0); if(selectedId==='systemCheckPanel') setTimeout(()=>fix68RunRulesCheck().catch(e=>recordError?.('fix68RunRulesCheck',e)),250); }
+function fix68ShowPanel(selectedId){ const ids=['alertCenterPanel','nowPanel','historyPanel','reportsPanel','usagePanel','trafficPanel','sessionsPanel','usersPanel','visibilityPanel','geofencesPanel','journalPanel','gpsLogPanel','errorsPanel','systemCheckPanel','postUpdatePanel','adminLogsPanel','settingsPanel']; ids.forEach(id=>{ const el=fix68Qs(id); if(el) el.classList.toggle('hidden', id!==selectedId); }); document.querySelectorAll('.tab-btn[data-tab]').forEach(btn=>btn.classList.toggle('active', btn.dataset.tab===selectedId)); if(selectedId==='alertCenterPanel') setTimeout(()=>fix68BuildAlerts().catch(e=>recordError?.('fix68BuildAlerts',e)),0); if(selectedId==='nowPanel') setTimeout(()=>fix68UpdateUserHealth().catch(e=>recordError?.('fix68UpdateUserHealth',e)),0); if(selectedId==='systemCheckPanel') setTimeout(()=>fix68RunRulesCheck().catch(e=>recordError?.('fix68RunRulesCheck',e)),250); }
 function fix68Install(){ fix68ApplyAlertSettings(); ['adminSoundAlertsToggle','adminBrowserPushToggle'].forEach(id=>{ const el=fix68Qs(id); if(el&&!el.dataset.fix68){ el.dataset.fix68='1'; el.addEventListener('change', fix68SaveAlertSettings); }}); const req=fix68Qs('requestAdminPushBtn'); if(req&&!req.dataset.fix68){ req.dataset.fix68='1'; req.onclick=async()=>{ if(!('Notification' in window)) return showToast?.('Браузер не поддерживает push','warn'); const r=await Notification.requestPermission(); showToast?.('Push: '+r, r==='granted'?'success':'warn'); }; } const refresh=fix68Qs('refreshAlertsBtn'); if(refresh&&!refresh.dataset.fix68){ refresh.dataset.fix68='1'; refresh.onclick=()=>fix68BuildAlerts().then(()=>showToast?.('Тревоги обновлены','success')).catch(e=>showToast?.('Ошибка тревог: '+(errText?.(e)||e),'error')); } const rules=fix68Qs('runRulesCheckBtn'); if(rules&&!rules.dataset.fix68){ rules.dataset.fix68='1'; rules.onclick=()=>fix68RunRulesCheck(); } const liveBtn=fix68Qs('checkLiveHealthBtn'); if(liveBtn&&!liveBtn.dataset.fix68live){ liveBtn.dataset.fix68live='1'; liveBtn.title='Левый клик — проверка live health, Ctrl/Alt+клик — диагностика live-ссылки'; liveBtn.addEventListener('click', e=>{ if(e.ctrlKey||e.altKey) fix68CheckLiveLink(); }, true); } const build=fix68Qs('buildRouteTimelineBtn'); if(build&&!build.dataset.fix68){ build.dataset.fix68='1'; build.onclick=()=>fix68BuildRouteTimeline().catch(e=>showToast?.('Ошибка timeline: '+(errText?.(e)||e),'error')); } const clear=fix68Qs('clearRouteTimelineBtn'); if(clear&&!clear.dataset.fix68){ clear.dataset.fix68='1'; clear.onclick=fix68ClearTimeline; } }
 document.addEventListener('click', ev=>{ const btn=ev.target?.closest?.('.tab-btn[data-tab]'); if(btn) setTimeout(()=>fix68ShowPanel(btn.dataset.tab),35); }, true);
 window.addEventListener('load', ()=>{ fix68Install(); setTimeout(fix68Install,1500); setTimeout(()=>fix68UpdateUserHealth().catch(()=>{}),2500); });
@@ -10682,8 +10730,8 @@ function startLiveSessionsRealtimeSync(){
 window.addEventListener('load', ()=>{ mygpsLivePatchInstallUi(); setTimeout(()=>{ try{ startLiveSessionsRealtimeSync(); }catch(e){} }, 1800); });
 
 
-/* === Admin fix_70: update check, route filter, diagnostics, replay events, cleanup === */
-const ADMIN_FIX70_VERSION = "fix_70";
+/* === Admin fix_71: update check, route filter, diagnostics, replay events, cleanup === */
+const ADMIN_FIX70_VERSION = "fix_71";
 function fix70Qs(id){ return document.getElementById(id); }
 function fix70Esc(v){ return String(v ?? "").replace(/[&<>'"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c])); }
 function fix70Badge(text, kind="ok"){ return `<span class="postUpdateBadge ${kind}">${fix70Esc(text)}</span>`; }
@@ -10809,7 +10857,7 @@ function fix70EnsurePostUpdateTab(){
     if(btn.dataset.fix70) return; btn.dataset.fix70='1';
     btn.addEventListener('click',()=>{
       document.querySelectorAll('.tab-btn[data-tab]').forEach(b=>b.classList.toggle('active',b===btn));
-      document.querySelectorAll('#adminPanel > div[id$="Panel"], #nowPanel, #historyPanel, #reportsPanel, #usagePanel, #trafficPanel, #sessionsPanel, #usersPanel, #visibilityPanel, #geofencesPanel, #journalPanel, #gpsLogPanel, #alertsPanel, #errorsPanel, #systemCheckPanel, #postUpdatePanel, #adminLogsPanel, #settingsPanel').forEach(p=>p.classList.add('hidden'));
+      document.querySelectorAll('#alertCenterPanel,#nowPanel,#historyPanel,#reportsPanel,#usagePanel,#trafficPanel,#sessionsPanel,#usersPanel,#visibilityPanel,#geofencesPanel,#journalPanel,#gpsLogPanel,#errorsPanel,#systemCheckPanel,#postUpdatePanel,#adminLogsPanel,#settingsPanel').forEach(p=>p.classList.add('hidden'));
       fix70Qs('postUpdatePanel')?.classList.remove('hidden');
     }, true);
   });
@@ -10847,7 +10895,7 @@ const fix70OldLoadAdminSettings = typeof loadAdminSettings === 'function' ? load
 if(fix70OldLoadAdminSettings){ loadAdminSettings = async function(){ await fix70OldLoadAdminSettings.apply(this,arguments); try{ fix70ApplyRouteFilterUi(); fix70ApplyRetentionUi(); }catch(e){} }; }
 window.addEventListener('load',()=>setTimeout(fix70Install,1200));
 setTimeout(fix70Install,2500);
-/* === /Admin fix_70 === */
+/* === /Admin fix_71 === */
 
 
 
