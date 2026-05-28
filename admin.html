@@ -689,6 +689,12 @@ tr.gpsLogRowStop,tr.gpsLogRowError{background:rgba(185,28,28,.13)}
           
         </div>
 
+        <div class="adminVersionGrid" id="nowVersionsGrid">
+          <div class="adminVersionCard"><b>MyGps Android</b><span id="nowMyGpsVersion">—</span><span class="adminVersionHint" id="nowMyGpsVersionHint">по данным пользователя / live</span></div>
+          <div class="adminVersionCard"><b>MyGpsLive</b><span id="nowMyGpsLiveVersion">—</span><span class="adminVersionHint" id="nowMyGpsLiveVersionHint">по данным live-сессии</span></div>
+          <div class="adminVersionCard"><b>Admin</b><span id="nowAdminVersion">fix_75</span><span class="adminVersionHint">текущая админка</span></div>
+        </div>
+
         <div id="nowLiveWarning" class="nowLiveWarning">—</div>
 
         <div class="row">
@@ -700,6 +706,15 @@ tr.gpsLogRowStop,tr.gpsLogRowError{background:rgba(185,28,28,.13)}
           <button id="downloadDiagBtn" class="secondary">Скачать диагностику</button>
           <button id="copyNowCoordsBtn" class="secondary">Копировать координаты</button>
           <button id="openNowMapsBtn" class="secondary">Google Maps</button>
+        </div>
+        <div class="adminAutoRefreshBox" id="nowAutoRefreshBox">
+          <label class="pill"><input id="nowAutoRefreshToggle" type="checkbox" style="width:auto;min-width:auto"> Автообновление</label>
+          <select id="nowAutoRefreshInterval">
+            <option value="10000">каждые 10 сек</option>
+            <option value="30000" selected>каждые 30 сек</option>
+            <option value="60000">каждую минуту</option>
+          </select>
+          <span class="smallMuted" id="nowAutoRefreshStatus">выключено</span>
         </div>
         <div id="liveMap"></div>
       </div>
@@ -1353,7 +1368,9 @@ tr.gpsLogRowStop,tr.gpsLogRowError{background:rgba(185,28,28,.13)}
           <button id="downloadPostUpdateDiagBtn" class="secondary">Скачать диагностику</button>
         </div>
         <div class="postUpdateGrid">
-          <div class="postUpdateCard"><b>Admin version</b><span id="postAdminVersion">fix_72</span></div>
+          <div class="postUpdateCard"><b>Admin version</b><span id="postAdminVersion">fix_75</span></div>
+          <div class="postUpdateCard"><b>MyGps Android</b><span id="postMyGpsVersion">—</span></div>
+          <div class="postUpdateCard"><b>MyGpsLive</b><span id="postMyGpsLiveVersion">—</span></div>
           <div class="postUpdateCard"><b>Auth</b><span id="postAuthStatus">—</span></div>
           <div class="postUpdateCard"><b>Выбранный пользователь</b><span id="postSelectedUser">—</span></div>
           <div class="postUpdateCard"><b>GPS лог</b><span id="postGpsLogStatus">—</span></div>
@@ -10656,7 +10673,7 @@ window.addEventListener('load', ()=>{ mygpsLivePatchInstallUi(); setTimeout(()=>
 
 
 /* === Admin fix_72: update check, route filter, diagnostics, replay events, cleanup === */
-const ADMIN_FIX70_VERSION = "fix_74";
+const ADMIN_FIX70_VERSION = "fix_75";
 function fix70Qs(id){ return document.getElementById(id); }
 function fix70Esc(v){ return String(v ?? "").replace(/[&<>'"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c])); }
 function fix70Badge(text, kind="ok"){ return `<span class="postUpdateBadge ${kind}">${fix70Esc(text)}</span>`; }
@@ -10921,6 +10938,158 @@ window.fix73UpdateDistanceCompare = fix73UpdateDistanceCompare;
 window.addEventListener('load',()=>setTimeout(fix73Install,1300));
 setTimeout(fix73Install,2600);
 /* === /Admin fix_74 === */
+
+
+/* === Admin fix_75: app versions + safe auto-refresh in Сейчас === */
+const ADMIN_FIX75_VERSION = "fix_75";
+let adminFix75AutoTimer = null;
+let adminFix75Refreshing = false;
+function fix75Qs(id){ return document.getElementById(id); }
+function fix75Text(id, value){ const el=fix75Qs(id); if(el) el.textContent = value == null || value === '' ? '—' : String(value); }
+function fix75FirstString(...vals){
+  for(const v of vals){
+    if(v == null) continue;
+    if(typeof v === 'string' && v.trim()) return v.trim();
+    if(typeof v === 'number' && Number.isFinite(v)) return String(v);
+    if(typeof v === 'object'){
+      const nested = fix75FirstString(v.versionName, v.version, v.appVersion, v.buildName, v.build, v.versionCode, v.code);
+      if(nested && nested !== '—') return nested;
+    }
+  }
+  return '';
+}
+function fix75PointForUid(uid){
+  const selected = uid || selectedUid || fix75Qs('userSelect')?.value || '';
+  const livePoint = selected ? (liveByUid?.[selected] || null) : null;
+  const session = fix75ActiveSessionForUid(selected);
+  const publicPoint = session?.[1]?.public?.lastPoint || null;
+  return livePoint || publicPoint || currentLivePoint || latestLivePoint || null;
+}
+function fix75ActiveSessionForUid(uid){
+  const now=Date.now();
+  const selected=uid||'';
+  try{
+    return Object.entries(allSessions||{}).find(([token,s])=>{
+      const meta=s?.meta||s||{};
+      const active = meta.active===true || String(meta.status||'').toLowerCase()==='active' || String(meta.status||'').toLowerCase()==='paused';
+      const notExpired = !Number(meta.expiresAt||0) || Number(meta.expiresAt||0)>now;
+      const owner = meta.ownerUid || s?.ownerUid || '';
+      return active && notExpired && (!selected || !owner || owner===selected);
+    }) || null;
+  }catch(e){ return null; }
+}
+function fix75VersionInfo(){
+  const uid = selectedUid || fix75Qs('userSelect')?.value || '';
+  const user = uid ? (usersMeta?.[uid] || {}) : {};
+  const point = fix75PointForUid(uid) || {};
+  const sessionPair = fix75ActiveSessionForUid(uid);
+  const session = sessionPair?.[1] || {};
+  const meta = session?.meta || {};
+  const publicNode = session?.public || {};
+  const viewStats = session?.viewStats || {};
+  const mygps = fix75FirstString(
+    user.myGpsVersion, user.mygpsVersion, user.appVersion, user.versionName, user.version, user.buildVersion,
+    user.app, user.android, user.device?.app, user.device?.version,
+    point.myGpsVersion, point.mygpsVersion, point.appVersion, point.versionName, point.version, point.buildVersion,
+    point.app, point.android, point.device?.app, point.device?.version,
+    meta.ownerAppVersion, meta.myGpsVersion, meta.appVersion, meta.versionName
+  );
+  const live = fix75FirstString(
+    meta.myGpsLiveVersion, meta.viewerVersion, meta.liveViewerVersion, meta.pwaVersion,
+    viewStats.myGpsLiveVersion, viewStats.viewerVersion, viewStats.liveViewerVersion, viewStats.pwaVersion,
+    publicNode.myGpsLiveVersion, publicNode.viewerVersion, publicNode.liveViewerVersion
+  );
+  return {
+    uid,
+    mygps: mygps || 'нет данных',
+    mygpsHint: mygps ? 'обнаружено в Firebase' : 'MyGps пока не пишет версию в Firebase',
+    live: live || 'нет данных',
+    liveHint: live ? 'обнаружено в liveSessions' : 'MyGpsLive пока не пишет версию в Firebase',
+    admin: ADMIN_FIX75_VERSION
+  };
+}
+function fix75UpdateVersionUi(){
+  const v=fix75VersionInfo();
+  fix75Text('nowMyGpsVersion', v.mygps);
+  fix75Text('nowMyGpsVersionHint', v.mygpsHint);
+  fix75Text('nowMyGpsLiveVersion', v.live);
+  fix75Text('nowMyGpsLiveVersionHint', v.liveHint);
+  fix75Text('nowAdminVersion', v.admin);
+  fix75Text('postMyGpsVersion', v.mygps);
+  fix75Text('postMyGpsLiveVersion', v.live);
+  fix75Text('postAdminVersion', v.admin);
+}
+function fix75IsNowVisible(){ return !!fix75Qs('nowPanel') && !fix75Qs('nowPanel').classList.contains('hidden'); }
+function fix75AutoSettings(){
+  const enabled = localStorage.getItem('mygps_admin_now_auto_refresh') === '1';
+  const ms = Number(localStorage.getItem('mygps_admin_now_auto_refresh_ms') || fix75Qs('nowAutoRefreshInterval')?.value || 30000);
+  return {enabled, ms: [10000,30000,60000].includes(ms) ? ms : 30000};
+}
+function fix75SetAutoStatus(text){ fix75Text('nowAutoRefreshStatus', text); }
+async function fix75AutoRefreshTick(manual=false){
+  if(adminFix75Refreshing) return;
+  if(!fix75IsNowVisible() && !manual) return;
+  adminFix75Refreshing = true;
+  try{
+    if(typeof updateNowFromAvailableSources === 'function') await updateNowFromAvailableSources();
+    fix75UpdateVersionUi();
+    const time = new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    const {enabled, ms}=fix75AutoSettings();
+    fix75SetAutoStatus(enabled ? `обновлено ${time}, интервал ${Math.round(ms/1000)} сек` : `последнее обновление ${time}`);
+  }catch(e){
+    fix75SetAutoStatus('ошибка автообновления');
+    try{ recordError?.('fix75AutoRefreshTick', e); }catch(_){ }
+  }finally{
+    adminFix75Refreshing = false;
+  }
+}
+function fix75StopAutoRefresh(){ if(adminFix75AutoTimer){ clearInterval(adminFix75AutoTimer); adminFix75AutoTimer=null; } }
+function fix75StartAutoRefresh(){
+  fix75StopAutoRefresh();
+  const {enabled, ms}=fix75AutoSettings();
+  const toggle=fix75Qs('nowAutoRefreshToggle'); if(toggle) toggle.checked=enabled;
+  const select=fix75Qs('nowAutoRefreshInterval'); if(select) select.value=String(ms);
+  if(!enabled){ fix75SetAutoStatus('выключено'); return; }
+  fix75SetAutoStatus(`включено, интервал ${Math.round(ms/1000)} сек`);
+  adminFix75AutoTimer = setInterval(()=>fix75AutoRefreshTick(false), ms);
+  if(fix75IsNowVisible()) setTimeout(()=>fix75AutoRefreshTick(false), 250);
+}
+function fix75Install(){
+  fix75UpdateVersionUi();
+  const toggle=fix75Qs('nowAutoRefreshToggle');
+  const select=fix75Qs('nowAutoRefreshInterval');
+  const settings=fix75AutoSettings();
+  if(toggle){ toggle.checked=settings.enabled; if(!toggle.dataset.fix75){ toggle.dataset.fix75='1'; toggle.addEventListener('change',()=>{ localStorage.setItem('mygps_admin_now_auto_refresh', toggle.checked?'1':'0'); fix75StartAutoRefresh(); }); } }
+  if(select){ select.value=String(settings.ms); if(!select.dataset.fix75){ select.dataset.fix75='1'; select.addEventListener('change',()=>{ localStorage.setItem('mygps_admin_now_auto_refresh_ms', select.value); fix75StartAutoRefresh(); }); } }
+  const refresh=fix75Qs('refreshNowBtn');
+  if(refresh && !refresh.dataset.fix75ver){ refresh.dataset.fix75ver='1'; refresh.addEventListener('click',()=>setTimeout(()=>fix75UpdateVersionUi(),700)); }
+  document.querySelectorAll('.tab-btn[data-tab]').forEach(btn=>{
+    if(btn.dataset.fix75) return;
+    btn.dataset.fix75='1';
+    btn.addEventListener('click',()=>setTimeout(()=>{ fix75UpdateVersionUi(); fix75StartAutoRefresh(); },250));
+  });
+  fix75StartAutoRefresh();
+}
+const fix75OldUserSelectOnChange = fix75Qs('userSelect')?.onchange || null;
+if(fix75Qs('userSelect') && !fix75Qs('userSelect').dataset.fix75change){
+  fix75Qs('userSelect').dataset.fix75change='1';
+  fix75Qs('userSelect').addEventListener('change',()=>setTimeout(()=>{ fix75UpdateVersionUi(); if(fix75AutoSettings().enabled) fix75AutoRefreshTick(false); },900));
+}
+const fix75OldRunPostUpdate = typeof fix70RunPostUpdateCheck === 'function' ? fix70RunPostUpdateCheck : null;
+if(fix75OldRunPostUpdate){
+  fix70RunPostUpdateCheck = async function(){
+    const res = await fix75OldRunPostUpdate.apply(this, arguments);
+    try{ fix75UpdateVersionUi(); }catch(e){}
+    return res;
+  };
+}
+window.fix75UpdateVersionUi = fix75UpdateVersionUi;
+window.fix75AutoRefreshTick = fix75AutoRefreshTick;
+window.fix75Install = fix75Install;
+window.addEventListener('load',()=>setTimeout(fix75Install,1400));
+setTimeout(fix75Install,2800);
+/* === /Admin fix_75 === */
+
 
 /* === /Admin fix_72 integrated === */
 
