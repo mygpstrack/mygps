@@ -510,6 +510,19 @@ tr.gpsLogRowStop,tr.gpsLogRowError{background:rgba(185,28,28,.13)}
 @media(max-width:900px){.postUpdateGrid,.routeFilterGrid,.cleanupSettingsGrid,.diagGrid{grid-template-columns:1fr}}
 /* === /Admin fix_72 === */
 
+
+
+/* === Admin fix_73: quick live open + raw/clean distance comparison === */
+.distanceCompareBox{margin-top:12px;border-color:rgba(59,130,246,.28);background:rgba(37,99,235,.08)}
+.distanceCompareGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:10px}
+.distanceCompareItem{padding:12px 14px;border-radius:14px;border:1px solid var(--border);background:rgba(255,255,255,.035)}
+.distanceCompareItem b{display:block;margin-bottom:6px;color:#fff}
+.distanceCompareValue{font-size:18px;font-weight:900}
+.quickLiveOpenBtn{background:#15803d!important}
+@media(max-width:900px){.distanceCompareGrid{grid-template-columns:1fr 1fr}}
+@media(max-width:640px){.distanceCompareGrid{grid-template-columns:1fr}}
+/* === /Admin fix_73 === */
+
 </style>
 </head>
 <body>
@@ -704,6 +717,7 @@ tr.gpsLogRowStop,tr.gpsLogRowError{background:rgba(185,28,28,.13)}
           <button id="liveAutoCenterBtn">Автоцентр: вкл</button>
           <button id="refreshNowBtn" class="secondary">Обновить сейчас</button>
           <button id="refreshLiveBtn" class="secondary">Обновить live</button>
+          <button id="openSelectedLiveBtn" class="quickLiveOpenBtn">Открыть live</button>
           <button id="btnDiag" class="secondary">Диаг</button>
           <button id="downloadDiagBtn" class="secondary">Скачать диагностику</button>
           <button id="copyNowCoordsBtn" class="secondary">Копировать координаты</button>
@@ -793,6 +807,17 @@ tr.gpsLogRowStop,tr.gpsLogRowError{background:rgba(185,28,28,.13)}
           <div class="stat"><div class="label">Стоянок</div><div class="value" id="routeStops">0</div></div>
         </div>
         <div class="notice" id="stopsNotice">Стоянки будут показаны ниже.</div>
+
+        <div id="distanceCompareBox" class="notice distanceCompareBox">
+          <strong>Сравнение пробега</strong>
+          <div class="smallMuted">Показывает разницу между сырым пробегом и чистым расчётом с фильтрацией GPS-дрейфа.</div>
+          <div class="distanceCompareGrid">
+            <div class="distanceCompareItem"><b>Чистый пробег</b><div class="distanceCompareValue" id="cleanDistanceValue">0 км</div></div>
+            <div class="distanceCompareItem"><b>Сырой пробег</b><div class="distanceCompareValue" id="rawDistanceValue">0 км</div></div>
+            <div class="distanceCompareItem"><b>Отброшено</b><div class="distanceCompareValue" id="rejectedDistanceValue">0 км</div></div>
+            <div class="distanceCompareItem"><b>Сегментов отброшено</b><div class="distanceCompareValue" id="rejectedSegmentsValue">0</div></div>
+          </div>
+        </div>
       </div>
 
       <div class="card">
@@ -10653,7 +10678,7 @@ window.addEventListener('load', ()=>{ mygpsLivePatchInstallUi(); setTimeout(()=>
 
 
 /* === Admin fix_72: update check, route filter, diagnostics, replay events, cleanup === */
-const ADMIN_FIX70_VERSION = "fix_72";
+const ADMIN_FIX70_VERSION = "fix_73";
 function fix70Qs(id){ return document.getElementById(id); }
 function fix70Esc(v){ return String(v ?? "").replace(/[&<>'"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c])); }
 function fix70Badge(text, kind="ok"){ return `<span class="postUpdateBadge ${kind}">${fix70Esc(text)}</span>`; }
@@ -10828,6 +10853,97 @@ setTimeout(fix70Install,2500);
 
 
 /* === /MyGps live view details + realtime sync final patch === */
+
+
+/* === Admin fix_73: quick live open + raw/clean distance comparison === */
+function fix73FormatKm(v){ const n=Number(v||0); return `${Number.isFinite(n)?n.toFixed(2):'0.00'} км`; }
+function fix73RawDistanceKm(points){
+  const pts = (typeof adminFix66Sorted === 'function' ? adminFix66Sorted(points||[]) : (points||[])).filter(p=>p && Number.isFinite(Number(p.latitude)) && Number.isFinite(Number(p.longitude))).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+  let meters=0;
+  for(let i=1;i<pts.length;i++){ try{ meters += distanceMeters(pts[i-1], pts[i]); }catch(e){} }
+  return meters/1000;
+}
+function fix73CleanDistanceData(points){
+  if(typeof adminFix66CleanDistance === 'function') return adminFix66CleanDistance(points||[]);
+  return {km:fix73RawDistanceKm(points||[]), meters:fix73RawDistanceKm(points||[])*1000, rejected:[]};
+}
+function fix73UpdateDistanceCompare(points){
+  const pts = points || currentFiltered || [];
+  const rawKm = fix73RawDistanceKm(pts);
+  const clean = fix73CleanDistanceData(pts);
+  const cleanKm = Number(clean.km || (clean.meters||0)/1000 || 0);
+  const rejectedKm = Math.max(0, rawKm - cleanKm);
+  const rejectedSegments = Array.isArray(clean.rejected) ? clean.rejected.length : 0;
+  if(fix70Qs('cleanDistanceValue')) fix70Qs('cleanDistanceValue').textContent = fix73FormatKm(cleanKm);
+  if(fix70Qs('rawDistanceValue')) fix70Qs('rawDistanceValue').textContent = fix73FormatKm(rawKm);
+  if(fix70Qs('rejectedDistanceValue')) fix70Qs('rejectedDistanceValue').textContent = fix73FormatKm(rejectedKm);
+  if(fix70Qs('rejectedSegmentsValue')) fix70Qs('rejectedSegmentsValue').textContent = String(rejectedSegments);
+}
+const fix73OldRenderHistory = typeof renderHistory === 'function' ? renderHistory : null;
+if(fix73OldRenderHistory){
+  renderHistory = async function(){
+    const res = await fix73OldRenderHistory.apply(this, arguments);
+    try{ fix73UpdateDistanceCompare(currentFiltered || []); }catch(e){ try{ recordError('fix73UpdateDistanceCompare', e); }catch(_){} }
+    return res;
+  };
+}
+function fix73SessionIsActive(session){
+  const meta = session?.meta || session || {};
+  const status = String(meta.status || '').toLowerCase();
+  const active = meta.active === true || status === 'active' || status === 'paused';
+  const notExpired = !Number(meta.expiresAt||0) || Number(meta.expiresAt||0) > Date.now();
+  return active && notExpired;
+}
+function fix73SessionOwner(session){ return session?.meta?.ownerUid || session?.ownerUid || ''; }
+async function fix73FindActiveLiveToken(uid){
+  const selected = uid || selectedUid || fix70Qs('userSelect')?.value || '';
+  try{
+    const ownerSnap = selected ? await get(ref(db, `liveOwners/${selected}/activeSessionId`)) : null;
+    const ownerToken = ownerSnap && ownerSnap.exists() ? String(ownerSnap.val() || '') : '';
+    if(ownerToken){
+      const sessSnap = await get(ref(db, `liveSessions/${ownerToken}`));
+      const sess = sessSnap.val();
+      if(sess && fix73SessionIsActive(sess)) return ownerToken;
+    }
+  }catch(e){}
+  try{
+    const sessions = allSessions || {};
+    const found = Object.entries(sessions).find(([token, sess]) => fix73SessionIsActive(sess) && (!selected || fix73SessionOwner(sess) === selected));
+    if(found) return found[0];
+  }catch(e){}
+  try{
+    const snap = await get(query(ref(db, 'liveSessions'), limitToLast(100)));
+    const sessions = snap.val() || {};
+    const found = Object.entries(sessions).find(([token, sess]) => fix73SessionIsActive(sess) && (!selected || fix73SessionOwner(sess) === selected));
+    if(found) return found[0];
+  }catch(e){ throw e; }
+  return '';
+}
+async function fix73OpenSelectedLive(){
+  const uid = selectedUid || fix70Qs('userSelect')?.value || '';
+  const token = await fix73FindActiveLiveToken(uid);
+  if(!token){ showToast?.('У выбранного пользователя нет активной live-ссылки', 'warn', 3600); return; }
+  const sess = (allSessions && allSessions[token]) || {};
+  const meta = sess?.meta || {};
+  const url = meta.liveUrl || meta.link || meta.url || buildShareUrl(token);
+  window.open(url, '_blank', 'noopener,noreferrer');
+}
+function fix73Install(){
+  const btn = fix70Qs('openSelectedLiveBtn');
+  if(btn && !btn.dataset.fix73){
+    btn.dataset.fix73 = '1';
+    btn.onclick = () => fix73OpenSelectedLive().catch(e=>showToast?.('Ошибка открытия live: '+(errText?.(e)||e), 'error', 4200));
+  }
+  try{ fix73UpdateDistanceCompare(currentFiltered || []); }catch(e){}
+}
+const fix73OldRenderSessions = typeof renderSessions === 'function' ? renderSessions : null;
+if(fix73OldRenderSessions){ renderSessions = function(){ const r = fix73OldRenderSessions.apply(this, arguments); try{ fix73Install(); }catch(e){} return r; }; }
+window.fix73OpenSelectedLive = fix73OpenSelectedLive;
+window.fix73UpdateDistanceCompare = fix73UpdateDistanceCompare;
+window.addEventListener('load',()=>setTimeout(fix73Install,1300));
+setTimeout(fix73Install,2600);
+/* === /Admin fix_73 === */
+
 /* === /Admin fix_72 integrated === */
 
 </script>
