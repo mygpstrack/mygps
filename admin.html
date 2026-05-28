@@ -512,7 +512,7 @@ tr.gpsLogRowStop,tr.gpsLogRowError{background:rgba(185,28,28,.13)}
 
 
 
-/* === Admin fix_73: quick live open + raw/clean distance comparison === */
+/* === Admin fix_74: quick live open + raw/clean distance comparison === */
 .distanceCompareBox{margin-top:12px;border-color:rgba(59,130,246,.28);background:rgba(37,99,235,.08)}
 .distanceCompareGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:10px}
 .distanceCompareItem{padding:12px 14px;border-radius:14px;border:1px solid var(--border);background:rgba(255,255,255,.035)}
@@ -521,7 +521,7 @@ tr.gpsLogRowStop,tr.gpsLogRowError{background:rgba(185,28,28,.13)}
 .quickLiveOpenBtn{background:#15803d!important}
 @media(max-width:900px){.distanceCompareGrid{grid-template-columns:1fr 1fr}}
 @media(max-width:640px){.distanceCompareGrid{grid-template-columns:1fr}}
-/* === /Admin fix_73 === */
+/* === /Admin fix_74 === */
 
 </style>
 </head>
@@ -673,12 +673,6 @@ tr.gpsLogRowStop,tr.gpsLogRowError{background:rgba(185,28,28,.13)}
     <div id="nowPanel">
       <div class="card">
         <h2>Сейчас</h2>
-        <div class="gpsDiagGrid" id="nowGpsDiagGrid">
-          <div class="gpsDiagCard"><b>GPS</b><span id="nowGpsDiagState">—</span></div>
-          <div class="gpsDiagCard"><b>Service</b><span id="nowGpsDiagService">—</span></div>
-          <div class="gpsDiagCard"><b>Smart GPS</b><span id="nowGpsDiagSmart">—</span></div>
-          <div class="gpsDiagCard"><b>Последний лог</b><span id="nowGpsDiagLast">—</span></div>
-        </div>
         <div class="grid4">
           <div class="stat"><div class="label">Статус</div><div class="value" id="nowStatus">Нет данных</div></div>
           <div class="stat"><div class="label">Источник</div><div class="value" id="nowSource">—</div></div>
@@ -693,22 +687,6 @@ tr.gpsLogRowStop,tr.gpsLogRowError{background:rgba(185,28,28,.13)}
           <div class="stat"><div class="label">Спутники</div> <div class="value" id="nowSatellites">—</div></div>
           <div class="stat"><div class="label">GPS качество</div> <div class="value" id="nowGpsQuality">—</div></div>
           
-        </div>
-
-        
-
-        <div class="card" style="margin-top:12px">
-          <h3>Здоровье пользователя</h3>
-          <div class="userHealthGrid">
-            <div class="healthCard"><b>Online</b><span id="userHealthOnline">—</span></div>
-            <div class="healthCard"><b>GPS / Service</b><span id="userHealthGpsService">—</span></div>
-            <div class="healthCard"><b>Smart / Sleep</b><span id="userHealthSmart">—</span></div>
-            <div class="healthCard"><b>Live</b><span id="userHealthLive">—</span></div>
-            <div class="healthCard"><b>Последняя точка</b><span id="userHealthLastPoint">—</span></div>
-            <div class="healthCard"><b>Батарея</b><span id="userHealthBattery">—</span></div>
-            <div class="healthCard"><b>Последний GPS stop</b><span id="userHealthStopReason">—</span></div>
-            <div class="healthCard"><b>Последняя геозона</b><span id="userHealthGeofence">—</span></div>
-          </div>
         </div>
 
         <div id="nowLiveWarning" class="nowLiveWarning">—</div>
@@ -10678,7 +10656,7 @@ window.addEventListener('load', ()=>{ mygpsLivePatchInstallUi(); setTimeout(()=>
 
 
 /* === Admin fix_72: update check, route filter, diagnostics, replay events, cleanup === */
-const ADMIN_FIX70_VERSION = "fix_73";
+const ADMIN_FIX70_VERSION = "fix_74";
 function fix70Qs(id){ return document.getElementById(id); }
 function fix70Esc(v){ return String(v ?? "").replace(/[&<>'"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c])); }
 function fix70Badge(text, kind="ok"){ return `<span class="postUpdateBadge ${kind}">${fix70Esc(text)}</span>`; }
@@ -10855,7 +10833,7 @@ setTimeout(fix70Install,2500);
 /* === /MyGps live view details + realtime sync final patch === */
 
 
-/* === Admin fix_73: quick live open + raw/clean distance comparison === */
+/* === Admin fix_74: quick live open + raw/clean distance comparison === */
 function fix73FormatKm(v){ const n=Number(v||0); return `${Number.isFinite(n)?n.toFixed(2):'0.00'} км`; }
 function fix73RawDistanceKm(points){
   const pts = (typeof adminFix66Sorted === 'function' ? adminFix66Sorted(points||[]) : (points||[])).filter(p=>p && Number.isFinite(Number(p.latitude)) && Number.isFinite(Number(p.longitude))).sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
@@ -10942,7 +10920,7 @@ window.fix73OpenSelectedLive = fix73OpenSelectedLive;
 window.fix73UpdateDistanceCompare = fix73UpdateDistanceCompare;
 window.addEventListener('load',()=>setTimeout(fix73Install,1300));
 setTimeout(fix73Install,2600);
-/* === /Admin fix_73 === */
+/* === /Admin fix_74 === */
 
 /* === /Admin fix_72 integrated === */
 
