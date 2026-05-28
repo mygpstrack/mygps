@@ -689,10 +689,6 @@ tr.gpsLogRowStop,tr.gpsLogRowError{background:rgba(185,28,28,.13)}
           
         </div>
 
-        <div class="adminVersionGrid" id="nowVersionsGrid">
-          <div class="adminVersionCard"><b>MyGps Android</b><span id="nowMyGpsVersion">—</span><span class="adminVersionHint" id="nowMyGpsVersionHint">по данным пользователя / live</span></div>
-          <div class="adminVersionCard"><b>MyGpsLive</b><span id="nowMyGpsLiveVersion">—</span><span class="adminVersionHint" id="nowMyGpsLiveVersionHint">по данным live-сессии</span></div>
-                  </div>
 
         <div id="nowLiveWarning" class="nowLiveWarning">—</div>
 
@@ -1367,9 +1363,7 @@ tr.gpsLogRowStop,tr.gpsLogRowError{background:rgba(185,28,28,.13)}
           <button id="downloadPostUpdateDiagBtn" class="secondary">Скачать диагностику</button>
         </div>
         <div class="postUpdateGrid">
-          <div class="postUpdateCard"><b>Admin version</b><span id="postAdminVersion">fix_76</span></div>
-          <div class="postUpdateCard"><b>MyGps Android</b><span id="postMyGpsVersion">—</span></div>
-          <div class="postUpdateCard"><b>MyGpsLive</b><span id="postMyGpsLiveVersion">—</span></div>
+          <div class="postUpdateCard"><b>Admin version</b><span id="postAdminVersion">fix_77</span></div>
           <div class="postUpdateCard"><b>Auth</b><span id="postAuthStatus">—</span></div>
           <div class="postUpdateCard"><b>Выбранный пользователь</b><span id="postSelectedUser">—</span></div>
           <div class="postUpdateCard"><b>GPS лог</b><span id="postGpsLogStatus">—</span></div>
@@ -10672,7 +10666,7 @@ window.addEventListener('load', ()=>{ mygpsLivePatchInstallUi(); setTimeout(()=>
 
 
 /* === Admin fix_72: update check, route filter, diagnostics, replay events, cleanup === */
-const ADMIN_FIX70_VERSION = "fix_75";
+const ADMIN_FIX70_VERSION = "fix_77";
 function fix70Qs(id){ return document.getElementById(id); }
 function fix70Esc(v){ return String(v ?? "").replace(/[&<>'"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c])); }
 function fix70Badge(text, kind="ok"){ return `<span class="postUpdateBadge ${kind}">${fix70Esc(text)}</span>`; }
@@ -10940,7 +10934,7 @@ setTimeout(fix73Install,2600);
 
 
 /* === Admin fix_75: app versions + safe auto-refresh in Сейчас === */
-const ADMIN_FIX75_VERSION = "fix_76";
+const ADMIN_FIX75_VERSION = "fix_77";
 let adminFix75AutoTimer = null;
 let adminFix75Refreshing = false;
 function fix75Qs(id){ return document.getElementById(id); }
