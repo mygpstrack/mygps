@@ -523,6 +523,67 @@ tr.gpsLogRowStop,tr.gpsLogRowError{background:rgba(185,28,28,.13)}
 @media(max-width:640px){.distanceCompareGrid{grid-template-columns:1fr}}
 /* === /Admin fix_74 === */
 
+
+
+/* === Admin fix_78: UI cleanup, normal/diagnostic mode, mobile compact === */
+.adminModeBar{
+  display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px;
+  padding:10px;border:1px solid var(--border);border-radius:16px;background:rgba(255,255,255,.025)
+}
+.adminModeBar button{border-radius:12px;padding:9px 12px;background:#374151}
+.adminModeBar button.active{background:#2563eb!important;box-shadow:0 8px 18px rgba(37,99,235,.22)}
+.adminModeHint{color:var(--muted);font-size:13px;line-height:1.35;margin-left:4px}
+body.admin-normal-mode .tab-btn[data-tab="alertCenterPanel"],
+body.admin-normal-mode .tab-btn[data-tab="usagePanel"],
+body.admin-normal-mode .tab-btn[data-tab="trafficPanel"],
+body.admin-normal-mode .tab-btn[data-tab="gpsLogPanel"],
+body.admin-normal-mode .tab-btn[data-tab="errorsPanel"],
+body.admin-normal-mode .tab-btn[data-tab="systemCheckPanel"],
+body.admin-normal-mode .tab-btn[data-tab="postUpdatePanel"],
+body.admin-normal-mode .tab-btn[data-tab="adminLogsPanel"]{display:none!important}
+body.admin-normal-mode #btnDiag,
+body.admin-normal-mode #downloadDiagBtn,
+body.admin-normal-mode #downloadPostUpdateDiagBtn,
+body.admin-normal-mode #rulesCheckCard,
+body.admin-normal-mode .diagnosticOnly,
+body.admin-normal-mode [data-diagnostic-only="1"]{display:none!important}
+body.admin-diagnostic-mode .adminModeHint::after{content:" Диагностика включена: доступны тревоги, GPS лог, проверки, ошибки и логи."}
+body.admin-normal-mode .adminModeHint::after{content:" Обычный режим: скрыты технические вкладки и лишняя диагностика."}
+@media (max-width:900px){
+  body.admin-mobile-compact .wrap{padding:8px;max-width:none}
+  body.admin-mobile-compact .card{border-radius:14px;padding:10px;margin-bottom:10px}
+  body.admin-mobile-compact .tabs{position:sticky;top:0;z-index:1000;background:rgba(15,23,42,.96);padding:8px 0;margin-left:-2px;margin-right:-2px;overflow-x:auto;flex-wrap:nowrap;gap:6px;scrollbar-width:none}
+  body.admin-mobile-compact .tabs::-webkit-scrollbar{display:none}
+  body.admin-mobile-compact .tab-btn{flex:0 0 auto;padding:8px 10px;font-size:13px;border-radius:999px;white-space:nowrap}
+  body.admin-mobile-compact .adminToolsRow{gap:6px;margin-top:8px}
+  body.admin-mobile-compact .adminToolsRow>.toolField{min-width:calc(50% - 6px)}
+  body.admin-mobile-compact .grid2,body.admin-mobile-compact .grid3,body.admin-mobile-compact .grid4,body.admin-mobile-compact .grid5,body.admin-mobile-compact .grid6{gap:8px;margin-top:8px}
+  body.admin-mobile-compact .stat{padding:9px;border-radius:12px;min-height:auto!important}
+  body.admin-mobile-compact .label{font-size:12px;margin-bottom:4px}
+  body.admin-mobile-compact .value{font-size:15px;line-height:1.25}
+  body.admin-mobile-compact .row,body.admin-mobile-compact .toolbar{gap:6px;margin-top:8px}
+  body.admin-mobile-compact button{padding:8px 10px;font-size:13px;border-radius:10px}
+  body.admin-mobile-compact input,body.admin-mobile-compact select,body.admin-mobile-compact textarea{padding:9px 10px;font-size:14px;border-radius:10px}
+  body.admin-mobile-compact h2{font-size:20px}
+  body.admin-mobile-compact h3{font-size:17px}
+  body.admin-mobile-compact .sub,body.admin-mobile-compact .notice{font-size:13px;line-height:1.45}
+  body.admin-mobile-compact table{font-size:12px}
+  body.admin-mobile-compact th,body.admin-mobile-compact td{padding:7px 6px}
+  body.admin-mobile-compact #historyMap,body.admin-mobile-compact #liveMap,body.admin-mobile-compact #sessionMap,body.admin-mobile-compact #geofenceMap{height:330px;margin-top:8px;border-radius:12px}
+  body.admin-mobile-compact .weatherBar{gap:8px;margin-top:8px}
+  body.admin-mobile-compact .weatherChip{min-height:54px;padding:9px 11px;border-radius:14px}
+  body.admin-mobile-compact .weatherIcon{width:34px;height:34px;font-size:22px;border-radius:11px}
+  body.admin-mobile-compact .weatherCity,body.admin-mobile-compact .weatherMeta{font-size:12px}
+  body.admin-mobile-compact .adminModeBar{position:sticky;top:44px;z-index:999;margin-top:8px;padding:8px;border-radius:14px;background:rgba(15,23,42,.96)}
+  body.admin-mobile-compact .adminModeHint{display:none}
+}
+@media (max-width:520px){
+  body.admin-mobile-compact .grid4,body.admin-mobile-compact .grid5,body.admin-mobile-compact .grid6{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  body.admin-mobile-compact .adminToolsRow>.toolField{min-width:100%}
+  body.admin-mobile-compact .distanceCompareGrid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+}
+/* === /Admin fix_78 === */
+
 </style>
 </head>
 <body>
@@ -1363,7 +1424,7 @@ tr.gpsLogRowStop,tr.gpsLogRowError{background:rgba(185,28,28,.13)}
           <button id="downloadPostUpdateDiagBtn" class="secondary">Скачать диагностику</button>
         </div>
         <div class="postUpdateGrid">
-          <div class="postUpdateCard"><b>Admin version</b><span id="postAdminVersion">fix_77</span></div>
+          <div class="postUpdateCard"><b>Admin version</b><span id="postAdminVersion">fix_78</span></div>
           <div class="postUpdateCard"><b>Auth</b><span id="postAuthStatus">—</span></div>
           <div class="postUpdateCard"><b>Выбранный пользователь</b><span id="postSelectedUser">—</span></div>
           <div class="postUpdateCard"><b>GPS лог</b><span id="postGpsLogStatus">—</span></div>
@@ -10666,7 +10727,7 @@ window.addEventListener('load', ()=>{ mygpsLivePatchInstallUi(); setTimeout(()=>
 
 
 /* === Admin fix_72: update check, route filter, diagnostics, replay events, cleanup === */
-const ADMIN_FIX70_VERSION = "fix_77";
+const ADMIN_FIX70_VERSION = "fix_78";
 function fix70Qs(id){ return document.getElementById(id); }
 function fix70Esc(v){ return String(v ?? "").replace(/[&<>'"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c])); }
 function fix70Badge(text, kind="ok"){ return `<span class="postUpdateBadge ${kind}">${fix70Esc(text)}</span>`; }
@@ -10934,7 +10995,7 @@ setTimeout(fix73Install,2600);
 
 
 /* === Admin fix_75: app versions + safe auto-refresh in Сейчас === */
-const ADMIN_FIX75_VERSION = "fix_77";
+const ADMIN_FIX75_VERSION = "fix_78";
 let adminFix75AutoTimer = null;
 let adminFix75Refreshing = false;
 function fix75Qs(id){ return document.getElementById(id); }
@@ -11168,5 +11229,108 @@ setTimeout(fix75Install,2800);
 
 
 </script>
+
+
+
+<!-- === Admin fix_78: UI cleanup, normal/diagnostic mode, mobile compact === -->
+<script>
+(function(){
+  const DIAG_TABS = new Set(['alertCenterPanel','usagePanel','trafficPanel','gpsLogPanel','errorsPanel','systemCheckPanel','postUpdatePanel','adminLogsPanel']);
+  const MAIN_TABS = new Set(['nowPanel','historyPanel','reportsPanel','sessionsPanel','usersPanel','visibilityPanel','geofencesPanel','journalPanel','settingsPanel']);
+  const MODE_KEY = 'mygps_admin_ui_mode';
+  const MOBILE_KEY = 'mygps_admin_mobile_compact';
+
+  function qs(s){ return document.querySelector(s); }
+  function qsa(s){ return Array.from(document.querySelectorAll(s)); }
+  function isMobile(){ return window.matchMedia && window.matchMedia('(max-width: 900px)').matches; }
+  function currentMode(){ return localStorage.getItem(MODE_KEY) === 'diagnostic' ? 'diagnostic' : 'normal'; }
+  function mobileCompactEnabled(){ const v = localStorage.getItem(MOBILE_KEY); return v === null ? true : v === '1'; }
+
+  function clickTab(id){
+    const btn = qs(`.tab-btn[data-tab="${id}"]`);
+    if(btn){ btn.click(); return true; }
+    qsa('#alertCenterPanel,#nowPanel,#historyPanel,#reportsPanel,#usagePanel,#trafficPanel,#sessionsPanel,#usersPanel,#visibilityPanel,#geofencesPanel,#journalPanel,#gpsLogPanel,#errorsPanel,#systemCheckPanel,#postUpdatePanel,#adminLogsPanel,#settingsPanel')
+      .forEach(p => p.classList.toggle('hidden', p.id !== id));
+    qsa('.tab-btn[data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === id));
+    return false;
+  }
+
+  function visibleTabId(){
+    const active = qs('.tab-btn.active[data-tab]');
+    return active ? active.dataset.tab : 'nowPanel';
+  }
+
+  function ensureBar(){
+    const tabs = qs('.tabs');
+    if(!tabs || qs('#adminModeBar')) return;
+    const bar = document.createElement('div');
+    bar.id = 'adminModeBar';
+    bar.className = 'adminModeBar';
+    bar.innerHTML = `
+      <button id="adminNormalModeBtn" type="button">Обычный режим</button>
+      <button id="adminDiagnosticModeBtn" type="button">Диагностика</button>
+      <button id="adminMobileCompactBtn" type="button">Компактно: авто</button>
+      <span class="adminModeHint"></span>
+    `;
+    tabs.parentNode.insertBefore(bar, tabs);
+    qs('#adminNormalModeBtn')?.addEventListener('click', () => { localStorage.setItem(MODE_KEY, 'normal'); applyMode('normal', true); });
+    qs('#adminDiagnosticModeBtn')?.addEventListener('click', () => { localStorage.setItem(MODE_KEY, 'diagnostic'); applyMode('diagnostic', false); });
+    qs('#adminMobileCompactBtn')?.addEventListener('click', () => {
+      localStorage.setItem(MOBILE_KEY, mobileCompactEnabled() ? '0' : '1');
+      applyMobileCompact();
+    });
+  }
+
+  function applyMode(mode, forceSafeTab){
+    document.body.classList.toggle('admin-normal-mode', mode !== 'diagnostic');
+    document.body.classList.toggle('admin-diagnostic-mode', mode === 'diagnostic');
+    qs('#adminNormalModeBtn')?.classList.toggle('active', mode !== 'diagnostic');
+    qs('#adminDiagnosticModeBtn')?.classList.toggle('active', mode === 'diagnostic');
+
+    const active = visibleTabId();
+    if((forceSafeTab || mode !== 'diagnostic') && DIAG_TABS.has(active)){
+      setTimeout(() => clickTab('nowPanel'), 20);
+    }
+  }
+
+  function applyMobileCompact(){
+    const enabled = mobileCompactEnabled();
+    document.body.classList.toggle('admin-mobile-compact', enabled);
+    const btn = qs('#adminMobileCompactBtn');
+    if(btn){
+      btn.classList.toggle('active', enabled && isMobile());
+      btn.textContent = enabled ? (isMobile() ? 'Компактно: вкл' : 'Компактно: авто') : 'Компактно: выкл';
+    }
+  }
+
+  function markDiagnosticButtons(){
+    ['btnDiag','downloadDiagBtn','downloadPostUpdateDiagBtn'].forEach(id => {
+      const el = document.getElementById(id);
+      if(el) el.setAttribute('data-diagnostic-only','1');
+    });
+  }
+
+  function install(){
+    ensureBar();
+    markDiagnosticButtons();
+    applyMode(currentMode(), false);
+    applyMobileCompact();
+  }
+
+  document.addEventListener('DOMContentLoaded', install);
+  window.addEventListener('load', () => setTimeout(install, 500));
+  window.addEventListener('resize', applyMobileCompact);
+  document.addEventListener('click', ev => {
+    const btn = ev.target && ev.target.closest ? ev.target.closest('.tab-btn[data-tab]') : null;
+    if(!btn) return;
+    if(currentMode() !== 'diagnostic' && DIAG_TABS.has(btn.dataset.tab)){
+      ev.preventDefault(); ev.stopPropagation();
+      setTimeout(() => clickTab('nowPanel'), 0);
+    }
+  }, true);
+  setTimeout(install, 1500);
+})();
+</script>
+<!-- === /Admin fix_78 === -->
 
 </body></html>
