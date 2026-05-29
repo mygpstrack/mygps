@@ -1555,7 +1555,7 @@ body.admin-readonly-mode textarea.adminWriteDisabled{opacity:.45!important;curso
           <button id="downloadPostUpdateDiagBtn" class="secondary">Скачать диагностику</button>
         </div>
         <div class="postUpdateGrid">
-          <div class="postUpdateCard"><b>Admin version</b><span id="postAdminVersion">fix_97</span></div>
+          <div class="postUpdateCard"><b>Admin version</b><span id="postAdminVersion">fix_98</span></div>
           <div class="postUpdateCard"><b>Auth</b><span id="postAuthStatus">—</span></div>
           <div class="postUpdateCard"><b>Выбранный пользователь</b><span id="postSelectedUser">—</span></div>
           <div class="postUpdateCard"><b>GPS лог</b><span id="postGpsLogStatus">—</span></div>
@@ -2197,7 +2197,7 @@ setInterval(() => {
 
 const db = getDatabase(app);
 
-// === Traffic optimization fix_97 ===
+// === Traffic optimization fix_98 ===
 const ADMIN_HISTORY_DEFAULT_LIMIT_NOTE = "История загружается только для выбранного пользователя и выбранного периода.";
 const ADMIN_GPS_LOG_LIMIT = 100;
 const ADMIN_ADMIN_LOG_LIMIT = 200;
@@ -3629,7 +3629,7 @@ document.querySelectorAll(".tab-btn").forEach(btn=>{
     if(btn.dataset.tab === "historyPanel") { showTrafficLoadHint("История не обновляется автоматически: нажми Обновить историю."); }
     if(btn.dataset.tab === "journalPanel") window.loadLimitedEvents?.().catch(e=>recordError("loadLimitedEvents", e));
     if(btn.dataset.tab === "visibilityPanel") renderVisibilityPanel();
-    if(btn.dataset.tab === "systemCheckPanel") { /* traffic fix_97: system check only by button */ }
+    if(btn.dataset.tab === "systemCheckPanel") { /* traffic fix_98: system check only by button */ }
     setTimeout(()=>{ historyMap.invalidateSize(); liveMap.invalidateSize(); sessionMap.invalidateSize(); geofenceMap.invalidateSize(); speedChart?.resize(); distanceChart?.resize(); },50);
   };
 });
@@ -4531,7 +4531,7 @@ async function loadUsers(){
     try{ scheduleHeaderWeatherFromLastPoint(); }catch(e){}
 }
 
-// fix_97: lightweight users autoload safety.
+// fix_98: lightweight users autoload safety.
 // Keeps all existing admin features intact, but retries users list after page refresh
 // when Firebase/Auth timing leaves the selector empty. Heavy tabs are not loaded here.
 let __fix97UsersAutoloadTimer = null;
@@ -4553,7 +4553,7 @@ async function fix97EnsureUsersLoaded(reason = "startup"){
 }
 function fix97ScheduleUsersAutoload(){
   if(__fix97UsersAutoloadTimer) clearTimeout(__fix97UsersAutoloadTimer);
-  const delays = [250, 900, 1800, 3500];
+  const delays = [250, 900, 1800, 3500, 6500, 10000];
   delays.forEach((ms, idx) => {
     setTimeout(() => fix97EnsureUsersLoaded(`retry_${idx+1}`), ms);
   });
@@ -4657,7 +4657,7 @@ function notifyLiveGpsProfileChanges(liveSnapshot){
 }
 
 async function loadAllData(){
-  // Traffic optimization fix_97:
+  // Traffic optimization fix_98:
   // Do not download the whole /history tree. Load only selected user's history
   // inside selected date/time range using timestamp index.
   const [liveSnap, usersSnap] = await Promise.all([
@@ -8018,7 +8018,7 @@ onAuthStateChanged(auth, async user => {
     renderJournal();
     updateNowFromAvailableSources();
   });
-  // Traffic optimization fix_97: do not attach realtime listener to whole /history.
+  // Traffic optimization fix_98: do not attach realtime listener to whole /history.
   // History is loaded manually for selected user + selected period by loadAllData().
   trackedOnValue(query(ref(db, "liveSessions"), limitToLast(ADMIN_SESSIONS_LIMIT)), snap => { allSessions=snap.val()||{}; updateUsage(); renderSessions(); updateActiveSessionToast(); updateNowFromAvailableSources(); });
   trackedOnValue(query(ref(db, "adminLogs/deletions"), limitToLast(ADMIN_ADMIN_LOG_LIMIT)), snap => { deletionsLog=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0)); renderJournal(); });
@@ -8045,7 +8045,7 @@ onAuthStateChanged(auth, async user => {
     appEventLogs = [...androidEventLogs, ...legacyEventJournalLogs].sort((a,b)=>Number(b.ts||0)-Number(a.ts||0));
     renderJournal();
   }
-  // Traffic optimization fix_97: events/eventJournal are loaded only when Journal/Timeline is opened manually.
+  // Traffic optimization fix_98: events/eventJournal are loaded only when Journal/Timeline is opened manually.
   // window.loadLimitedEvents?.().catch(e=>recordError("loadLimitedEvents", e));
 
   await loadAdminSettings();
@@ -8054,7 +8054,22 @@ onAuthStateChanged(auth, async user => {
   fix97ScheduleUsersAutoload?.();
   restoreUiState();
   await loadStartupLight();
-  // Traffic optimization fix_97: sessions/backups/history/reports load only by opening tab or pressing refresh.
+
+  // fix_98: final users autoload after startup-light.
+  // loadStartupLight/restoreUiState can run after the first loadUsers call; run one more
+  // lightweight users refresh here so the selector is populated without pressing
+  // “Обновить пользователей”. Heavy history/reports/logs remain manual.
+  try{
+    await loadUsers();
+    renderUserSelect?.();
+    renderUsersManagement?.();
+    renderVisibilityPanel?.();
+    await updateNowFromAvailableSources?.();
+  }catch(e){
+    recordError?.("fix_98_final_loadUsers", e);
+  }
+
+  // Traffic optimization fix_98: sessions/backups/history/reports load only by opening tab or pressing refresh.
   // await loadSessions();
   // await renderBackups();
   // Low traffic: automatic full backup disabled on open; use Backup button manually.
@@ -8907,7 +8922,7 @@ setTimeout(() => {
     }
   }catch(e){}
 
-  // fix_97: users list must always be allowed to load after page refresh.
+  // fix_98: users list must always be allowed to load after page refresh.
   // Heavy history/reports/logs are still guarded, but loadUsers is lightweight and required for admin UI.
 }, 1000);
 
@@ -11329,7 +11344,7 @@ function mygpsLivePatchEscape(value){
   try{ return escapeHtml(value); }catch(e){ return String(value ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;'); }
 }
 function mygpsLivePatchInstallUi(){
-  // fix_97: блок “Открытия активной live-ссылки” убран из вкладки Live-сессии.
+  // fix_98: блок “Открытия активной live-ссылки” убран из вкладки Live-сессии.
   const old=document.getElementById('liveViewDetailsCard');
   if(old) old.remove();
 }
@@ -11366,7 +11381,7 @@ function mygpsLivePatchActiveEntry(){
   }catch(e){return null;}
 }
 function mygpsLivePatchRenderDetails(entry){
-  // fix_97: отдельная карточка с открытиями/IP больше не отображается.
+  // fix_98: отдельная карточка с открытиями/IP больше не отображается.
   const old=document.getElementById('liveViewDetailsCard');
   if(old) old.remove();
 }
@@ -11462,7 +11477,7 @@ window.addEventListener('load', ()=>{ mygpsLivePatchInstallUi(); setTimeout(()=>
 
 
 /* === Admin fix_72: update check, route filter, diagnostics, replay events, cleanup === */
-const ADMIN_FIX70_VERSION = "fix_97";
+const ADMIN_FIX70_VERSION = "fix_98";
 function fix70Qs(id){ return document.getElementById(id); }
 function fix70Esc(v){ return String(v ?? "").replace(/[&<>'"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c])); }
 function fix70Badge(text, kind="ok"){ return `<span class="postUpdateBadge ${kind}">${fix70Esc(text)}</span>`; }
@@ -11730,7 +11745,7 @@ setTimeout(fix73Install,2600);
 
 
 /* === Admin fix_75: app versions + safe auto-refresh in Сейчас === */
-const ADMIN_FIX75_VERSION = "fix_97";
+const ADMIN_FIX75_VERSION = "fix_98";
 let adminFix75AutoTimer = null;
 let adminFix75Refreshing = false;
 function fix75Qs(id){ return document.getElementById(id); }
@@ -11881,7 +11896,7 @@ setTimeout(fix75Install,2800);
 
 
 /* === Admin fix_79: alert hints, selected user check, live garbage, stops list, clean exports === */
-const ADMIN_FIX79_VERSION = "fix_97";
+const ADMIN_FIX79_VERSION = "fix_98";
 function fix79Esc(v){ return String(v ?? "").replace(/[&<>'"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[ch])); }
 function fix79Ts(v){ const n=Number(v||0); return Number.isFinite(n) && n>0 ? n : 0; }
 function fix79PointLat(p){ return Number(p?.latitude ?? p?.lat); }
@@ -12129,7 +12144,7 @@ setTimeout(fix79Install,2500);
 
 
 /* === Admin fix_87: history search, improved stops, problem layers === */
-const ADMIN_FIX80_VERSION = "fix_97";
+const ADMIN_FIX80_VERSION = "fix_98";
 let fix80ProblemLayer = null;
 let fix80StopCircleLayer = null;
 let fix80SearchMarker = null;
@@ -12268,7 +12283,7 @@ setTimeout(fix80Install,2800);
 
 
 /* === Admin fix_87: saved map settings === */
-const ADMIN_FIX83_VERSION = "fix_97";
+const ADMIN_FIX83_VERSION = "fix_98";
 const ADMIN_FIX83_MAP_KEY = "mygps_admin_map_settings";
 function fix83Qs(id){ return document.getElementById(id); }
 function fix83ReadMapSettings(){
@@ -12459,7 +12474,7 @@ function fix83InitMapSettings(){
     fix83BindMapSettings();
     fix83HookExistingMapControls();
     fix83ApplyMapSettings({render:false, move:true});
-    const v=fix83Qs("postUpdateAdminVersion"); if(v) v.textContent="fix_97";
+    const v=fix83Qs("postUpdateAdminVersion"); if(v) v.textContent="fix_98";
   }catch(e){ console.warn("fix83InitMapSettings", e); }
 }
 setTimeout(fix83InitMapSettings, 350);
@@ -12628,7 +12643,7 @@ async function auditAdminButton(btn, actionStatus = 'clicked'){
       buttonId: id || null,
       panel: adminFix87ActivePanel(),
       selectedUid: selectedUid || null,
-      source: 'admin_fix_97'
+      source: 'admin_fix_98'
     });
   }catch(e){
     console.warn('auditAdminButton error', e);
@@ -12770,7 +12785,7 @@ window.applyReadOnlyMode = applyReadOnlyMode;
 
 
 <script>
-// === Admin fix_97: reports are manual to save Firebase traffic ===
+// === Admin fix_98: reports are manual to save Firebase traffic ===
 (function(){
   function q(id){ return document.getElementById(id); }
   function setReportsStatus(text){ const el=q('reportsStatus'); if(el) el.textContent = text || 'Отчёты'; }
@@ -12823,7 +12838,7 @@ window.applyReadOnlyMode = applyReadOnlyMode;
     clearReportsUi('Нажми «Обновить отчёты»');
   });
 })();
-// === /Admin fix_97 ===
+// === /Admin fix_98 ===
 </script>
 
 </body></html>
