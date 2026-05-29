@@ -851,6 +851,7 @@ body.admin-readonly-mode textarea.adminWriteDisabled{opacity:.45!important;curso
           <button id="workdayBtn" class="secondary">Рабочий день</button>
           <button id="refreshHistoryBtn">Обновить историю</button>
         </div>
+        <div id="historyTrafficNotice" class="notice smallMuted">История загружается только вручную. Для экономии трафика по умолчанию используй короткий период: 15 мин / 30 мин / 1–2 часа.</div>
         <div class="row">
           <input id="maxAccuracyFilter" type="number" min="0" step="0.01" placeholder="Макс. accuracy, м"/>
           <input id="minSpeedFilter" type="number" min="0" step="0.1" placeholder="Скорость от, км/ч"/>
@@ -1555,7 +1556,7 @@ body.admin-readonly-mode textarea.adminWriteDisabled{opacity:.45!important;curso
           <button id="downloadPostUpdateDiagBtn" class="secondary">Скачать диагностику</button>
         </div>
         <div class="postUpdateGrid">
-          <div class="postUpdateCard"><b>Admin version</b><span id="postAdminVersion">fix_99</span></div>
+          <div class="postUpdateCard"><b>Admin version</b><span id="postAdminVersion">fix_101</span></div>
           <div class="postUpdateCard"><b>Auth</b><span id="postAuthStatus">—</span></div>
           <div class="postUpdateCard"><b>Выбранный пользователь</b><span id="postSelectedUser">—</span></div>
           <div class="postUpdateCard"><b>GPS лог</b><span id="postGpsLogStatus">—</span></div>
@@ -2197,7 +2198,7 @@ setInterval(() => {
 
 const db = getDatabase(app);
 
-// === Traffic optimization fix_99 ===
+// === Traffic optimization fix_101 ===
 const ADMIN_HISTORY_DEFAULT_LIMIT_NOTE = "История загружается только для выбранного пользователя и выбранного периода.";
 const ADMIN_GPS_LOG_LIMIT = 100;
 const ADMIN_ADMIN_LOG_LIMIT = 200;
@@ -2501,6 +2502,35 @@ let eventJournalSeenNotifyKeys = new Set();
 let liveGpsProfileNotifyInitialized = false;
 let liveGpsProfileSignatures = {};
 let historyLoaded = false;
+
+// fix_101: low-traffic history guard
+const HISTORY_LOW_TRAFFIC_MAX_POINTS = 3000;
+const HISTORY_LOW_TRAFFIC_WARN_MS = 24 * 60 * 60 * 1000;
+let historyLargeRangeConfirmedUntil = 0;
+
+function setHistoryTrafficNotice(text, tone = "info"){
+  const el = qs("historyTrafficNotice");
+  if(!el) return;
+  el.textContent = text || "";
+  el.classList.remove("error");
+  if(tone === "warn" || tone === "error") el.classList.add("error");
+}
+
+function currentHistoryRangeMs(){
+  const from = parseDateTime(qs("fromDate")?.value, qs("fromHour")?.value, qs("fromMinute")?.value) || 0;
+  const to = parseDateTime(qs("toDate")?.value, qs("toHour")?.value, qs("toMinute")?.value) || Date.now();
+  return { from, to, ms: Math.max(0, to - from) };
+}
+
+function warnLargeHistoryRangeIfNeeded(){
+  const r = currentHistoryRangeMs();
+  if(r.ms <= HISTORY_LOW_TRAFFIC_WARN_MS) return true;
+  if(Date.now() < historyLargeRangeConfirmedUntil) return true;
+  const hours = Math.round(r.ms / 36e5);
+  const ok = confirm(`Выбран большой период истории: примерно ${hours} ч. Это может скачать много Firebase данных.\n\nПродолжить загрузку?`);
+  if(ok) historyLargeRangeConfirmedUntil = Date.now() + 60 * 1000;
+  return ok;
+}
 let eventsLoaded = false;
 const ADMIN_HISTORY_LIMIT_PER_USER = 500;
 const ADMIN_EVENTS_LIMIT_PER_USER = 120;
@@ -3510,7 +3540,7 @@ function setDateTimeRange(start,end){
   qs("toHour").value = String(end.getHours()).padStart(2,"0");
   qs("toMinute").value = String(end.getMinutes()).padStart(2,"0");
 }
-function setDefaultPeriodToday(){ const now=new Date(), start=new Date(); start.setHours(0,0,0,0); setDateTimeRange(start,now); }
+function setDefaultPeriodToday(){ const now=new Date(), start=new Date(Date.now()-2*60*60*1000); setDateTimeRange(start,now); setQuickRangeActive?.("range2hBtn"); }
 
 
 
@@ -3636,7 +3666,7 @@ document.querySelectorAll(".tab-btn").forEach(btn=>{
     if(btn.dataset.tab === "historyPanel") { showTrafficLoadHint("История не обновляется автоматически: нажми Обновить историю."); }
     if(btn.dataset.tab === "journalPanel") window.loadLimitedEvents?.().catch(e=>recordError("loadLimitedEvents", e));
     if(btn.dataset.tab === "visibilityPanel") renderVisibilityPanel();
-    if(btn.dataset.tab === "systemCheckPanel") { /* traffic fix_99: system check only by button */ }
+    if(btn.dataset.tab === "systemCheckPanel") { /* traffic fix_101: system check only by button */ }
     setTimeout(()=>{ historyMap.invalidateSize(); liveMap.invalidateSize(); sessionMap.invalidateSize(); geofenceMap.invalidateSize(); speedChart?.resize(); distanceChart?.resize(); },50);
   };
 });
@@ -4538,7 +4568,7 @@ async function loadUsers(){
     try{ scheduleHeaderWeatherFromLastPoint(); }catch(e){}
 }
 
-// fix_99: lightweight users autoload safety.
+// fix_101: lightweight users autoload safety.
 // Keeps all existing admin features intact, but retries users list after page refresh
 // when Firebase/Auth timing leaves the selector empty. Heavy tabs are not loaded here.
 let __fix97UsersAutoloadTimer = null;
@@ -4664,7 +4694,7 @@ function notifyLiveGpsProfileChanges(liveSnapshot){
 }
 
 async function loadAllData(){
-  // Traffic optimization fix_99:
+  // Traffic optimization fix_101:
   // Do not download the whole /history tree. Load only selected user's history
   // inside selected date/time range using timestamp index.
   const [liveSnap, usersSnap] = await Promise.all([
@@ -4691,11 +4721,28 @@ async function loadAllData(){
     const from = parseDateTime(qs("fromDate")?.value, qs("fromHour")?.value, qs("fromMinute")?.value) || 0;
     const to = parseDateTime(qs("toDate")?.value, qs("toHour")?.value, qs("toMinute")?.value) || Date.now();
     try{
-      const histQuery = query(ref(db, `history/${selectedUid}`), orderByChild("timestamp"), startAt(from), endAt(to));
+      if(!warnLargeHistoryRangeIfNeeded()){
+        setHistoryTrafficNotice("Загрузка истории отменена: выбран слишком большой период.", "warn");
+        return;
+      }
+      const histQuery = query(
+        ref(db, `history/${selectedUid}`),
+        orderByChild("timestamp"),
+        startAt(from),
+        endAt(to),
+        limitToLast(HISTORY_LOW_TRAFFIC_MAX_POINTS)
+      );
       const historySnap = await get(histQuery);
-      historyByUid[selectedUid] = Object.values(historySnap.val() || {})
+      const loadedPoints = Object.values(historySnap.val() || {})
         .filter(Boolean)
         .sort((a,b)=>Number(a.timestamp||0)-Number(b.timestamp||0));
+      historyByUid[selectedUid] = loadedPoints;
+      const periodHours = Math.max(0, Math.round((to - from) / 36e5));
+      if(loadedPoints.length >= HISTORY_LOW_TRAFFIC_MAX_POINTS){
+        setHistoryTrafficNotice(`История: загружен лимит ${loadedPoints.length} точек за выбранный период (${periodHours} ч). Для полного маршрута сократи период или выбери короткий диапазон.`, "warn");
+      }else{
+        setHistoryTrafficNotice(`История: загружено ${loadedPoints.length} точек за выбранный период (${periodHours} ч). Лимит защиты: ${HISTORY_LOW_TRAFFIC_MAX_POINTS}.`, "info");
+      }
     }catch(e){
       recordError("loadSelectedHistoryRange", e);
       historyByUid[selectedUid] = [];
@@ -6064,11 +6111,12 @@ function setupAutoRefresh(){
   if(sec > 0){
     autoRefreshTimer = setInterval(async()=>{
       try{
-        await loadAllData();
-        await loadSessions();
-    updateActiveSessionNotice();
+        // fix_101: auto-refresh must stay lightweight.
+        // Do not load history/reports/sessions automatically.
+        await updateNowFromAvailableSources();
+        updateActiveSessionNotice?.();
       }catch(e){ recordError("autoRefresh", e); }
-    }, sec*1000);
+    }, Math.max(30, sec)*1000);
   }
 }
 function updateUsageBars(){
@@ -7733,7 +7781,7 @@ if (qs("eveningBtn")) qs("eveningBtn").onclick = ()=>{ const now=new Date(), sta
 if (qs("workdayBtn")) qs("workdayBtn").onclick = ()=>{ const now=new Date(), start=new Date(); start.setHours(9,0,0,0); const end=new Date(); end.setHours(18,0,0,0); if(end>now) end.setTime(now.getTime()); setDateTimeRange(start,end); setQuickRangeActive("workdayBtn"); renderHistory(); };
 if (qs("applyFiltersBtn")) qs("applyFiltersBtn").onclick = renderHistory;
 if (qs("resetFiltersBtn")) qs("resetFiltersBtn").onclick = ()=>{ qs("maxAccuracyFilter").value=""; qs("minSpeedFilter").value=""; qs("maxSpeedFilter").value=""; qs("hideJunkToggle").checked=false; if(qs("hideStopsToggle")) qs("hideStopsToggle").checked=false; if(qs("onlyMoveToggle")) qs("onlyMoveToggle").checked=false; clearQuickRangeActive(); renderHistory(); };
-if (qs("refreshHistoryBtn")) qs("refreshHistoryBtn").onclick = async()=>{ await loadAllData(); showToast(`История обновлена: ${historyByUid[selectedUid]?.length || 0} точек`,"success"); };
+if (qs("refreshHistoryBtn")) qs("refreshHistoryBtn").onclick = async()=>{ allowNextHeavyLoad?.("history"); await loadAllData(); showToast(`История обновлена: ${historyByUid[selectedUid]?.length || 0} точек`,"success"); };
 if (qs("fitRouteBtn")) qs("fitRouteBtn").onclick = ()=>{ historyMapAutoFit = true; const pts=getHistoryMapPointsFromCurrent().filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[Number(p.latitude),Number(p.longitude)]); if(pts.length){ suppressHistoryMapInteraction = true; historyMap.fitBounds(L.latLngBounds(pts), {padding:[30,30]}); setTimeout(()=>{ suppressHistoryMapInteraction = false; }, 300); } };
 if (qs("clearSelectedPointsBtn")) qs("clearSelectedPointsBtn").onclick = async()=>{ document.querySelectorAll(".historyPointCheckbox").forEach(cb=>cb.checked=false); if(qs("selectAllHistoryPoints")) qs("selectAllHistoryPoints").checked=false; await refreshHistoryMapFromCurrentSelection(); showToast("Выделение снято","info"); };
 qs("deleteSelectedPointsBtn").onclick=async()=>{
@@ -8028,7 +8076,7 @@ onAuthStateChanged(auth, async user => {
     renderJournal();
     updateNowFromAvailableSources();
   });
-  // Traffic optimization fix_99: do not attach realtime listener to whole /history.
+  // Traffic optimization fix_101: do not attach realtime listener to whole /history.
   // History is loaded manually for selected user + selected period by loadAllData().
   trackedOnValue(query(ref(db, "liveSessions"), limitToLast(ADMIN_SESSIONS_LIMIT)), snap => { allSessions=snap.val()||{}; updateUsage(); renderSessions(); updateActiveSessionToast(); updateNowFromAvailableSources(); });
   trackedOnValue(query(ref(db, "adminLogs/deletions"), limitToLast(ADMIN_ADMIN_LOG_LIMIT)), snap => { deletionsLog=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0)); renderJournal(); });
@@ -8055,7 +8103,7 @@ onAuthStateChanged(auth, async user => {
     appEventLogs = [...androidEventLogs, ...legacyEventJournalLogs].sort((a,b)=>Number(b.ts||0)-Number(a.ts||0));
     renderJournal();
   }
-  // Traffic optimization fix_99: events/eventJournal are loaded only when Journal/Timeline is opened manually.
+  // Traffic optimization fix_101: events/eventJournal are loaded only when Journal/Timeline is opened manually.
   // window.loadLimitedEvents?.().catch(e=>recordError("loadLimitedEvents", e));
 
   await loadAdminSettings();
@@ -8065,7 +8113,7 @@ onAuthStateChanged(auth, async user => {
   restoreUiState();
   await loadStartupLight();
 
-  // fix_99: final users autoload after startup-light.
+  // fix_101: final users autoload after startup-light.
   // loadStartupLight/restoreUiState can run after the first loadUsers call; run one more
   // lightweight users refresh here so the selector is populated without pressing
   // “Обновить пользователей”. Heavy history/reports/logs remain manual.
@@ -8076,10 +8124,10 @@ onAuthStateChanged(auth, async user => {
     renderVisibilityPanel?.();
     await updateNowFromAvailableSources?.();
   }catch(e){
-    recordError?.("fix_99_final_loadUsers", e);
+    recordError?.("fix_101_final_loadUsers", e);
   }
 
-  // Traffic optimization fix_99: sessions/backups/history/reports load only by opening tab or pressing refresh.
+  // Traffic optimization fix_101: sessions/backups/history/reports load only by opening tab or pressing refresh.
   // await loadSessions();
   // await renderBackups();
   // Low traffic: automatic full backup disabled on open; use Backup button manually.
@@ -8680,9 +8728,9 @@ function refreshVisibleTabLight(){
         if(typeof refreshLive === "function") refreshLive();
       }else if(tab === "sessionsPanel" && typeof loadSessions === "function"){
         loadSessions();
-      }else if(tab === "historyPanel" && typeof loadHistory === "function"){
-        // History is heavy: only reload if user is actually on the tab.
-        loadHistory();
+      }else if(tab === "historyPanel"){
+        // fix_101: history is heavy; never auto-load on focus/tab. Use “Обновить историю”.
+        setHistoryTrafficNotice?.("История не загружается автоматически. Нажми «Обновить историю» для выбранного периода.", "info");
       }else if(tab === "journalPanel" && typeof loadJournal === "function"){
         loadJournal();
       }else if(tab === "adminLogsPanel" && typeof adminLogsLoad === "function"){
@@ -8777,7 +8825,7 @@ function refreshVisibleTabThrottled(){
     });
   }else if(tab === "historyPanel"){
     scheduleAdminRefresh("historyPanel", 30000, () => {
-      if(typeof loadHistory === "function") loadHistory();
+      setHistoryTrafficNotice?.("История не автообновляется для экономии Firebase. Нажми «Обновить историю».", "info");
     });
   }else if(tab === "journalPanel"){
     scheduleAdminRefresh("journalPanel", 30000, () => {
@@ -8932,7 +8980,7 @@ setTimeout(() => {
     }
   }catch(e){}
 
-  // fix_99: users list must always be allowed to load after page refresh.
+  // fix_101: users list must always be allowed to load after page refresh.
   // Heavy history/reports/logs are still guarded, but loadUsers is lightweight and required for admin UI.
 }, 1000);
 
@@ -11354,7 +11402,7 @@ function mygpsLivePatchEscape(value){
   try{ return escapeHtml(value); }catch(e){ return String(value ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;'); }
 }
 function mygpsLivePatchInstallUi(){
-  // fix_99: блок “Открытия активной live-ссылки” убран из вкладки Live-сессии.
+  // fix_101: блок “Открытия активной live-ссылки” убран из вкладки Live-сессии.
   const old=document.getElementById('liveViewDetailsCard');
   if(old) old.remove();
 }
@@ -11391,7 +11439,7 @@ function mygpsLivePatchActiveEntry(){
   }catch(e){return null;}
 }
 function mygpsLivePatchRenderDetails(entry){
-  // fix_99: отдельная карточка с открытиями/IP больше не отображается.
+  // fix_101: отдельная карточка с открытиями/IP больше не отображается.
   const old=document.getElementById('liveViewDetailsCard');
   if(old) old.remove();
 }
@@ -11487,7 +11535,7 @@ window.addEventListener('load', ()=>{ mygpsLivePatchInstallUi(); setTimeout(()=>
 
 
 /* === Admin fix_72: update check, route filter, diagnostics, replay events, cleanup === */
-const ADMIN_FIX70_VERSION = "fix_99";
+const ADMIN_FIX70_VERSION = "fix_101";
 function fix70Qs(id){ return document.getElementById(id); }
 function fix70Esc(v){ return String(v ?? "").replace(/[&<>'"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c])); }
 function fix70Badge(text, kind="ok"){ return `<span class="postUpdateBadge ${kind}">${fix70Esc(text)}</span>`; }
@@ -11755,7 +11803,7 @@ setTimeout(fix73Install,2600);
 
 
 /* === Admin fix_75: app versions + safe auto-refresh in Сейчас === */
-const ADMIN_FIX75_VERSION = "fix_99";
+const ADMIN_FIX75_VERSION = "fix_101";
 let adminFix75AutoTimer = null;
 let adminFix75Refreshing = false;
 function fix75Qs(id){ return document.getElementById(id); }
@@ -11908,7 +11956,7 @@ setTimeout(fix75Install,2800);
 
 
 /* === Admin fix_79: alert hints, selected user check, live garbage, stops list, clean exports === */
-const ADMIN_FIX79_VERSION = "fix_99";
+const ADMIN_FIX79_VERSION = "fix_101";
 function fix79Esc(v){ return String(v ?? "").replace(/[&<>'"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[ch])); }
 function fix79Ts(v){ const n=Number(v||0); return Number.isFinite(n) && n>0 ? n : 0; }
 function fix79PointLat(p){ return Number(p?.latitude ?? p?.lat); }
@@ -12156,7 +12204,7 @@ setTimeout(fix79Install,2500);
 
 
 /* === Admin fix_87: history search, improved stops, problem layers === */
-const ADMIN_FIX80_VERSION = "fix_99";
+const ADMIN_FIX80_VERSION = "fix_101";
 let fix80ProblemLayer = null;
 let fix80StopCircleLayer = null;
 let fix80SearchMarker = null;
@@ -12295,7 +12343,7 @@ setTimeout(fix80Install,2800);
 
 
 /* === Admin fix_87: saved map settings === */
-const ADMIN_FIX83_VERSION = "fix_99";
+const ADMIN_FIX83_VERSION = "fix_101";
 const ADMIN_FIX83_MAP_KEY = "mygps_admin_map_settings";
 function fix83Qs(id){ return document.getElementById(id); }
 function fix83ReadMapSettings(){
@@ -12486,7 +12534,7 @@ function fix83InitMapSettings(){
     fix83BindMapSettings();
     fix83HookExistingMapControls();
     fix83ApplyMapSettings({render:false, move:true});
-    const v=fix83Qs("postUpdateAdminVersion"); if(v) v.textContent="fix_99";
+    const v=fix83Qs("postUpdateAdminVersion"); if(v) v.textContent="fix_101";
   }catch(e){ console.warn("fix83InitMapSettings", e); }
 }
 setTimeout(fix83InitMapSettings, 350);
@@ -12656,7 +12704,7 @@ async function auditAdminButton(btn, actionStatus = 'clicked'){
       buttonId: id || null,
       panel: adminFix87ActivePanel(),
       selectedUid: (window.selectedUid || document.getElementById("userSelect")?.value || null),
-      source: 'admin_fix_99'
+      source: 'admin_fix_101'
     });
   }catch(e){
     console.warn('auditAdminButton error', e);
@@ -12798,7 +12846,7 @@ window.applyReadOnlyMode = applyReadOnlyMode;
 
 
 <script>
-// === Admin fix_99: reports are manual to save Firebase traffic ===
+// === Admin fix_101: reports are manual to save Firebase traffic ===
 (function(){
   function q(id){ return document.getElementById(id); }
   function setReportsStatus(text){ const el=q('reportsStatus'); if(el) el.textContent = text || 'Отчёты'; }
@@ -12851,7 +12899,7 @@ window.applyReadOnlyMode = applyReadOnlyMode;
     clearReportsUi('Нажми «Обновить отчёты»');
   });
 })();
-// === /Admin fix_99 ===
+// === /Admin fix_101 ===
 </script>
 
 </body></html>
