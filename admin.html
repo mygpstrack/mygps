@@ -632,6 +632,24 @@ body.admin-readonly-mode textarea.adminWriteDisabled{opacity:.45!important;curso
 .roleBadge.viewer{background:rgba(59,130,246,.20);border-color:#1d4ed8;color:#bfdbfe}
 .roleBadge.user{background:rgba(100,116,139,.18);border-color:#475569;color:#cbd5e1}
 
+
+
+/* === Admin fix_103: Security audit panel === */
+.securityAuditGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:12px}
+.securityAuditCard{padding:12px 14px;border:1px solid var(--border);border-radius:14px;background:rgba(255,255,255,.03);line-height:1.45}
+.securityAuditCard b{display:block;margin-bottom:6px;color:#bfdbfe}
+.securityBadge{display:inline-flex;align-items:center;padding:4px 8px;border-radius:999px;border:1px solid var(--border);font-size:12px;font-weight:900}
+.securityBadge.ok{background:rgba(22,163,74,.22);border-color:#166534;color:#bbf7d0}
+.securityBadge.warn{background:rgba(180,83,9,.22);border-color:#92400e;color:#fde68a}
+.securityBadge.danger{background:rgba(185,28,28,.25);border-color:#7f1d1d;color:#fecaca}
+.securityBadge.info{background:rgba(37,99,235,.20);border-color:#1d4ed8;color:#bfdbfe}
+#securityAuditTbody tr.security-ok-row{background:rgba(22,163,74,.06)}
+#securityAuditTbody tr.security-warn-row{background:rgba(180,83,9,.08)}
+#securityAuditTbody tr.security-danger-row{background:rgba(185,28,28,.10)}
+body.admin-normal-mode .tab-btn[data-tab="securityPanel"]{display:none!important}
+@media(max-width:900px){.securityAuditGrid{grid-template-columns:1fr}}
+/* === /Admin fix_103 === */
+
 </style>
 </head>
 <body>
@@ -746,6 +764,7 @@ body.admin-readonly-mode textarea.adminWriteDisabled{opacity:.45!important;curso
         <button class="tab-btn" data-tab="gpsLogPanel">GPS лог</button>
         <button class="tab-btn" data-tab="errorsPanel">Ошибки</button>
         <button class="tab-btn" data-tab="systemCheckPanel">Проверка</button>
+        <button class="tab-btn" data-tab="securityPanel">Безопасность</button>
         <button class="tab-btn" data-tab="postUpdatePanel">После обновления</button>
         <button class="tab-btn" data-tab="adminLogsPanel">Логи админа</button>
         <button class="tab-btn" data-tab="settingsPanel">Настройки</button>
@@ -1556,6 +1575,32 @@ body.admin-readonly-mode textarea.adminWriteDisabled{opacity:.45!important;curso
 
 
 
+
+
+    <div id="securityPanel" class="hidden">
+      <div class="card">
+        <h2>Безопасность</h2>
+        <p class="sub">Проверка ролей, публичных live-ссылок, read-only доступа, опасных связей и базовых Firebase Rules. Запускается только вручную, чтобы не тратить трафик.</p>
+        <div class="toolbar">
+          <button id="runSecurityAuditBtn" class="success">Проверить безопасность</button>
+          <button id="downloadSecurityReportBtn" class="secondary">Скачать security report</button>
+        </div>
+        <div class="securityAuditGrid">
+          <div class="securityAuditCard"><b>Admins</b><span id="securityAdminsCount">—</span></div>
+          <div class="securityAuditCard"><b>Только просмотр</b><span id="securityViewersCount">—</span></div>
+          <div class="securityAuditCard"><b>Активные live</b><span id="securityActiveLiveCount">—</span></div>
+          <div class="securityAuditCard"><b>Итог</b><span id="securitySummaryBadge" class="securityBadge info">не проверено</span></div>
+        </div>
+        <div id="securityAuditStatus" class="notice smallMuted">Нажми “Проверить безопасность”. Проверка читает только нужные узлы и последние live-сессии.</div>
+        <div style="overflow:auto;margin-top:12px">
+          <table>
+            <thead><tr><th>Уровень</th><th>Проверка</th><th>Что найдено</th><th>Что делать</th></tr></thead>
+            <tbody id="securityAuditTbody"><tr><td colspan="4">Проверка ещё не запускалась.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <div id="postUpdatePanel" class="hidden">
       <div class="card">
         <h2>После обновления</h2>
@@ -1565,7 +1610,7 @@ body.admin-readonly-mode textarea.adminWriteDisabled{opacity:.45!important;curso
           <button id="downloadPostUpdateDiagBtn" class="secondary">Скачать диагностику</button>
         </div>
         <div class="postUpdateGrid">
-          <div class="postUpdateCard"><b>Admin version</b><span id="postAdminVersion">fix_102</span></div>
+          <div class="postUpdateCard"><b>Admin version</b><span id="postAdminVersion">fix_103</span></div>
           <div class="postUpdateCard"><b>Auth</b><span id="postAuthStatus">—</span></div>
           <div class="postUpdateCard"><b>Выбранный пользователь</b><span id="postSelectedUser">—</span></div>
           <div class="postUpdateCard"><b>GPS лог</b><span id="postGpsLogStatus">—</span></div>
@@ -1938,7 +1983,7 @@ window.addEventListener("load", () => {
 
 /* === Admin fix_72: strict tabs + post-update buttons === */
 function fix71PanelIds(){
-  return ['alertCenterPanel','nowPanel','historyPanel','reportsPanel','usagePanel','trafficPanel','sessionsPanel','usersPanel','visibilityPanel','geofencesPanel','journalPanel','gpsLogPanel','errorsPanel','systemCheckPanel','postUpdatePanel','adminLogsPanel','settingsPanel'];
+  return ['alertCenterPanel','nowPanel','historyPanel','reportsPanel','usagePanel','trafficPanel','sessionsPanel','usersPanel','visibilityPanel','geofencesPanel','journalPanel','gpsLogPanel','errorsPanel','systemCheckPanel','securityPanel','postUpdatePanel','adminLogsPanel','settingsPanel'];
 }
 function fix71ShowOnlyPanel(selectedId){
   const ids = fix71PanelIds();
@@ -2207,7 +2252,7 @@ setInterval(() => {
 
 const db = getDatabase(app);
 
-// === Traffic optimization fix_102 ===
+// === Traffic optimization fix_103 ===
 const ADMIN_HISTORY_DEFAULT_LIMIT_NOTE = "История загружается только для выбранного пользователя и выбранного периода.";
 const ADMIN_GPS_LOG_LIMIT = 100;
 const ADMIN_ADMIN_LOG_LIMIT = 200;
@@ -2512,7 +2557,7 @@ let liveGpsProfileNotifyInitialized = false;
 let liveGpsProfileSignatures = {};
 let historyLoaded = false;
 
-// fix_102: low-traffic history guard
+// fix_103: low-traffic history guard
 const HISTORY_LOW_TRAFFIC_MAX_POINTS = 3000;
 const HISTORY_LOW_TRAFFIC_WARN_MS = 24 * 60 * 60 * 1000;
 let historyLargeRangeConfirmedUntil = 0;
@@ -3228,7 +3273,7 @@ function restoreUiState(){
 
     if(state.activeTab){
       document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
-      document.querySelectorAll("#alertCenterPanel,#nowPanel,#historyPanel,#reportsPanel,#usagePanel,#trafficPanel,#sessionsPanel,#usersPanel,#visibilityPanel,#geofencesPanel,#journalPanel,#gpsLogPanel,#errorsPanel,#systemCheckPanel,#postUpdatePanel,#adminLogsPanel,#settingsPanel").forEach(p=>p.classList.add("hidden"));
+      document.querySelectorAll("#alertCenterPanel,#nowPanel,#historyPanel,#reportsPanel,#usagePanel,#trafficPanel,#sessionsPanel,#usersPanel,#visibilityPanel,#geofencesPanel,#journalPanel,#gpsLogPanel,#errorsPanel,#systemCheckPanel,#securityPanel,#postUpdatePanel,#adminLogsPanel,#settingsPanel").forEach(p=>p.classList.add("hidden"));
       const btn = document.querySelector(`.tab-btn[data-tab="${state.activeTab}"]`);
       if(btn){
         btn.classList.add("active");
@@ -3669,13 +3714,13 @@ qs("runSystemCheckBtn")?.addEventListener("click", () => runSystemCheck().catch(
 document.querySelectorAll(".tab-btn").forEach(btn=>{
   btn.onclick=()=>{
     document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
-    document.querySelectorAll("#alertCenterPanel,#nowPanel,#historyPanel,#reportsPanel,#usagePanel,#trafficPanel,#sessionsPanel,#usersPanel,#visibilityPanel,#geofencesPanel,#journalPanel,#gpsLogPanel,#errorsPanel,#systemCheckPanel,#postUpdatePanel,#adminLogsPanel,#settingsPanel").forEach(p=>p.classList.add("hidden"));
+    document.querySelectorAll("#alertCenterPanel,#nowPanel,#historyPanel,#reportsPanel,#usagePanel,#trafficPanel,#sessionsPanel,#usersPanel,#visibilityPanel,#geofencesPanel,#journalPanel,#gpsLogPanel,#errorsPanel,#systemCheckPanel,#securityPanel,#postUpdatePanel,#adminLogsPanel,#settingsPanel").forEach(p=>p.classList.add("hidden"));
     btn.classList.add("active");
     qs(btn.dataset.tab).classList.remove("hidden");
     if(btn.dataset.tab === "historyPanel") { showTrafficLoadHint("История не обновляется автоматически: нажми Обновить историю."); }
     if(btn.dataset.tab === "journalPanel") window.loadLimitedEvents?.().catch(e=>recordError("loadLimitedEvents", e));
     if(btn.dataset.tab === "visibilityPanel") renderVisibilityPanel();
-    if(btn.dataset.tab === "systemCheckPanel") { /* traffic fix_102: system check only by button */ }
+    if(btn.dataset.tab === "systemCheckPanel") { /* traffic fix_103: system check only by button */ }
     setTimeout(()=>{ historyMap.invalidateSize(); liveMap.invalidateSize(); sessionMap.invalidateSize(); geofenceMap.invalidateSize(); speedChart?.resize(); distanceChart?.resize(); },50);
   };
 });
@@ -4577,7 +4622,7 @@ async function loadUsers(){
     try{ scheduleHeaderWeatherFromLastPoint(); }catch(e){}
 }
 
-// fix_102: lightweight users autoload safety.
+// fix_103: lightweight users autoload safety.
 // Keeps all existing admin features intact, but retries users list after page refresh
 // when Firebase/Auth timing leaves the selector empty. Heavy tabs are not loaded here.
 let __fix97UsersAutoloadTimer = null;
@@ -4703,7 +4748,7 @@ function notifyLiveGpsProfileChanges(liveSnapshot){
 }
 
 async function loadAllData(){
-  // Traffic optimization fix_102:
+  // Traffic optimization fix_103:
   // Do not download the whole /history tree. Load only selected user's history
   // inside selected date/time range using timestamp index.
   const [liveSnap, usersSnap] = await Promise.all([
@@ -6120,7 +6165,7 @@ function setupAutoRefresh(){
   if(sec > 0){
     autoRefreshTimer = setInterval(async()=>{
       try{
-        // fix_102: auto-refresh must stay lightweight.
+        // fix_103: auto-refresh must stay lightweight.
         // Do not load history/reports/sessions automatically.
         await updateNowFromAvailableSources();
         updateActiveSessionNotice?.();
@@ -8085,7 +8130,7 @@ onAuthStateChanged(auth, async user => {
     renderJournal();
     updateNowFromAvailableSources();
   });
-  // Traffic optimization fix_102: do not attach realtime listener to whole /history.
+  // Traffic optimization fix_103: do not attach realtime listener to whole /history.
   // History is loaded manually for selected user + selected period by loadAllData().
   trackedOnValue(query(ref(db, "liveSessions"), limitToLast(ADMIN_SESSIONS_LIMIT)), snap => { allSessions=snap.val()||{}; updateUsage(); renderSessions(); updateActiveSessionToast(); updateNowFromAvailableSources(); });
   trackedOnValue(query(ref(db, "adminLogs/deletions"), limitToLast(ADMIN_ADMIN_LOG_LIMIT)), snap => { deletionsLog=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0)); renderJournal(); });
@@ -8112,7 +8157,7 @@ onAuthStateChanged(auth, async user => {
     appEventLogs = [...androidEventLogs, ...legacyEventJournalLogs].sort((a,b)=>Number(b.ts||0)-Number(a.ts||0));
     renderJournal();
   }
-  // Traffic optimization fix_102: events/eventJournal are loaded only when Journal/Timeline is opened manually.
+  // Traffic optimization fix_103: events/eventJournal are loaded only when Journal/Timeline is opened manually.
   // window.loadLimitedEvents?.().catch(e=>recordError("loadLimitedEvents", e));
 
   await loadAdminSettings();
@@ -8122,7 +8167,7 @@ onAuthStateChanged(auth, async user => {
   restoreUiState();
   await loadStartupLight();
 
-  // fix_102: final users autoload after startup-light.
+  // fix_103: final users autoload after startup-light.
   // loadStartupLight/restoreUiState can run after the first loadUsers call; run one more
   // lightweight users refresh here so the selector is populated without pressing
   // “Обновить пользователей”. Heavy history/reports/logs remain manual.
@@ -8133,10 +8178,10 @@ onAuthStateChanged(auth, async user => {
     renderVisibilityPanel?.();
     await updateNowFromAvailableSources?.();
   }catch(e){
-    recordError?.("fix_102_final_loadUsers", e);
+    recordError?.("fix_103_final_loadUsers", e);
   }
 
-  // Traffic optimization fix_102: sessions/backups/history/reports load only by opening tab or pressing refresh.
+  // Traffic optimization fix_103: sessions/backups/history/reports load only by opening tab or pressing refresh.
   // await loadSessions();
   // await renderBackups();
   // Low traffic: automatic full backup disabled on open; use Backup button manually.
@@ -8738,7 +8783,7 @@ function refreshVisibleTabLight(){
       }else if(tab === "sessionsPanel" && typeof loadSessions === "function"){
         loadSessions();
       }else if(tab === "historyPanel"){
-        // fix_102: history is heavy; never auto-load on focus/tab. Use “Обновить историю”.
+        // fix_103: history is heavy; never auto-load on focus/tab. Use “Обновить историю”.
         setHistoryTrafficNotice?.("История не загружается автоматически. Нажми «Обновить историю» для выбранного периода.", "info");
       }else if(tab === "journalPanel" && typeof loadJournal === "function"){
         loadJournal();
@@ -8989,7 +9034,7 @@ setTimeout(() => {
     }
   }catch(e){}
 
-  // fix_102: users list must always be allowed to load after page refresh.
+  // fix_103: users list must always be allowed to load after page refresh.
   // Heavy history/reports/logs are still guarded, but loadUsers is lightweight and required for admin UI.
 }, 1000);
 
@@ -11412,7 +11457,7 @@ function fix68NearestPoint(ts){ const pts=(typeof filteredHistory==='function'?f
 async function fix68BuildRouteTimeline(){ const uid=selectedUid||fix68Qs('userSelect')?.value||''; const fromDate=fix68Qs('fromDate')?.value||''; const toDate=fix68Qs('toDate')?.value||''; const from=fromDate?new Date(`${fromDate}T00:00:00`).getTime():0; const to=toDate?new Date(`${toDate}T23:59:59`).getTime():Date.now(); const onlyProblems=!!fix68Qs('timelineOnlyProblemsToggle')?.checked; const rows=[]; const logs=await fix68LatestGpsLogs(uid,300); logs.forEach(x=>{ const ts=fix68Ts(x.ts||x.timestamp); if(ts>=from&&ts<=to) rows.push({ts,kind:fix68TimelineKind(x),title:x.title||x.type||'GPS log',message:x.message||'',raw:x}); }); try{ const snap=uid?await get(query(ref(db,`events/${uid}`), limitToLast(300))):await get(ref(db,'events')); const val=snap.val()||{}; const add=(u,id,e)=>{ const ts=fix68Ts(e.timestamp||e.ts); if(ts>=from&&ts<=to) rows.push({ts,kind:fix68TimelineKind(e),title:e.type||'event',message:e.message||e.geofenceName||'',raw:{...e,uid:u,id}}); }; if(uid) Object.entries(val).forEach(([id,e])=>add(uid,id,e)); else Object.entries(val).forEach(([u,items])=>Object.entries(items||{}).forEach(([id,e])=>add(u,id,e))); }catch(e){} let filtered=rows.sort((a,b)=>a.ts-b.ts); if(onlyProblems) filtered=filtered.filter(e=>{ const t=`${e.title} ${e.message}`.toLowerCase(); return t.includes('stop')||t.includes('ошиб')||t.includes('error')||t.includes('выключ')||t.includes('bad')||t.includes('плох')||t.includes('offline'); }); adminFix68TimelineEvents=filtered; fix68RenderTimeline(); }
 function fix68RenderTimeline(){ const tbody=fix68Qs('routeTimelineTbody'); if(!tbody) return; tbody.innerHTML=''; if(adminFix68TimelineLayer){ try{historyMap.removeLayer(adminFix68TimelineLayer);}catch(e){} adminFix68TimelineLayer=null; } adminFix68TimelineLayer=L.layerGroup().addTo(historyMap); if(!adminFix68TimelineEvents.length){ tbody.innerHTML='<tr><td colspan="5">Событий для выбранного периода нет.</td></tr>'; return; } adminFix68TimelineEvents.slice(0,300).forEach((ev,idx)=>{ const p=fix68NearestPoint(ev.ts); const tr=document.createElement('tr'); tr.innerHTML=`<td>${fmtTime(ev.ts)}</td><td><span class="timelineBadge ${fix68TimelineKind(ev)}">${fix68Esc(fix68TimelineKind(ev))}</span></td><td>${fix68Esc(ev.title)}</td><td>${fix68Esc(ev.message||'—')}</td><td><button class="secondary small" data-timeline-index="${idx}">К точке</button></td>`; tbody.appendChild(tr); if(p&&fix68ValidLatLng(p)){ const lat=fix68PointLat(p),lng=fix68PointLng(p); const color=ev.kind==='live'?'#60a5fa':(ev.kind==='geofence'?'#f59e0b':(String(ev.title).toLowerCase().includes('stop')?'#ef4444':'#22c55e')); const marker=L.circleMarker([lat,lng],{radius:7,weight:2,color,fillOpacity:.85}).bindPopup(`<b>${fix68Esc(ev.title)}</b><br>${fix68Esc(ev.message||'')}<br>${fmtTime(ev.ts)}`); marker.addTo(adminFix68TimelineLayer); ev._latlng=[lat,lng]; } }); tbody.querySelectorAll('[data-timeline-index]').forEach(btn=>btn.onclick=()=>{ const ev=adminFix68TimelineEvents[Number(btn.dataset.timelineIndex)]; if(ev?._latlng){ historyMap.setView(ev._latlng, Math.max(historyMap.getZoom(),15)); } else showToast?.('Нет ближайшей точки на маршруте','warn'); }); }
 function fix68ClearTimeline(){ if(adminFix68TimelineLayer){ try{historyMap.removeLayer(adminFix68TimelineLayer);}catch(e){} adminFix68TimelineLayer=null; } adminFix68TimelineEvents=[]; if(fix68Qs('routeTimelineTbody')) fix68Qs('routeTimelineTbody').innerHTML='<tr><td colspan="5">Timeline очищен.</td></tr>'; }
-function fix68ShowPanel(selectedId){ const ids=['alertCenterPanel','nowPanel','historyPanel','reportsPanel','usagePanel','trafficPanel','sessionsPanel','usersPanel','visibilityPanel','geofencesPanel','journalPanel','gpsLogPanel','errorsPanel','systemCheckPanel','postUpdatePanel','adminLogsPanel','settingsPanel']; ids.forEach(id=>{ const el=fix68Qs(id); if(el) el.classList.toggle('hidden', id!==selectedId); }); document.querySelectorAll('.tab-btn[data-tab]').forEach(btn=>btn.classList.toggle('active', btn.dataset.tab===selectedId)); if(selectedId==='alertCenterPanel') setTimeout(()=>fix68BuildAlerts().catch(e=>recordError?.('fix68BuildAlerts',e)),0); if(selectedId==='nowPanel') setTimeout(()=>fix68UpdateUserHealth().catch(e=>recordError?.('fix68UpdateUserHealth',e)),0); if(selectedId==='systemCheckPanel') setTimeout(()=>fix68RunRulesCheck().catch(e=>recordError?.('fix68RunRulesCheck',e)),250); }
+function fix68ShowPanel(selectedId){ const ids=['alertCenterPanel','nowPanel','historyPanel','reportsPanel','usagePanel','trafficPanel','sessionsPanel','usersPanel','visibilityPanel','geofencesPanel','journalPanel','gpsLogPanel','errorsPanel','systemCheckPanel','securityPanel','postUpdatePanel','adminLogsPanel','settingsPanel']; ids.forEach(id=>{ const el=fix68Qs(id); if(el) el.classList.toggle('hidden', id!==selectedId); }); document.querySelectorAll('.tab-btn[data-tab]').forEach(btn=>btn.classList.toggle('active', btn.dataset.tab===selectedId)); if(selectedId==='alertCenterPanel') setTimeout(()=>fix68BuildAlerts().catch(e=>recordError?.('fix68BuildAlerts',e)),0); if(selectedId==='nowPanel') setTimeout(()=>fix68UpdateUserHealth().catch(e=>recordError?.('fix68UpdateUserHealth',e)),0); if(selectedId==='systemCheckPanel') setTimeout(()=>fix68RunRulesCheck().catch(e=>recordError?.('fix68RunRulesCheck',e)),250); }
 function fix68Install(){ fix68ApplyAlertSettings(); ['adminSoundAlertsToggle','adminBrowserPushToggle'].forEach(id=>{ const el=fix68Qs(id); if(el&&!el.dataset.fix68){ el.dataset.fix68='1'; el.addEventListener('change', fix68SaveAlertSettings); }}); const req=fix68Qs('requestAdminPushBtn'); if(req&&!req.dataset.fix68){ req.dataset.fix68='1'; req.onclick=async()=>{ if(!('Notification' in window)) return showToast?.('Браузер не поддерживает push','warn'); const r=await Notification.requestPermission(); showToast?.('Push: '+r, r==='granted'?'success':'warn'); }; } const refresh=fix68Qs('refreshAlertsBtn'); if(refresh&&!refresh.dataset.fix68){ refresh.dataset.fix68='1'; refresh.onclick=()=>fix68BuildAlerts().then(()=>showToast?.('Тревоги обновлены','success')).catch(e=>showToast?.('Ошибка тревог: '+(errText?.(e)||e),'error')); } const rules=fix68Qs('runRulesCheckBtn'); if(rules&&!rules.dataset.fix68){ rules.dataset.fix68='1'; rules.onclick=()=>fix68RunRulesCheck(); } const liveBtn=fix68Qs('checkLiveHealthBtn'); if(liveBtn&&!liveBtn.dataset.fix68live){ liveBtn.dataset.fix68live='1'; liveBtn.title='Левый клик — проверка live health, Ctrl/Alt+клик — диагностика live-ссылки'; liveBtn.addEventListener('click', e=>{ if(e.ctrlKey||e.altKey) fix68CheckLiveLink(); }, true); } const build=fix68Qs('buildRouteTimelineBtn'); if(build&&!build.dataset.fix68){ build.dataset.fix68='1'; build.onclick=()=>fix68BuildRouteTimeline().catch(e=>showToast?.('Ошибка timeline: '+(errText?.(e)||e),'error')); } const clear=fix68Qs('clearRouteTimelineBtn'); if(clear&&!clear.dataset.fix68){ clear.dataset.fix68='1'; clear.onclick=fix68ClearTimeline; } }
 document.addEventListener('click', ev=>{ const btn=ev.target?.closest?.('.tab-btn[data-tab]'); if(btn) setTimeout(()=>fix68ShowPanel(btn.dataset.tab),35); }, true);
 window.addEventListener('load', ()=>{ fix68Install(); setTimeout(fix68Install,1500); setTimeout(()=>fix68UpdateUserHealth().catch(()=>{}),2500); });
@@ -11424,7 +11469,7 @@ function mygpsLivePatchEscape(value){
   try{ return escapeHtml(value); }catch(e){ return String(value ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;'); }
 }
 function mygpsLivePatchInstallUi(){
-  // fix_102: блок “Открытия активной live-ссылки” убран из вкладки Live-сессии.
+  // fix_103: блок “Открытия активной live-ссылки” убран из вкладки Live-сессии.
   const old=document.getElementById('liveViewDetailsCard');
   if(old) old.remove();
 }
@@ -11461,7 +11506,7 @@ function mygpsLivePatchActiveEntry(){
   }catch(e){return null;}
 }
 function mygpsLivePatchRenderDetails(entry){
-  // fix_102: отдельная карточка с открытиями/IP больше не отображается.
+  // fix_103: отдельная карточка с открытиями/IP больше не отображается.
   const old=document.getElementById('liveViewDetailsCard');
   if(old) old.remove();
 }
@@ -11557,7 +11602,7 @@ window.addEventListener('load', ()=>{ mygpsLivePatchInstallUi(); setTimeout(()=>
 
 
 /* === Admin fix_72: update check, route filter, diagnostics, replay events, cleanup === */
-const ADMIN_FIX70_VERSION = "fix_102";
+const ADMIN_FIX70_VERSION = "fix_103";
 function fix70Qs(id){ return document.getElementById(id); }
 function fix70Esc(v){ return String(v ?? "").replace(/[&<>'"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c])); }
 function fix70Badge(text, kind="ok"){ return `<span class="postUpdateBadge ${kind}">${fix70Esc(text)}</span>`; }
@@ -11683,7 +11728,7 @@ function fix70EnsurePostUpdateTab(){
     if(btn.dataset.fix70) return; btn.dataset.fix70='1';
     btn.addEventListener('click',()=>{
       document.querySelectorAll('.tab-btn[data-tab]').forEach(b=>b.classList.toggle('active',b===btn));
-      document.querySelectorAll('#alertCenterPanel,#nowPanel,#historyPanel,#reportsPanel,#usagePanel,#trafficPanel,#sessionsPanel,#usersPanel,#visibilityPanel,#geofencesPanel,#journalPanel,#gpsLogPanel,#errorsPanel,#systemCheckPanel,#postUpdatePanel,#adminLogsPanel,#settingsPanel').forEach(p=>p.classList.add('hidden'));
+      document.querySelectorAll('#alertCenterPanel,#nowPanel,#historyPanel,#reportsPanel,#usagePanel,#trafficPanel,#sessionsPanel,#usersPanel,#visibilityPanel,#geofencesPanel,#journalPanel,#gpsLogPanel,#errorsPanel,#systemCheckPanel,#securityPanel,#postUpdatePanel,#adminLogsPanel,#settingsPanel').forEach(p=>p.classList.add('hidden'));
       fix70Qs('postUpdatePanel')?.classList.remove('hidden');
     }, true);
   });
@@ -11825,7 +11870,7 @@ setTimeout(fix73Install,2600);
 
 
 /* === Admin fix_75: app versions + safe auto-refresh in Сейчас === */
-const ADMIN_FIX75_VERSION = "fix_102";
+const ADMIN_FIX75_VERSION = "fix_103";
 let adminFix75AutoTimer = null;
 let adminFix75Refreshing = false;
 function fix75Qs(id){ return document.getElementById(id); }
@@ -11978,7 +12023,7 @@ setTimeout(fix75Install,2800);
 
 
 /* === Admin fix_79: alert hints, selected user check, live garbage, stops list, clean exports === */
-const ADMIN_FIX79_VERSION = "fix_102";
+const ADMIN_FIX79_VERSION = "fix_103";
 function fix79Esc(v){ return String(v ?? "").replace(/[&<>'"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[ch])); }
 function fix79Ts(v){ const n=Number(v||0); return Number.isFinite(n) && n>0 ? n : 0; }
 function fix79PointLat(p){ return Number(p?.latitude ?? p?.lat); }
@@ -12226,7 +12271,7 @@ setTimeout(fix79Install,2500);
 
 
 /* === Admin fix_87: history search, improved stops, problem layers === */
-const ADMIN_FIX80_VERSION = "fix_102";
+const ADMIN_FIX80_VERSION = "fix_103";
 let fix80ProblemLayer = null;
 let fix80StopCircleLayer = null;
 let fix80SearchMarker = null;
@@ -12365,7 +12410,7 @@ setTimeout(fix80Install,2800);
 
 
 /* === Admin fix_87: saved map settings === */
-const ADMIN_FIX83_VERSION = "fix_102";
+const ADMIN_FIX83_VERSION = "fix_103";
 const ADMIN_FIX83_MAP_KEY = "mygps_admin_map_settings";
 function fix83Qs(id){ return document.getElementById(id); }
 function fix83ReadMapSettings(){
@@ -12556,7 +12601,7 @@ function fix83InitMapSettings(){
     fix83BindMapSettings();
     fix83HookExistingMapControls();
     fix83ApplyMapSettings({render:false, move:true});
-    const v=fix83Qs("postUpdateAdminVersion"); if(v) v.textContent="fix_102";
+    const v=fix83Qs("postUpdateAdminVersion"); if(v) v.textContent="fix_103";
   }catch(e){ console.warn("fix83InitMapSettings", e); }
 }
 setTimeout(fix83InitMapSettings, 350);
@@ -12564,6 +12609,141 @@ document.addEventListener("click", ev=>{
   const tab = ev.target?.closest?.('.tab-btn[data-tab="settingsPanel"]');
   if(tab) setTimeout(fix83InitMapSettings, 80);
 }, true);
+
+
+// === Admin fix_103: Security audit ===
+const ADMIN_SECURITY_FIX_VERSION = "fix_103";
+let adminSecurityLastReport = null;
+function fix103Q(id){ return document.getElementById(id); }
+function fix103Set(id, txt){ const el=fix103Q(id); if(el) el.textContent = txt; }
+function fix103Badge(level, text){ return `<span class="securityBadge ${level||'info'}">${text||level||'info'}</span>`; }
+function fix103Esc(v){ return String(v ?? '').replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c])); }
+function fix103Ts(v){ const n=Number(v||0); return Number.isFinite(n) && n>0 ? n : 0; }
+async function fix103SafeGet(path, fallback={}){
+  try{ const snap = await get(ref(db, path)); return snap.val() ?? fallback; }
+  catch(e){ return {__error:String(e?.message||e)}; }
+}
+function fix103Add(rows, level, check, found, action){ rows.push({level, check, found, action}); }
+function fix103RenderSecurity(rows, meta){
+  fix103Set('securityAdminsCount', String(meta.adminsCount ?? '—'));
+  fix103Set('securityViewersCount', String(meta.viewersCount ?? '—'));
+  fix103Set('securityActiveLiveCount', String(meta.activeLiveCount ?? '—'));
+  const danger = rows.filter(r=>r.level==='danger').length;
+  const warn = rows.filter(r=>r.level==='warn').length;
+  const badge = fix103Q('securitySummaryBadge');
+  if(badge){
+    badge.className = 'securityBadge ' + (danger?'danger':warn?'warn':'ok');
+    badge.textContent = danger ? `${danger} критично` : warn ? `${warn} предупрежд.` : 'OK';
+  }
+  const tbody=fix103Q('securityAuditTbody');
+  if(tbody){
+    tbody.innerHTML = rows.map(r=>`<tr class="security-${r.level}-row"><td>${fix103Badge(r.level, r.level==='danger'?'Критично':r.level==='warn'?'Внимание':r.level==='ok'?'OK':'Info')}</td><td>${fix103Esc(r.check)}</td><td>${fix103Esc(r.found)}</td><td>${fix103Esc(r.action)}</td></tr>`).join('') || '<tr><td colspan="4">Нет данных.</td></tr>';
+  }
+  const st=fix103Q('securityAuditStatus');
+  if(st) st.textContent = `Проверено: ${new Date().toLocaleString('ru-RU')}. Критично: ${danger}, предупреждений: ${warn}.`;
+}
+async function runSecurityAudit(){
+  const rows=[]; const now=Date.now();
+  const [admins, viewers, users, owners, sessions] = await Promise.all([
+    fix103SafeGet('admins',{}),
+    fix103SafeGet('adminViewers',{}),
+    fix103SafeGet('users',{}),
+    fix103SafeGet('liveOwners',{}),
+    get(query(ref(db,'liveSessions'), limitToLast(200))).then(s=>s.val()||{}).catch(e=>({__error:String(e?.message||e)}))
+  ]);
+  if(admins.__error) fix103Add(rows,'danger','admins read',admins.__error,'Проверь Firebase Rules для admins.');
+  if(viewers.__error) fix103Add(rows,'warn','adminViewers read',viewers.__error,'Если нужен режим “только просмотр”, обнови Rules.');
+  if(users.__error) fix103Add(rows,'danger','users read',users.__error,'Админка не сможет проверить пользователей.');
+  const adminIds=Object.keys(admins||{}).filter(k=>admins[k]===true);
+  const viewerIds=Object.keys(viewers||{}).filter(k=>viewers[k]===true);
+  const userIds=Object.keys(users||{}).filter(k=>users[k] && !k.startsWith('__'));
+  if(!adminIds.length) fix103Add(rows,'danger','Admins','В базе нет admins=true','Добавь хотя бы одного владельца в admins/<uid>=true.');
+  else fix103Add(rows,'ok','Admins',`${adminIds.length} admin: ${adminIds.map(id=>getDisplayName?.(id)||id).join(', ')}`,'OK');
+  if(adminIds.length>2) fix103Add(rows,'warn','Много admins',`${adminIds.length} пользователей имеют полный доступ`,'Оставь полный доступ только тем, кому он реально нужен.');
+  const unknownAdmins=adminIds.filter(id=>!users[id]);
+  if(unknownAdmins.length) fix103Add(rows,'warn','Admins без профиля users',unknownAdmins.join(', '),'Проверь, не старые ли это UID.');
+  const both=viewerIds.filter(id=>adminIds.includes(id));
+  if(both.length) fix103Add(rows,'warn','Admin одновременно viewer',both.join(', '),'Можно убрать из adminViewers, если пользователь уже admin.');
+  if(viewerIds.length) fix103Add(rows,'ok','Read-only пользователи',`${viewerIds.length}: ${viewerIds.map(id=>getDisplayName?.(id)||id).join(', ')}`,'Viewer может читать, но не должен писать.');
+  else fix103Add(rows,'info','Read-only пользователи','adminViewers пуст','Это нормально, если второй админ-просмотрщик не нужен.');
+
+  const usersNoEmail=userIds.filter(id=>!(users[id]?.email || users[id]?.name || users[id]?.displayName)).slice(0,20);
+  if(usersNoEmail.length) fix103Add(rows,'warn','Пустые/непонятные users',`${usersNoEmail.length} UID без имени/email: ${usersNoEmail.join(', ')}`,'Проверь и очисти пустые профили во вкладке Пользователи/Проверка.');
+  else fix103Add(rows,'ok','Профили users','Пустые профили не найдены среди загруженных users','OK');
+
+  let activeLive=0, riskyLive=0, noOwner=0, noExpire=0, expiredActive=0, staleActive=0;
+  Object.entries(sessions||{}).forEach(([token,s])=>{
+    const meta=s?.meta||{}; const pub=s?.public||{}; const lp=pub.lastPoint||{};
+    const active=meta.active===true || meta.status==='active';
+    if(!meta.ownerUid) noOwner++;
+    if(active){
+      activeLive++;
+      const expires=Number(meta.expiresAt||0);
+      if(!expires){ noExpire++; riskyLive++; }
+      else if(expires <= now){ expiredActive++; riskyLive++; }
+      const lpTs=fix103Ts(lp.timestamp||lp.ts||lp.time);
+      if(!lpTs || now-lpTs>10*60*1000){ staleActive++; }
+    }
+  });
+  if(activeLive) fix103Add(rows, riskyLive?'warn':'ok','Публичные live-ссылки',`${activeLive} active из последних 200 sessions`,'Проверь, что active live имеют expiresAt и lastPoint.');
+  else fix103Add(rows,'ok','Публичные live-ссылки','Активных live среди последних 200 не найдено','OK');
+  if(noOwner) fix103Add(rows,'danger','liveSessions без ownerUid',`${noOwner} sessions без meta.ownerUid`,'Используй Проверка → Исправить безопасно или очисти вручную.');
+  if(noExpire) fix103Add(rows,'danger','Active live без expiresAt',`${noExpire} active sessions без срока окончания`,'Заверши или исправь такие live-сессии.');
+  if(expiredActive) fix103Add(rows,'warn','Expired, но active',`${expiredActive} active sessions уже истекли`,'Используй безопасное исправление структуры Firebase.');
+  if(staleActive) fix103Add(rows,'warn','Active live со старым lastPoint',`${staleActive} active live без свежей точки`,'Проверь MyGps, интернет, GPS лог или indoor/no GPS статус.');
+
+  let brokenOwners=0; const ownerEntries=Object.entries(owners||{}).slice(0,80);
+  for(const [uid,row] of ownerEntries){
+    const token=row?.activeSessionId;
+    if(!token) continue;
+    let s=sessions[token];
+    if(!s){ try{ const snap=await get(ref(db,`liveSessions/${token}/meta/ownerUid`)); if(!snap.exists()) brokenOwners++; }catch(e){} }
+    else if(s?.meta?.ownerUid && s.meta.ownerUid!==uid) brokenOwners++;
+  }
+  if(brokenOwners) fix103Add(rows,'warn','liveOwners битые связи',`${brokenOwners} liveOwners указывают на отсутствующую/чужую session`,'Запусти Проверка структуры Firebase.');
+  else fix103Add(rows,'ok','liveOwners связи','Критичных битых связей в проверенных liveOwners не найдено','OK');
+
+  const selected = selectedUid || fix103Q('userSelect')?.value || userIds[0] || '';
+  if(selected){
+    const gpsSnap = await get(query(ref(db,`gpsServiceLogs/${selected}`), limitToLast(1))).catch(e=>({val:()=>({__error:String(e?.message||e)})}));
+    const gpsVal=gpsSnap.val()||{};
+    if(gpsVal.__error) fix103Add(rows,'warn','gpsServiceLogs read',gpsVal.__error,'Обнови Rules с gpsServiceLogs и adminViewers.');
+    else fix103Add(rows,'ok','gpsServiceLogs read',Object.keys(gpsVal).length?'Доступ есть, последние записи читаются':'Доступ есть, лог пуст','OK');
+  }
+  const actionSnap = await get(query(ref(db,'adminLogs/actions'), limitToLast(1))).catch(e=>({val:()=>({__error:String(e?.message||e)})}));
+  const actionsVal=actionSnap.val()||{};
+  if(actionsVal.__error) fix103Add(rows,'warn','adminLogs/actions read',actionsVal.__error,'Для audit log проверь Rules adminLogs/actions.');
+  else fix103Add(rows,'ok','adminLogs/actions read',Object.keys(actionsVal).length?'Audit log читается':'Audit log читается, записей нет','OK');
+
+  fix103Add(rows,'info','SHA / App Check','SHA-1/SHA-256 и App Check проверяются в Firebase Console, не из браузера','Для Android apps добавь SHA в Firebase Project settings → Android app.');
+  const meta={adminsCount:adminIds.length, viewersCount:viewerIds.length, activeLiveCount:activeLive, checkedAt:now, selectedUid:selected, version:ADMIN_SECURITY_FIX_VERSION};
+  adminSecurityLastReport={meta, rows};
+  fix103RenderSecurity(rows,meta);
+  return adminSecurityLastReport;
+}
+function downloadSecurityReport(){
+  const report=adminSecurityLastReport || {meta:{version:ADMIN_SECURITY_FIX_VERSION, note:'Security audit not run yet'}, rows:[]};
+  const blob=new Blob([JSON.stringify(report,null,2)],{type:'application/json;charset=utf-8'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`mygps-security-report-${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.json`;
+  document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },500);
+}
+function showSecurityPanelFix103(){
+  const panels=['alertCenterPanel','nowPanel','historyPanel','reportsPanel','usagePanel','trafficPanel','sessionsPanel','usersPanel','visibilityPanel','geofencesPanel','journalPanel','gpsLogPanel','errorsPanel','systemCheckPanel','securityPanel','postUpdatePanel','adminLogsPanel','settingsPanel'];
+  panels.forEach(id=>fix103Q(id)?.classList.add('hidden'));
+  fix103Q('securityPanel')?.classList.remove('hidden');
+  document.querySelectorAll('.tab-btn[data-tab]').forEach(b=>b.classList.toggle('active', b.dataset.tab==='securityPanel'));
+}
+document.addEventListener('click', ev=>{
+  const secTab=ev.target?.closest?.('.tab-btn[data-tab="securityPanel"]');
+  if(secTab){ ev.preventDefault(); ev.stopPropagation(); showSecurityPanelFix103(); return; }
+  const run=ev.target?.closest?.('#runSecurityAuditBtn');
+  if(run){ ev.preventDefault(); runSecurityAudit().catch(e=>{ recordError?.('runSecurityAudit',e); showToast?.('Ошибка security audit: '+(errText?.(e)||e),'error',4500); }); return; }
+  const dl=ev.target?.closest?.('#downloadSecurityReportBtn');
+  if(dl){ ev.preventDefault(); downloadSecurityReport(); return; }
+}, true);
+// === /Admin fix_103 ===
 
 </script>
 
@@ -12726,7 +12906,7 @@ async function auditAdminButton(btn, actionStatus = 'clicked'){
       buttonId: id || null,
       panel: adminFix87ActivePanel(),
       selectedUid: (window.selectedUid || document.getElementById("userSelect")?.value || null),
-      source: 'admin_fix_102'
+      source: 'admin_fix_103'
     });
   }catch(e){
     console.warn('auditAdminButton error', e);
@@ -12767,7 +12947,7 @@ window.applyReadOnlyMode = applyReadOnlyMode;
 <!-- === Admin fix_79: UI cleanup, normal/diagnostic mode, mobile compact === -->
 <script>
 (function(){
-  const DIAG_TABS = new Set(['alertCenterPanel','usagePanel','trafficPanel','gpsLogPanel','errorsPanel','systemCheckPanel','postUpdatePanel','adminLogsPanel']);
+  const DIAG_TABS = new Set(['alertCenterPanel','usagePanel','trafficPanel','gpsLogPanel','errorsPanel','systemCheckPanel','securityPanel','postUpdatePanel','adminLogsPanel']);
   const MAIN_TABS = new Set(['nowPanel','historyPanel','reportsPanel','sessionsPanel','usersPanel','visibilityPanel','geofencesPanel','journalPanel','settingsPanel']);
   const MODE_KEY = 'mygps_admin_ui_mode';
   const MOBILE_KEY = 'mygps_admin_mobile_compact';
@@ -12781,7 +12961,7 @@ window.applyReadOnlyMode = applyReadOnlyMode;
   function clickTab(id){
     const btn = qs(`.tab-btn[data-tab="${id}"]`);
     if(btn){ btn.click(); return true; }
-    qsa('#alertCenterPanel,#nowPanel,#historyPanel,#reportsPanel,#usagePanel,#trafficPanel,#sessionsPanel,#usersPanel,#visibilityPanel,#geofencesPanel,#journalPanel,#gpsLogPanel,#errorsPanel,#systemCheckPanel,#postUpdatePanel,#adminLogsPanel,#settingsPanel')
+    qsa('#alertCenterPanel,#nowPanel,#historyPanel,#reportsPanel,#usagePanel,#trafficPanel,#sessionsPanel,#usersPanel,#visibilityPanel,#geofencesPanel,#journalPanel,#gpsLogPanel,#errorsPanel,#systemCheckPanel,#securityPanel,#postUpdatePanel,#adminLogsPanel,#settingsPanel')
       .forEach(p => p.classList.toggle('hidden', p.id !== id));
     qsa('.tab-btn[data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === id));
     return false;
@@ -12868,7 +13048,7 @@ window.applyReadOnlyMode = applyReadOnlyMode;
 
 
 <script>
-// === Admin fix_102: reports are manual to save Firebase traffic ===
+// === Admin fix_103: reports are manual to save Firebase traffic ===
 (function(){
   function q(id){ return document.getElementById(id); }
   function setReportsStatus(text){ const el=q('reportsStatus'); if(el) el.textContent = text || 'Отчёты'; }
@@ -12921,7 +13101,7 @@ window.applyReadOnlyMode = applyReadOnlyMode;
     clearReportsUi('Нажми «Обновить отчёты»');
   });
 })();
-// === /Admin fix_102 ===
+// === /Admin fix_103 ===
 </script>
 
 </body></html>
