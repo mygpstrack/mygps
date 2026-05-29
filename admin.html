@@ -4999,13 +4999,23 @@ async function logDeviceEvent(kind, description, extra = {}){
 function buildShareUrl(token){ return `https://mygpstrack.github.io/mygps/live.html?session=${encodeURIComponent(token)}`; }
 
 function generateSessionToken(){
-  const part = () => Math.random().toString(36).slice(2, 10);
+  // fix_109: security hardening. Firebase Rules require 32–96 URL-safe chars.
+  // 32 random bytes -> 43 base64url chars (~256-bit entropy), no UID/email/timestamp.
+  const fallbackAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-";
   if(window.crypto && typeof window.crypto.getRandomValues === "function"){
-    const bytes = new Uint8Array(12);
+    const bytes = new Uint8Array(32);
     window.crypto.getRandomValues(bytes);
-    return Array.from(bytes, b => b.toString(36).padStart(2, "0")).join("").slice(0, 22);
+    let binary = "";
+    bytes.forEach(b => binary += String.fromCharCode(b));
+    return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
   }
-  return `${Date.now().toString(36)}${part()}${part()}`.slice(0, 22);
+  let token = "";
+  for(let i=0;i<48;i++) token += fallbackAlphabet[Math.floor(Math.random()*fallbackAlphabet.length)];
+  return token;
+}
+
+function isValidLiveToken(token){
+  return typeof token === "string" && /^[A-Za-z0-9_-]{32,96}$/.test(token);
 }
 
 function normalizeShareSourcePoint(p){
@@ -5047,7 +5057,7 @@ async function createLiveSession(){
   });
   if(activeExisting){
     const [token, session] = activeExisting;
-    createdShareUrl = buildShareUrl(token);
+    createdShareUrl = liveUrl;
     qs("shareLinkText").textContent = createdShareUrl;
     qs("shareExpiresText").textContent = fmtTime(getSessionRoot(session).meta?.expiresAt);
     qs("shareResultBox").classList.remove("hidden");
@@ -5069,9 +5079,32 @@ async function createLiveSession(){
   const sourcePoints=getRecentSourcePoints();
   if(!sourcePoints.length) return showToast("Нет данных выбранного пользователя для создания live-ссылки.","warn");
 
-  const token=generateSessionToken(), expiresAt=now+durationMinutes*60*1000, lastPoint=sourcePoints[sourcePoints.length-1], recentPointsObj={};
+  const token=generateSessionToken();
+  if(!isValidLiveToken(token)) return showToast("Не удалось создать безопасный live token", "error");
+  const expiresAt=now+durationMinutes*60*1000, lastPoint=sourcePoints[sourcePoints.length-1], recentPointsObj={};
   sourcePoints.forEach(p=>recentPointsObj[String(p.timestamp||Date.now()+Math.random())]=p);
-  const payload={meta:{active:true,paused:false,createdAt:now,expiresAt,remainingMs:durationMinutes*60*1000,ownerUid:selectedUid,createdBy:auth.currentUser?.uid||null,createdByEmail:auth.currentUser?.email||null,durationMinutes},public:{lastPoint,recentPoints:recentPointsObj},viewStats:{openCount:0,firstOpenAt:null,lastOpenAt:null}};
+  const liveUrl = buildShareUrl(token);
+  const payload={
+    meta:{
+      active:true,
+      paused:false,
+      status:"active",
+      linkStatus:"active",
+      sessionId:token,
+      createdAt:now,
+      startedAt:now,
+      expiresAt,
+      remainingMs:durationMinutes*60*1000,
+      ownerUid:selectedUid,
+      createdBy:auth.currentUser?.uid||null,
+      durationMinutes,
+      liveUrl,
+      link:liveUrl,
+      updatedAt:now
+    },
+    public:{lastPoint,recentPoints:recentPointsObj},
+    viewStats:{openCount:0,firstOpenAt:null,lastOpenAt:null}
+  };
   try{
     await set(ref(db,`liveSessions/${token}`), payload);
     await update(ref(db), { [`liveOwners/${selectedUid}/activeSessionId`]:token, [`liveOwners/${selectedUid}/lastCreatedAt`]:now });
@@ -5089,12 +5122,23 @@ async function createLiveSession(){
 }
 
 function getSessionStatus(session){
-  const root=getSessionRoot(session), meta=root.meta||{}, active=!!meta.active, expiresAt=Number(meta.expiresAt||0), now=Date.now();
-  if(active && expiresAt>now) return "active";
-  if(!active && expiresAt>now) return "ended";
+  const root=getSessionRoot(session), meta=root.meta||{}, now=Date.now();
+  const raw = String(meta.status || meta.linkStatus || "").toLowerCase();
+  const active = meta.active === true;
+  const paused = meta.paused === true || raw === "paused";
+  const expiresAt = Number(meta.expiresAt || 0);
+  const ended = active === false || ["stopped","ended","stop"].includes(raw);
+  if(paused && !ended) return "paused";
+  if(active && (!expiresAt || expiresAt > now)) return "active";
+  if(ended && (!expiresAt || expiresAt > now)) return "ended";
   return "expired";
 }
-function getSessionStatusLabel(status){ if(status==="active") return "активна"; if(status==="ended") return "завершена"; return "истекла"; }
+function getSessionStatusLabel(status){
+  if(status==="paused") return '<span class="tag idle">пауза</span>';
+  if(status==="active") return '<span class="tag online">активна</span>';
+  if(status==="ended") return '<span class="tag offline">завершена</span>';
+  return '<span class="tag offline">истекла</span>';
+}
 
 
 function findActiveSessionEntryForSelectedUser(){
@@ -9545,415 +9589,12 @@ setInterval(() => {
   requireDeleteWord = function(){ return true; };
 })();
 
-
-/* === fix_107: show live remaining-time notice immediately after admin-created live === */
-(function(){
-  function safeMsToText(ms){
-    try{ return formatRemainingMs(Math.max(0, Number(ms || 0))); }
-    catch(e){
-      const sec = Math.max(0, Math.floor(Number(ms || 0) / 1000));
-      const m = Math.floor(sec / 60), s = sec % 60;
-      return m + ':' + String(s).padStart(2, '0');
-    }
-  }
-
-  function readMetaStatus(meta){
-    try{ return liveFix67MetaStatus(meta); }
-    catch(e){
-      const expiresAt = Number(meta?.expiresAt || 0);
-      const paused = meta?.paused === true || meta?.status === 'paused';
-      return {
-        active: meta?.active === true && (paused || expiresAt > Date.now()),
-        paused,
-        leftMs: paused ? Math.max(0, Number(meta?.remainingMs || 0)) : Math.max(0, expiresAt - Date.now())
-      };
-    }
-  }
-
-  function ensureLiveCountdownNotice(token, meta){
-    if(!token || !meta) return;
-    const st = readMetaStatus(meta);
-    if(!st.active) return;
-    const url = (meta.liveUrl || meta.link || (typeof buildShareUrl === 'function' ? buildShareUrl(token) : ''));
-
-    try{
-      createdShareUrl = url;
-      const linkEl = qs('shareLinkText');
-      const expEl = qs('shareExpiresText');
-      const resultBox = qs('shareResultBox');
-      if(linkEl) linkEl.textContent = url;
-      if(expEl) expEl.textContent = fmtTime(Number(meta.expiresAt || 0));
-      if(resultBox) resultBox.classList.remove('hidden');
-    }catch(e){}
-
-    const box = qs('activeSessionNotice');
-    if(box){
-      box.classList.remove('hidden');
-      if(box.dataset.liveToken !== token){
-        box.dataset.liveToken = token;
-        box.innerHTML = '<strong id="activeSessionNoticeTitle"></strong><div style="margin-top:6px"><span id="activeSessionNoticeLabel"></span>: <b id="activeSessionNoticeTime"></b></div><div style="margin-top:6px" class="mono" id="activeSessionNoticeUrl"></div>';
-      }
-      const title = qs('activeSessionNoticeTitle');
-      const label = qs('activeSessionNoticeLabel');
-      const time = qs('activeSessionNoticeTime');
-      const urlEl = qs('activeSessionNoticeUrl');
-      if(title) title.textContent = st.paused ? 'Live-сессия на паузе' : 'Live-сессия активна';
-      if(label) label.textContent = st.paused ? 'Пауза' : 'Осталось';
-      if(time) time.textContent = safeMsToText(st.leftMs);
-      if(urlEl) urlEl.textContent = url;
-      clearInterval(box._fix107Timer);
-      box._fix107Timer = setInterval(()=>{
-        const nextSt = readMetaStatus(meta);
-        const left = nextSt.paused ? Math.max(0, Number(meta.remainingMs || 0)) : Math.max(0, Number(meta.expiresAt || 0) - Date.now());
-        const time2 = qs('activeSessionNoticeTime');
-        if(time2) time2.textContent = safeMsToText(left);
-        if(!nextSt.paused && left <= 0){ clearInterval(box._fix107Timer); }
-      }, 1000);
-    }
-
-    let toast = document.getElementById('activeSessionToast');
-    try{
-      const host = typeof getToastHost === 'function' ? getToastHost() : document.body;
-      if(!toast){
-        toast = document.createElement('div');
-        toast.id = 'activeSessionToast';
-        toast.style.pointerEvents = 'auto';
-        toast.style.display = 'flex';
-        toast.style.flexDirection = 'column';
-        toast.style.gap = '8px';
-        toast.style.padding = '12px 14px';
-        toast.style.borderRadius = '14px';
-        toast.style.color = '#fff';
-        toast.style.boxShadow = '0 10px 28px rgba(0,0,0,.28)';
-        toast.style.fontWeight = '600';
-        toast.style.lineHeight = '1.35';
-        toast.style.wordBreak = 'break-word';
-        host.appendChild(toast);
-      }
-      toast.style.background = st.paused ? '#b45309' : '#2563eb';
-      toast.innerHTML = '<div style="font-weight:800" id="activeSessionToastTitle"></div><div id="activeSessionToastTime" style="font-size:13px;opacity:.95"></div>';
-      qs('activeSessionToastTitle').textContent = st.paused ? 'Live-сессия на паузе' : 'Live-сессия активна';
-      qs('activeSessionToastTime').textContent = (st.paused ? 'Пауза: ' : 'Осталось: ') + safeMsToText(st.leftMs);
-      clearInterval(toast._fix107Timer);
-      toast._fix107Timer = setInterval(()=>{
-        const left = st.paused ? Math.max(0, Number(meta.remainingMs || 0)) : Math.max(0, Number(meta.expiresAt || 0) - Date.now());
-        const timeEl = qs('activeSessionToastTime');
-        if(timeEl) timeEl.textContent = (st.paused ? 'Пауза: ' : 'Осталось: ') + safeMsToText(left);
-        if(!st.paused && left <= 0){ clearInterval(toast._fix107Timer); toast.remove(); }
-      }, 1000);
-      const createBtn = qs('createShareBtn');
-      if(createBtn){ createBtn.disabled = true; createBtn.textContent = st.paused ? 'Live на паузе' : 'Есть активная ссылка'; }
-    }catch(e){ try{ recordError('fix107CountdownToast', e); }catch(_){} }
-  }
-
-  async function refreshActiveLiveAfterCreate(){
-    if(!selectedUid) return;
-    try{
-      const ownerSnap = await get(ref(db, `liveOwners/${selectedUid}/activeSessionId`));
-      const token = String(ownerSnap.val() || '').trim();
-      if(!token) return;
-      const sessionSnap = await get(ref(db, `liveSessions/${token}`));
-      const session = sessionSnap.val();
-      const meta = session?.meta || {};
-      if(!session || !meta) return;
-      allSessions = allSessions || {};
-      allSessions[token] = session;
-      ensureLiveCountdownNotice(token, meta);
-      try{ updateActiveSessionNotice(); }catch(e){}
-      try{ updateActiveSessionToast(); }catch(e){}
-      setTimeout(()=>ensureLiveCountdownNotice(token, meta), 150);
-    }catch(e){ try{ recordError('fix107RefreshActiveLiveAfterCreate', e); }catch(_){} }
-  }
-
-  const oldCreateLiveSessionFix107 = createLiveSession;
-  createLiveSession = async function(){
-    await oldCreateLiveSessionFix107.apply(this, arguments);
-    await refreshActiveLiveAfterCreate();
-  };
-
-  const btn = qs('createShareBtn');
-  if(btn){ btn.onclick = ()=>createLiveSession(); }
-})();
-/* === /fix_107 === */
-
 </script>
 
 
 <!-- === Fix 68: Leaflet maps stable resize / no blank map after admin open === -->
-<script type="module">
-// This script runs after the main module. Most map variables are module-scoped there,
-// so we use DOM + Leaflet container resize events through global events and safe retries.
-(function(){
-  const mapIds = ['liveMap','historyMap','sessionMap','geofenceMap'];
-  let resizeTimer = null;
 
-  function visible(el){
-    if(!el) return false;
-    const r = el.getBoundingClientRect();
-    return r.width > 40 && r.height > 40 && getComputedStyle(el).display !== 'none' && !el.closest('.hidden');
-  }
+<!-- fix_109: removed broken isolated live-session patch module -->
 
-  function fireMapResize(reason){
-    try{
-      // Leaflet listens to window resize and recalculates tile layout.
-      window.dispatchEvent(new Event('resize'));
-    }catch(e){}
-
-    // Retry several times because tabs/panels become visible after CSS/layout settles.
-    [60, 180, 420, 900].forEach(delay => {
-      setTimeout(() => {
-        try{ window.dispatchEvent(new Event('resize')); }catch(e){}
-        mapIds.forEach(id => {
-          const el = document.getElementById(id);
-          if(!visible(el)) return;
-          // Force browser layout recalculation for Leaflet tile containers.
-          el.style.minHeight = el.style.minHeight || '';
-          el.getBoundingClientRect();
-        });
-      }, delay);
-    });
-  }
-
-  function scheduleMapResize(reason=''){
-    clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => fireMapResize(reason), 40);
-  }
-
-  // Tab switching: fixes white/half-loaded maps when a Leaflet map was initialized hidden.
-  document.addEventListener('click', (ev) => {
-    const btn = ev.target && ev.target.closest ? ev.target.closest('.tab-btn[data-tab]') : null;
-    if(btn) scheduleMapResize('tab');
-  }, true);
-
-  // Initial admin open/login and browser resize/orientation changes.
-  window.addEventListener('load', () => scheduleMapResize('load'));
-  window.addEventListener('resize', () => scheduleMapResize('resize'));
-  window.addEventListener('orientationchange', () => scheduleMapResize('orientation'));
-
-  // When hidden panels become visible after login/tab restore, resize maps automatically.
-  const observer = new MutationObserver((mutations) => {
-    for(const m of mutations){
-      if(m.type === 'attributes' && (m.attributeName === 'class' || m.attributeName === 'style')){
-        const t = m.target;
-        if(t && (t.id === 'adminPanel' || /Panel$/.test(t.id || '') || mapIds.includes(t.id || ''))){
-          scheduleMapResize('mutation');
-          return;
-        }
-      }
-    }
-  });
-
-  window.addEventListener('DOMContentLoaded', () => {
-    try{
-      document.querySelectorAll('#adminPanel,#nowPanel,#historyPanel,#sessionsPanel,#geofencesPanel,#liveMap,#historyMap,#sessionMap,#geofenceMap')
-        .forEach(el => observer.observe(el, {attributes:true, attributeFilter:['class','style']}));
-    }catch(e){}
-    scheduleMapResize('dom');
-  });
-
-  // Expose manual helper for existing code if needed.
-  window.fixAdminMapsLayout = scheduleMapResize;
-})();
-
-
-/* === MyGps live view details + realtime sync final patch === */
-function mygpsLivePatchEscape(value){
-  try{ return escapeHtml(value); }catch(e){ return String(value ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;'); }
-}
-function mygpsLivePatchInstallUi(){
-  if(!document.getElementById('mygpsLiveDetailsStyle')){
-    const st=document.createElement('style');
-    st.id='mygpsLiveDetailsStyle';
-    st.textContent=`
-      .liveDetailsCard{margin-top:12px;border-color:rgba(59,130,246,.28);background:linear-gradient(180deg,rgba(37,99,235,.10),rgba(255,255,255,.025))}
-      .liveDetailsGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:12px}
-      .liveDetailsOpenList{margin-top:12px;display:grid;gap:8px}
-      .liveOpenItem{padding:10px 12px;border-radius:14px;border:1px solid var(--border);background:rgba(255,255,255,.035);line-height:1.45}
-      .liveOpenItem b{display:block;margin-bottom:3px}
-      .liveOpenMeta{color:var(--muted);font-size:12px;word-break:break-word}
-      .liveViewBadge{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;border:1px solid rgba(59,130,246,.45);background:rgba(37,99,235,.18);font-weight:900;color:#bfdbfe}
-      @media(max-width:900px){.liveDetailsGrid{grid-template-columns:1fr}}
-    `;
-    document.head.appendChild(st);
-  }
-  const sessionsPanel=document.getElementById('sessionsPanel');
-  const managementCard=sessionsPanel ? Array.from(sessionsPanel.querySelectorAll('.card')).find(c=>c.textContent.includes('Управление live-сессиями')) : null;
-  if(managementCard && !document.getElementById('liveViewDetailsCard')){
-    const box=document.createElement('div');
-    box.id='liveViewDetailsCard';
-    box.className='notice liveDetailsCard';
-    box.innerHTML=`
-      <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center">
-        <div><strong>Открытия активной live-ссылки</strong><div class="smallMuted">Показывает данные из liveSessions/&lt;token&gt;/viewStats. IP/город появятся только если их записывает live-страница или Cloud Function.</div></div>
-        <button id="liveViewDetailsRefreshBtn" class="secondary small" type="button">Обновить</button>
-      </div>
-      <div class="liveDetailsGrid">
-        <div class="stat"><div class="label">Открытий всего</div><div class="value" id="liveDetailsOpenCount">0</div></div>
-        <div class="stat"><div class="label">Первое открытие</div><div class="value" id="liveDetailsFirstOpen">—</div></div>
-        <div class="stat"><div class="label">Последнее открытие</div><div class="value" id="liveDetailsLastOpen">—</div></div>
-        <div class="stat"><div class="label">Последний IP / город</div><div class="value" id="liveDetailsLastPlace">—</div></div>
-      </div>
-      <div class="liveDetailsOpenList" id="liveDetailsOpenList"><div class="smallMuted">Открытий пока нет.</div></div>
-    `;
-    const tableWrap=managementCard.querySelector('div[style*="overflow:auto"]');
-    managementCard.insertBefore(box, tableWrap || null);
-    const btn=document.getElementById('liveViewDetailsRefreshBtn');
-    if(btn) btn.onclick=()=>{ renderSessions(); showToast && showToast('Детали открытий обновлены','success'); };
-  }
-}
-function mygpsLivePatchGetStats(session){
-  const root=getSessionRoot(session)||{};
-  const stats=root.viewStats||{};
-  const opens=stats.opens || stats.recentOpens || root.opens || {};
-  const list=Array.isArray(opens) ? opens.filter(Boolean) : Object.entries(opens||{}).map(([id,v])=>({id,...(v||{})}));
-  list.sort((a,b)=>Number(b.openedAt||b.ts||b.timestamp||0)-Number(a.openedAt||a.ts||a.timestamp||0));
-  const last=list[0]||{};
-  return {
-    stats,
-    list,
-    openCount:Number(stats.openCount || stats.count || list.length || 0),
-    firstOpenAt:Number(stats.firstOpenAt || stats.firstOpenedAt || 0),
-    lastOpenAt:Number(stats.lastOpenAt || stats.lastOpenedAt || last.openedAt || last.ts || last.timestamp || 0),
-    lastIp:stats.lastIp || stats.ip || last.ip || last.clientIp || '',
-    lastCountry:stats.lastCountry || last.country || last.countryName || '',
-    lastCity:stats.lastCity || last.city || '',
-    lastUserAgent:stats.lastUserAgent || last.userAgent || last.ua || ''
-  };
-}
-function mygpsLivePatchActiveEntry(){
-  try{
-    const now=Date.now();
-    const entries=Object.entries(allSessions||{}).filter(([token])=>token !== '_init');
-    const selected=entries.find(([token, session])=>{
-      const meta=(getSessionRoot(session)||{}).meta||{};
-      return (!selectedUid || meta.ownerUid===selectedUid) && !!meta.active && Number(meta.expiresAt||0)>now;
-    });
-    if(selected) return selected;
-    return entries.sort((a,b)=>Number((getSessionRoot(b[1])||{}).meta?.createdAt||0)-Number((getSessionRoot(a[1])||{}).meta?.createdAt||0))[0] || null;
-  }catch(e){return null;}
-}
-function mygpsLivePatchRenderDetails(entry){
-  mygpsLivePatchInstallUi();
-  const card=document.getElementById('liveViewDetailsCard');
-  if(!card) return;
-  if(!entry){
-    const ids=['liveDetailsOpenCount','liveDetailsFirstOpen','liveDetailsLastOpen','liveDetailsLastPlace'];
-    ids.forEach(id=>{ const el=document.getElementById(id); if(el) el.textContent=id==='liveDetailsOpenCount'?'0':'—'; });
-    const list=document.getElementById('liveDetailsOpenList'); if(list) list.innerHTML='<div class="smallMuted">Активной live-сессии нет.</div>';
-    return;
-  }
-  const [token, session]=entry;
-  const s=mygpsLivePatchGetStats(session);
-  const place=[s.lastIp, s.lastCity, s.lastCountry].filter(Boolean).join(' · ') || '—';
-  const set=(id,val)=>{ const el=document.getElementById(id); if(el) el.textContent=val; };
-  set('liveDetailsOpenCount', String(s.openCount));
-  set('liveDetailsFirstOpen', fmtTime(s.firstOpenAt));
-  set('liveDetailsLastOpen', fmtTime(s.lastOpenAt));
-  set('liveDetailsLastPlace', place);
-  const listEl=document.getElementById('liveDetailsOpenList');
-  if(listEl){
-    if(!s.list.length){
-      const ua=s.lastUserAgent ? `<div class="liveOpenMeta">Браузер: ${mygpsLivePatchEscape(s.lastUserAgent)}</div>` : '';
-      listEl.innerHTML=`<div class="liveOpenItem"><b>Последнее открытие</b><div class="liveOpenMeta">Token: ${mygpsLivePatchEscape(token)}</div><div class="liveOpenMeta">IP/город: ${mygpsLivePatchEscape(place)}</div>${ua}</div>`;
-    }else{
-      listEl.innerHTML=s.list.slice(0,8).map((o,i)=>{
-        const ts=Number(o.openedAt||o.ts||o.timestamp||0);
-        const p=[o.ip||o.clientIp||'', o.city||'', o.country||o.countryName||''].filter(Boolean).join(' · ') || 'нет IP/города';
-        const ua=o.userAgent||o.ua||'';
-        return `<div class="liveOpenItem"><b>#${i+1} · ${fmtTime(ts)}</b><div class="liveOpenMeta">${mygpsLivePatchEscape(p)}</div>${ua?`<div class="liveOpenMeta">${mygpsLivePatchEscape(ua)}</div>`:''}</div>`;
-      }).join('');
-    }
-  }
-}
-function mygpsLivePatchCollectSessionPoints(session){
-  const root=getSessionRoot(session)||{};
-  const arr=[];
-  const add=p=>{ const lat=getPointLat(p), lng=getPointLng(p); if(lat!=null && lng!=null) arr.push({lat:Number(lat), lng:Number(lng), ts:Number(p?.timestamp||p?.ts||p?.time||0), p}); };
-  const rp=root.public?.recentPoints || root.recentPoints || {};
-  if(Array.isArray(rp)) rp.forEach(add); else Object.values(rp).forEach(add);
-  add(root.public?.lastPoint || root.lastPoint);
-  return arr.filter(x=>Number.isFinite(x.lat)&&Number.isFinite(x.lng)).sort((a,b)=>a.ts-b.ts);
-}
-function showSessionRouteOnMap(token){
-  const session=getSessionRoot(allSessions?.[token])||{};
-  const pts=mygpsLivePatchCollectSessionPoints(session);
-  if(!pts.length) return showToast('Нет точек маршрута в этой live-сессии','warn');
-  const latlngs=pts.map(x=>[x.lat,x.lng]);
-  try{
-    sessionTrail.setLatLngs(latlngs);
-    sessionMarker.setLatLng(latlngs[latlngs.length-1]);
-    sessionMap.fitBounds(L.latLngBounds(latlngs), {padding:[30,30]});
-    const tabs=document.querySelectorAll('.tab-btn[data-tab]');
-    tabs.forEach(b=>{ if(b.dataset.tab==='sessionsPanel') b.classList.add('active'); else b.classList.remove('active'); });
-    document.querySelectorAll('#adminPanel > div[id$="Panel"], #adminPanel > #nowPanel, #historyPanel, #reportsPanel, #usagePanel, #trafficPanel, #sessionsPanel, #usersPanel, #visibilityPanel, #geofencesPanel, #journalPanel, #errorsPanel, #systemCheckPanel, #adminLogsPanel, #settingsPanel').forEach(p=>{ if(p.id==='sessionsPanel') p.classList.remove('hidden'); });
-    setTimeout(()=>sessionMap.invalidateSize(),250);
-    showToast('Маршрут live-сессии показан на карте','success');
-  }catch(e){ recordError('showSessionRouteOnMap', e); showToast('Ошибка показа маршрута: '+errText(e),'error'); }
-}
-function mygpsLivePatchStatusLabel(status, meta){
-  const paused=meta?.paused===true || meta?.status==='paused';
-  if(paused) return '<span class="tag idle">пауза</span>';
-  if(status==='active') return '<span class="tag online">активна</span>';
-  if(status==='ended') return '<span class="tag offline">завершена</span>';
-  return '<span class="tag offline">истекла</span>';
-}
-function mygpsLivePatchStatsHtml(session){
-  const s=mygpsLivePatchGetStats(session);
-  const place=[s.lastIp, s.lastCity, s.lastCountry].filter(Boolean).join(' · ');
-  return `<span class="liveViewBadge">👁 ${s.openCount}</span>${place?`<div class="smallMuted" style="margin-top:4px">${mygpsLivePatchEscape(place)}</div>`:''}`;
-}
-renderSessions = function(){
-  mygpsLivePatchInstallUi();
-  const tbody=qs('sessionsTbody'); if(!tbody) return;
-  tbody.innerHTML='';
-  const search=(qs('sessionSearchInput')?.value||'').trim().toLowerCase(), statusFilter=qs('sessionStatusFilter')?.value||'all';
-  const entries=Object.entries(allSessions||{}).filter(([token])=>token!=='_init').map(([token,session])=>[token,getSessionRoot(session),getSessionStatus(session)]).filter(([token,session,status])=>{
-    if(statusFilter!=='all' && status!==statusFilter) return false;
-    if(search && !token.toLowerCase().includes(search)) return false;
-    if(selectedUid && session?.meta?.ownerUid && qs('viewModeSelect')?.value==='selected' && session.meta.ownerUid!==selectedUid) return false;
-    return true;
-  }).sort((a,b)=>Number((b[1]?.meta?.createdAt||0))-Number((a[1]?.meta?.createdAt||0)));
-  if(!entries.length){
-    tbody.innerHTML='<tr><td colspan="8">Сессий нет</td></tr>';
-    mygpsLivePatchRenderDetails(null);
-    const createBtn=qs('createShareBtn'); if(createBtn){ createBtn.disabled=false; createBtn.textContent='Создать live-ссылку'; }
-    try{ updateActiveSessionToast(); }catch(e){}
-    return;
-  }
-  for(const [token,session,status] of entries){
-    const meta=session?.meta||{}, tr=document.createElement('tr');
-    const lpInfo=getSessionLastPointInfo(session, status);
-    const stat=mygpsLivePatchGetStats(session);
-    tr.innerHTML=`<td class="mono">${mygpsLivePatchEscape(token)}<br><span class="tag">${mygpsLivePatchEscape(getDisplayName(meta.ownerUid)||meta.ownerUid||'—')}</span></td><td>${mygpsLivePatchStatusLabel(status, meta)}</td><td>${lpInfo.html}</td><td>${lpInfo.age}</td><td>${fmtTime(meta.expiresAt)}</td><td>${mygpsLivePatchStatsHtml(session)}</td><td>${fmtTime(stat.firstOpenAt)}<br>${fmtTime(stat.lastOpenAt)}</td><td><div class="row"><button class="secondary small" data-copy="${mygpsLivePatchEscape(token)}">Копировать</button><button class="secondary small" data-share="${mygpsLivePatchEscape(token)}">Поделиться</button><button class="secondary small" data-open="${mygpsLivePatchEscape(token)}">Карта</button><button class="secondary small" data-route="${mygpsLivePatchEscape(token)}">Маршрут</button><button class="secondary small" data-gmaps="${mygpsLivePatchEscape(token)}">Google Maps</button><button class="secondary small" data-center="${mygpsLivePatchEscape(token)}">Центр</button><button class="warn small" data-end="${mygpsLivePatchEscape(token)}">Завершить</button><button class="danger small" data-delete="${mygpsLivePatchEscape(token)}">Удалить</button></div></td>`;
-    tbody.appendChild(tr);
-  }
-  mygpsLivePatchRenderDetails(mygpsLivePatchActiveEntry());
-  tbody.querySelectorAll('[data-copy]').forEach(btn=>btn.onclick=async()=>{ try{ await navigator.clipboard.writeText(buildShareUrl(btn.dataset.copy)); showToast('Ссылка скопирована','success'); }catch(e){ alert('Ошибка копирования: '+errText(e)); }});
-  tbody.querySelectorAll('[data-share]').forEach(btn=>btn.onclick=async()=>{ const url=buildShareUrl(btn.dataset.share); try{ if(navigator.share){ await navigator.share({title:'MyGps Live', text:'Активная live-ссылка', url}); } else { await navigator.clipboard.writeText(url); showToast('Ссылка скопирована для отправки','success'); }}catch(e){} });
-  tbody.querySelectorAll('[data-open]').forEach(btn=>btn.onclick=()=>window.open(buildShareUrl(btn.dataset.open), '_blank', 'noopener,noreferrer'));
-  tbody.querySelectorAll('[data-route]').forEach(btn=>btn.onclick=()=>showSessionRouteOnMap(btn.dataset.route));
-  tbody.querySelectorAll('[data-center]').forEach(btn=>btn.onclick=()=>centerSessionOnPoint(btn.dataset.center));
-  tbody.querySelectorAll('[data-gmaps]').forEach(btn=>btn.onclick=()=>{ const session=getSessionRoot(allSessions[btn.dataset.gmaps])||{}; const p=session?.public?.lastPoint; const lat=getPointLat(p), lng=getPointLng(p); if(!p||lat==null||lng==null) return showToast('Нет точки','warn'); window.open(`https://www.google.com/maps?q=${lat},${lng}`,'_blank'); });
-  tbody.querySelectorAll('[data-end]').forEach(btn=>btn.onclick=()=>endSession(btn.dataset.end));
-  tbody.querySelectorAll('[data-delete]').forEach(btn=>btn.onclick=()=>deleteSession(btn.dataset.delete));
-  const createBtn=qs('createShareBtn'); if(createBtn){ const hasActiveForSelected=entries.some(([token,session,status])=>status==='active' && (!selectedUid || session?.meta?.ownerUid===selectedUid) && Number(session?.meta?.expiresAt||0)>Date.now()); createBtn.disabled=hasActiveForSelected; createBtn.textContent=hasActiveForSelected?'Есть активная ссылка':'Создать live-ссылку'; }
-  try{ updateActiveSessionToast(); }catch(e){}
-};
-let __mygpsLiveSessionsUnsub=null;
-function startLiveSessionsRealtimeSync(){
-  try{
-    if(__mygpsLiveSessionsUnsub) return;
-    __mygpsLiveSessionsUnsub=onValue(query(ref(db,'liveSessions'), limitToLast(typeof ADMIN_SESSIONS_LIMIT !== 'undefined' ? ADMIN_SESSIONS_LIMIT : 80)), snap=>{
-      allSessions=snap.val()||{};
-      try{ renderSessions(); }catch(e){ recordError('renderSessionsRealtime', e); }
-      try{ updateActiveSessionNotice(); }catch(e){}
-      try{ updateActiveSessionToast(); }catch(e){}
-      try{ updateNowFromAvailableSources(); }catch(e){}
-    }, e=>recordError('liveSessionsRealtimeSync', e));
-  }catch(e){ recordError('startLiveSessionsRealtimeSync', e); }
-}
-window.addEventListener('load', ()=>{ mygpsLivePatchInstallUi(); setTimeout(()=>{ try{ startLiveSessionsRealtimeSync(); }catch(e){} }, 1800); });
-/* === /MyGps live view details + realtime sync final patch === */
-</script>
 
 </body></html>
