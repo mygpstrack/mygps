@@ -264,7 +264,17 @@ const db=getDatabase(app);
 
 const qs=id=>document.getElementById(id);
 const params=new URLSearchParams(location.search);
-const sessionId=params.get("session");
+
+const LIVE_TOKEN_RE = /^[A-Za-z0-9_-]{32,96}$/;
+function getLiveSessionToken(){
+  const raw = String(params.get("session") || params.get("token") || params.get("t") || "").trim();
+  if(!raw) return { token:"", ok:false, reason:"missing" };
+  if(!LIVE_TOKEN_RE.test(raw)) return { token:"", ok:false, reason:"invalid" };
+  return { token: raw, ok:true, reason:"ok" };
+}
+
+const sessionTokenInfo = getLiveSessionToken();
+const sessionId = sessionTokenInfo.ok ? sessionTokenInfo.token : "";
 
 function hideMyGpsLiveLaunchSplash(){
   const splash=document.getElementById('mygpsliveLaunchSplash');
@@ -334,11 +344,12 @@ function toggleBottomPanel(){
   bottomPanelCollapsed = !bottomPanelCollapsed;
   localStorage.setItem('live_bottom_panel_collapsed', bottomPanelCollapsed ? '1' : '0');
   applyBottomPanelState();
-window.addEventListener('load', () => {
-  applyTopInfoState();
-});
 }
 window.toggleBottomPanel = toggleBottomPanel;
+window.addEventListener('load', () => {
+  applyTopInfoState();
+  applyBottomPanelState();
+});
 
 function togglePanel(){
   open=!open;
@@ -448,7 +459,7 @@ async function registerSessionOpen(meta = {}){
         uid: ownerUid,
         sessionId,
         userAgent: navigator.userAgent || "",
-        url: location.href.split("#")[0]
+        urlPath: location.pathname || "/mygps/live.html"
       });
     }
 
@@ -1021,7 +1032,9 @@ function rememberSlimPoint(point){
 }
 
 if(!sessionId){
-  showEnd('Неверная ссылка (нет session).');
+  showEnd(sessionTokenInfo.reason === 'invalid'
+    ? 'Неверная live-ссылка: token имеет неправильный формат.'
+    : 'Неверная live-ссылка: нет session/token.');
 }else{
   const metaRef = ref(db, `liveSessions/${sessionId}/meta`);
   const lastPointRef = ref(db, `liveSessions/${sessionId}/public/lastPoint`);
@@ -1128,6 +1141,8 @@ if ("serviceWorker" in navigator) {
   });
 }
 
+
+// Security fix 105: live token validation, no full token URL in events
 </script>
 </body>
 </html>
