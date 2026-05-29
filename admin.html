@@ -455,6 +455,13 @@
 tr.gpsLogRowGood{background:rgba(22,163,74,.07)}
 tr.gpsLogRowSleep,tr.gpsLogRowWarn{background:rgba(234,179,8,.08)}
 tr.gpsLogRowStop,tr.gpsLogRowError{background:rgba(185,28,28,.13)}
+.gpsLogTypeBadge.indoor{background:rgba(234,179,8,.20);border-color:#a16207;color:#fde68a}
+.gpsLogTypeBadge.heartbeat{background:rgba(20,184,166,.18);border-color:#0f766e;color:#ccfbf1}
+.gpsLogTypeBadge.watchdog{background:rgba(147,51,234,.18);border-color:#7e22ce;color:#e9d5ff}
+tr.gpsLogRowIndoor{background:rgba(234,179,8,.09)}
+tr.gpsLogRowHeartbeat{background:rgba(20,184,166,.07)}
+tr.gpsLogRowWatchdog{background:rgba(147,51,234,.08)}
+
 .historyModeBox{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px}
 .historyModeBox .active{background:#16a34a!important}
 .cleanDistanceHint{border-color:rgba(34,197,94,.25);background:rgba(22,163,74,.08)}
@@ -558,7 +565,6 @@ tr.gpsLogRowStop,tr.gpsLogRowError{background:rgba(185,28,28,.13)}
 body.admin-normal-mode .tab-btn[data-tab="alertCenterPanel"],
 body.admin-normal-mode .tab-btn[data-tab="usagePanel"],
 body.admin-normal-mode .tab-btn[data-tab="trafficPanel"],
-body.admin-normal-mode .tab-btn[data-tab="gpsLogPanel"],
 body.admin-normal-mode .tab-btn[data-tab="errorsPanel"],
 body.admin-normal-mode .tab-btn[data-tab="systemCheckPanel"],
 body.admin-normal-mode .tab-btn[data-tab="postUpdatePanel"],
@@ -569,8 +575,8 @@ body.admin-normal-mode #downloadPostUpdateDiagBtn,
 body.admin-normal-mode #rulesCheckCard,
 body.admin-normal-mode .diagnosticOnly,
 body.admin-normal-mode [data-diagnostic-only="1"]{display:none!important}
-body.admin-diagnostic-mode .adminModeHint::after{content:" Диагностика включена: доступны тревоги, GPS лог, проверки, ошибки и логи."}
-body.admin-normal-mode .adminModeHint::after{content:" Обычный режим: скрыты технические вкладки и лишняя диагностика."}
+body.admin-diagnostic-mode .adminModeHint::after{content:" Диагностика включена: доступны тревоги, проверки, ошибки и логи."}
+body.admin-normal-mode .adminModeHint::after{content:" Обычный режим: скрыты тяжёлые технические вкладки; GPS лог доступен отдельно."}
 @media (max-width:900px){
   body.admin-mobile-compact .wrap{padding:8px;max-width:none}
   body.admin-mobile-compact .card{border-radius:14px;padding:10px;margin-bottom:10px}
@@ -1433,7 +1439,7 @@ body.admin-readonly-mode textarea.adminWriteDisabled{opacity:.45!important;curso
     <div id="gpsLogPanel" class="hidden">
       <div class="card">
         <h2>GPS лог</h2>
-        <p class="sub">Такой же служебный журнал, как в MyGps: service/GPS, live stop/expire, Smart GPS sleep, профили и фильтр плохих точек. Новые записи появляются после обновления MyGps до fix_64.</p>
+        <p class="sub">Такой же служебный журнал, как в MyGps: service/GPS, live stop/expire, Smart GPS sleep, профили и фильтр плохих точек. Новые записи появляются из MyGps: service/GPS, indoor/no GPS, heartbeat, watchdog, live и фильтр плохих точек.</p>
         <div class="grid4">
           <div>
             <div class="label">Пользователь</div>
@@ -1449,6 +1455,9 @@ body.admin-readonly-mode textarea.adminWriteDisabled{opacity:.45!important;curso
               <option value="gps">GPS</option>
               <option value="live">Live</option>
               <option value="sleep">Smart sleep</option>
+              <option value="indoor">Помещение / no GPS</option>
+              <option value="heartbeat">Heartbeat</option>
+              <option value="watchdog">Watchdog</option>
               <option value="filter">Фильтр точек</option>
             </select>
           </div>
@@ -1556,7 +1565,7 @@ body.admin-readonly-mode textarea.adminWriteDisabled{opacity:.45!important;curso
           <button id="downloadPostUpdateDiagBtn" class="secondary">Скачать диагностику</button>
         </div>
         <div class="postUpdateGrid">
-          <div class="postUpdateCard"><b>Admin version</b><span id="postAdminVersion">fix_101</span></div>
+          <div class="postUpdateCard"><b>Admin version</b><span id="postAdminVersion">fix_102</span></div>
           <div class="postUpdateCard"><b>Auth</b><span id="postAuthStatus">—</span></div>
           <div class="postUpdateCard"><b>Выбранный пользователь</b><span id="postSelectedUser">—</span></div>
           <div class="postUpdateCard"><b>GPS лог</b><span id="postGpsLogStatus">—</span></div>
@@ -2198,7 +2207,7 @@ setInterval(() => {
 
 const db = getDatabase(app);
 
-// === Traffic optimization fix_101 ===
+// === Traffic optimization fix_102 ===
 const ADMIN_HISTORY_DEFAULT_LIMIT_NOTE = "История загружается только для выбранного пользователя и выбранного периода.";
 const ADMIN_GPS_LOG_LIMIT = 100;
 const ADMIN_ADMIN_LOG_LIMIT = 200;
@@ -2503,7 +2512,7 @@ let liveGpsProfileNotifyInitialized = false;
 let liveGpsProfileSignatures = {};
 let historyLoaded = false;
 
-// fix_101: low-traffic history guard
+// fix_102: low-traffic history guard
 const HISTORY_LOW_TRAFFIC_MAX_POINTS = 3000;
 const HISTORY_LOW_TRAFFIC_WARN_MS = 24 * 60 * 60 * 1000;
 let historyLargeRangeConfirmedUntil = 0;
@@ -3666,7 +3675,7 @@ document.querySelectorAll(".tab-btn").forEach(btn=>{
     if(btn.dataset.tab === "historyPanel") { showTrafficLoadHint("История не обновляется автоматически: нажми Обновить историю."); }
     if(btn.dataset.tab === "journalPanel") window.loadLimitedEvents?.().catch(e=>recordError("loadLimitedEvents", e));
     if(btn.dataset.tab === "visibilityPanel") renderVisibilityPanel();
-    if(btn.dataset.tab === "systemCheckPanel") { /* traffic fix_101: system check only by button */ }
+    if(btn.dataset.tab === "systemCheckPanel") { /* traffic fix_102: system check only by button */ }
     setTimeout(()=>{ historyMap.invalidateSize(); liveMap.invalidateSize(); sessionMap.invalidateSize(); geofenceMap.invalidateSize(); speedChart?.resize(); distanceChart?.resize(); },50);
   };
 });
@@ -4568,7 +4577,7 @@ async function loadUsers(){
     try{ scheduleHeaderWeatherFromLastPoint(); }catch(e){}
 }
 
-// fix_101: lightweight users autoload safety.
+// fix_102: lightweight users autoload safety.
 // Keeps all existing admin features intact, but retries users list after page refresh
 // when Firebase/Auth timing leaves the selector empty. Heavy tabs are not loaded here.
 let __fix97UsersAutoloadTimer = null;
@@ -4694,7 +4703,7 @@ function notifyLiveGpsProfileChanges(liveSnapshot){
 }
 
 async function loadAllData(){
-  // Traffic optimization fix_101:
+  // Traffic optimization fix_102:
   // Do not download the whole /history tree. Load only selected user's history
   // inside selected date/time range using timestamp index.
   const [liveSnap, usersSnap] = await Promise.all([
@@ -6111,7 +6120,7 @@ function setupAutoRefresh(){
   if(sec > 0){
     autoRefreshTimer = setInterval(async()=>{
       try{
-        // fix_101: auto-refresh must stay lightweight.
+        // fix_102: auto-refresh must stay lightweight.
         // Do not load history/reports/sessions automatically.
         await updateNowFromAvailableSources();
         updateActiveSessionNotice?.();
@@ -8076,7 +8085,7 @@ onAuthStateChanged(auth, async user => {
     renderJournal();
     updateNowFromAvailableSources();
   });
-  // Traffic optimization fix_101: do not attach realtime listener to whole /history.
+  // Traffic optimization fix_102: do not attach realtime listener to whole /history.
   // History is loaded manually for selected user + selected period by loadAllData().
   trackedOnValue(query(ref(db, "liveSessions"), limitToLast(ADMIN_SESSIONS_LIMIT)), snap => { allSessions=snap.val()||{}; updateUsage(); renderSessions(); updateActiveSessionToast(); updateNowFromAvailableSources(); });
   trackedOnValue(query(ref(db, "adminLogs/deletions"), limitToLast(ADMIN_ADMIN_LOG_LIMIT)), snap => { deletionsLog=Object.values(snap.val()||{}).filter(Boolean).sort((a,b)=>Number(a.ts||0)-Number(b.ts||0)); renderJournal(); });
@@ -8103,7 +8112,7 @@ onAuthStateChanged(auth, async user => {
     appEventLogs = [...androidEventLogs, ...legacyEventJournalLogs].sort((a,b)=>Number(b.ts||0)-Number(a.ts||0));
     renderJournal();
   }
-  // Traffic optimization fix_101: events/eventJournal are loaded only when Journal/Timeline is opened manually.
+  // Traffic optimization fix_102: events/eventJournal are loaded only when Journal/Timeline is opened manually.
   // window.loadLimitedEvents?.().catch(e=>recordError("loadLimitedEvents", e));
 
   await loadAdminSettings();
@@ -8113,7 +8122,7 @@ onAuthStateChanged(auth, async user => {
   restoreUiState();
   await loadStartupLight();
 
-  // fix_101: final users autoload after startup-light.
+  // fix_102: final users autoload after startup-light.
   // loadStartupLight/restoreUiState can run after the first loadUsers call; run one more
   // lightweight users refresh here so the selector is populated without pressing
   // “Обновить пользователей”. Heavy history/reports/logs remain manual.
@@ -8124,10 +8133,10 @@ onAuthStateChanged(auth, async user => {
     renderVisibilityPanel?.();
     await updateNowFromAvailableSources?.();
   }catch(e){
-    recordError?.("fix_101_final_loadUsers", e);
+    recordError?.("fix_102_final_loadUsers", e);
   }
 
-  // Traffic optimization fix_101: sessions/backups/history/reports load only by opening tab or pressing refresh.
+  // Traffic optimization fix_102: sessions/backups/history/reports load only by opening tab or pressing refresh.
   // await loadSessions();
   // await renderBackups();
   // Low traffic: automatic full backup disabled on open; use Backup button manually.
@@ -8729,7 +8738,7 @@ function refreshVisibleTabLight(){
       }else if(tab === "sessionsPanel" && typeof loadSessions === "function"){
         loadSessions();
       }else if(tab === "historyPanel"){
-        // fix_101: history is heavy; never auto-load on focus/tab. Use “Обновить историю”.
+        // fix_102: history is heavy; never auto-load on focus/tab. Use “Обновить историю”.
         setHistoryTrafficNotice?.("История не загружается автоматически. Нажми «Обновить историю» для выбранного периода.", "info");
       }else if(tab === "journalPanel" && typeof loadJournal === "function"){
         loadJournal();
@@ -8980,7 +8989,7 @@ setTimeout(() => {
     }
   }catch(e){}
 
-  // fix_101: users list must always be allowed to load after page refresh.
+  // fix_102: users list must always be allowed to load after page refresh.
   // Heavy history/reports/logs are still guarded, but loadUsers is lightweight and required for admin UI.
 }, 1000);
 
@@ -10874,20 +10883,37 @@ let gpsServiceLogs = [];
 function gpsLogEscape(v){
   return String(v ?? "").replace(/[&<>'"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[ch]));
 }
+function gpsLogText(item){
+  return `${item.title || ""} ${item.message || ""} ${item.type || ""} ${item.source || ""} ${item.status || ""}`.toLowerCase();
+}
 function gpsLogKind(item){
-  const text = `${item.title || ""} ${item.message || ""} ${item.type || ""}`.toLowerCase();
+  const text = gpsLogText(item);
+  if(text.includes("indoor") || text.includes("no_gps") || text.includes("no gps") || text.includes("помещ") || text.includes("нет спут") || text.includes("network fallback") || text.includes("passive fallback")) return "indoor";
+  if(text.includes("heartbeat") || text.includes("service alive") || text.includes("internet ok") || text.includes("lastheartbeat") || text.includes("живой")) return "heartbeat";
+  if(text.includes("watchdog") || text.includes("перерегистр")) return "watchdog";
   if(text.includes("sleep") || text.includes("сон") || text.includes("smart")) return "sleep";
   if(text.includes("live")) return "live";
-  if(text.includes("фильтр") || text.includes("плох") || text.includes("отклон")) return "filter";
+  if(text.includes("фильтр") || text.includes("плох") || text.includes("отклон") || text.includes("bad point")) return "filter";
   if(text.includes("gps")) return "gps";
   return "service";
 }
 function gpsLogKindLabel(kind){
-  return ({service:"Service", gps:"GPS", live:"Live", sleep:"Smart sleep", filter:"Фильтр"})[kind] || kind || "Service";
+  return ({service:"Service", gps:"GPS", live:"Live", sleep:"Smart sleep", indoor:"Помещение", heartbeat:"Heartbeat", watchdog:"Watchdog", filter:"Фильтр"})[kind] || kind || "Service";
+}
+function gpsLogIsProblem(item){
+  const text = gpsLogText(item);
+  return text.includes("error") || text.includes("ошиб") || text.includes("fail") || text.includes("denied") || text.includes("permission") ||
+    text.includes("выключ") || text.includes("stop") || text.includes("останов") || text.includes("no_gps") || text.includes("no gps") ||
+    text.includes("нет gps") || text.includes("нет спут") || text.includes("lost") || text.includes("потер") || text.includes("слаб") ||
+    text.includes("watchdog") || text.includes("indoor") || text.includes("помещ") || text.includes("плох") || text.includes("отклон");
 }
 function gpsLogRowClass(item){
-  const text = `${item.title || ""} ${item.message || ""}`.toLowerCase();
+  const text = gpsLogText(item);
+  if(text.includes("error") || text.includes("ошиб") || text.includes("denied") || text.includes("permission")) return "gpsLogRowError";
   if(text.includes("выключ") || text.includes("stop") || text.includes("останов")) return "gpsLogRowStop";
+  if(text.includes("indoor") || text.includes("no_gps") || text.includes("помещ") || text.includes("нет спут")) return "gpsLogRowIndoor";
+  if(text.includes("heartbeat") || text.includes("живой") || text.includes("service alive")) return "gpsLogRowHeartbeat";
+  if(text.includes("watchdog") || text.includes("перерегистр")) return "gpsLogRowWatchdog";
   if(text.includes("sleep") || text.includes("сон") || text.includes("smart")) return "gpsLogRowSleep";
   if(text.includes("запущ") || text.includes("включ") || text.includes("актив")) return "gpsLogRowGood";
   return "";
@@ -10941,6 +10967,7 @@ function renderGpsServiceLogs(){
   let rows = gpsServiceLogs.slice();
   if(uidFilter) rows = rows.filter(x => x.uid === uidFilter);
   if(typeFilter) rows = rows.filter(x => gpsLogKind(x) === typeFilter);
+  if(qs("gpsLogProblemsOnly")?.checked) rows = rows.filter(gpsLogIsProblem);
   if(qs("gpsLogCount")) qs("gpsLogCount").textContent = String(rows.length);
   tbody.innerHTML = "";
   if(!rows.length){
@@ -10952,9 +10979,7 @@ function renderGpsServiceLogs(){
     const tr = document.createElement("tr");
     const ts = Number(item.ts || item.timestamp || 0);
     tr.className = gpsLogRowClass(item);
-    const indoorText = `${item.title||""} ${item.message||""} ${item.type||""} ${item.source||""}`.toLowerCase();
-    if(indoorText.includes("indoor") || indoorText.includes("помещ") || indoorText.includes("no_gps")) tr.classList.add("journal-geofence-row");
-    tr.innerHTML = `<td>${fmtTime(ts)}</td><td><span class="gpsLogTypeBadge">${gpsLogKindLabel(kind)}</span></td><td>${gpsLogEscape(item.title || item.type || "—")}</td><td>${gpsLogEscape(item.message || "—")}</td><td>${gpsLogEscape(getDisplayName(item.uid) || item.uid || "—")}</td><td>${gpsLogEscape(item.source || "android_service")}</td>`;
+    tr.innerHTML = `<td>${fmtTime(ts)}</td><td><span class="gpsLogTypeBadge ${gpsLogEscape(kind)}">${gpsLogKindLabel(kind)}</span></td><td>${gpsLogEscape(item.title || item.type || "—")}</td><td>${gpsLogEscape(item.message || "—")}</td><td>${gpsLogEscape(getDisplayName(item.uid) || item.uid || "—")}</td><td>${gpsLogEscape(item.source || "android_service")}</td>`;
     tbody.appendChild(tr);
   });
 }
@@ -10987,7 +11012,7 @@ function installGpsLogPanel(){
     clearBtn.dataset.bound = "1";
     clearBtn.onclick = clearSelectedGpsLog;
   }
-  ["gpsLogUserFilter","gpsLogTypeFilter"].forEach(id => {
+  ["gpsLogUserFilter","gpsLogTypeFilter","gpsLogProblemsOnly"].forEach(id => {
     const el = qs(id);
     if(el && !el.dataset.bound){
       el.dataset.bound = "1";
@@ -11133,10 +11158,6 @@ function adminFix66InstallHistoryMode(){
   if(rejected && !rejected.dataset.fix66){ rejected.dataset.fix66="1"; rejected.onchange=()=>{ adminShowRejectedSegments=!!rejected.checked; localStorage.setItem("mygps_admin_show_rejected", adminShowRejectedSegments?'1':'0'); adminFix66RenderRejectedSegments(); }; }
 }
 
-function gpsLogIsProblem(item){
-  const text = `${item.title || ""} ${item.message || ""} ${item.type || ""}`.toLowerCase();
-  return /(ошиб|error|permission|denied|выключ|отключ|stop|останов|kill|force|нет сигнала|no signal|bad|плох|watchdog|restart)/i.test(text);
-}
 function gpsLogStopReasonText(item){
   if(!item) return "—";
   const text = `${item.title || ""} ${item.message || ""}`.toLowerCase();
@@ -11167,6 +11188,7 @@ renderGpsServiceLogs = function(){
   let rows = gpsServiceLogs.slice();
   if(uidFilter) rows = rows.filter(x => x.uid === uidFilter);
   if(typeFilter) rows = rows.filter(x => gpsLogKind(x) === typeFilter);
+  if(qs("gpsLogProblemsOnly")?.checked) rows = rows.filter(gpsLogIsProblem);
   if(onlyProblems) rows = rows.filter(gpsLogIsProblem);
   if(qs("gpsLogCount")) qs("gpsLogCount").textContent = String(rows.length);
   const lastProblem = rows.find(gpsLogIsProblem) || gpsServiceLogs.find(gpsLogIsProblem);
@@ -11402,7 +11424,7 @@ function mygpsLivePatchEscape(value){
   try{ return escapeHtml(value); }catch(e){ return String(value ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;'); }
 }
 function mygpsLivePatchInstallUi(){
-  // fix_101: блок “Открытия активной live-ссылки” убран из вкладки Live-сессии.
+  // fix_102: блок “Открытия активной live-ссылки” убран из вкладки Live-сессии.
   const old=document.getElementById('liveViewDetailsCard');
   if(old) old.remove();
 }
@@ -11439,7 +11461,7 @@ function mygpsLivePatchActiveEntry(){
   }catch(e){return null;}
 }
 function mygpsLivePatchRenderDetails(entry){
-  // fix_101: отдельная карточка с открытиями/IP больше не отображается.
+  // fix_102: отдельная карточка с открытиями/IP больше не отображается.
   const old=document.getElementById('liveViewDetailsCard');
   if(old) old.remove();
 }
@@ -11535,7 +11557,7 @@ window.addEventListener('load', ()=>{ mygpsLivePatchInstallUi(); setTimeout(()=>
 
 
 /* === Admin fix_72: update check, route filter, diagnostics, replay events, cleanup === */
-const ADMIN_FIX70_VERSION = "fix_101";
+const ADMIN_FIX70_VERSION = "fix_102";
 function fix70Qs(id){ return document.getElementById(id); }
 function fix70Esc(v){ return String(v ?? "").replace(/[&<>'"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c])); }
 function fix70Badge(text, kind="ok"){ return `<span class="postUpdateBadge ${kind}">${fix70Esc(text)}</span>`; }
@@ -11803,7 +11825,7 @@ setTimeout(fix73Install,2600);
 
 
 /* === Admin fix_75: app versions + safe auto-refresh in Сейчас === */
-const ADMIN_FIX75_VERSION = "fix_101";
+const ADMIN_FIX75_VERSION = "fix_102";
 let adminFix75AutoTimer = null;
 let adminFix75Refreshing = false;
 function fix75Qs(id){ return document.getElementById(id); }
@@ -11956,7 +11978,7 @@ setTimeout(fix75Install,2800);
 
 
 /* === Admin fix_79: alert hints, selected user check, live garbage, stops list, clean exports === */
-const ADMIN_FIX79_VERSION = "fix_101";
+const ADMIN_FIX79_VERSION = "fix_102";
 function fix79Esc(v){ return String(v ?? "").replace(/[&<>'"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[ch])); }
 function fix79Ts(v){ const n=Number(v||0); return Number.isFinite(n) && n>0 ? n : 0; }
 function fix79PointLat(p){ return Number(p?.latitude ?? p?.lat); }
@@ -12204,7 +12226,7 @@ setTimeout(fix79Install,2500);
 
 
 /* === Admin fix_87: history search, improved stops, problem layers === */
-const ADMIN_FIX80_VERSION = "fix_101";
+const ADMIN_FIX80_VERSION = "fix_102";
 let fix80ProblemLayer = null;
 let fix80StopCircleLayer = null;
 let fix80SearchMarker = null;
@@ -12343,7 +12365,7 @@ setTimeout(fix80Install,2800);
 
 
 /* === Admin fix_87: saved map settings === */
-const ADMIN_FIX83_VERSION = "fix_101";
+const ADMIN_FIX83_VERSION = "fix_102";
 const ADMIN_FIX83_MAP_KEY = "mygps_admin_map_settings";
 function fix83Qs(id){ return document.getElementById(id); }
 function fix83ReadMapSettings(){
@@ -12534,7 +12556,7 @@ function fix83InitMapSettings(){
     fix83BindMapSettings();
     fix83HookExistingMapControls();
     fix83ApplyMapSettings({render:false, move:true});
-    const v=fix83Qs("postUpdateAdminVersion"); if(v) v.textContent="fix_101";
+    const v=fix83Qs("postUpdateAdminVersion"); if(v) v.textContent="fix_102";
   }catch(e){ console.warn("fix83InitMapSettings", e); }
 }
 setTimeout(fix83InitMapSettings, 350);
@@ -12704,7 +12726,7 @@ async function auditAdminButton(btn, actionStatus = 'clicked'){
       buttonId: id || null,
       panel: adminFix87ActivePanel(),
       selectedUid: (window.selectedUid || document.getElementById("userSelect")?.value || null),
-      source: 'admin_fix_101'
+      source: 'admin_fix_102'
     });
   }catch(e){
     console.warn('auditAdminButton error', e);
@@ -12846,7 +12868,7 @@ window.applyReadOnlyMode = applyReadOnlyMode;
 
 
 <script>
-// === Admin fix_101: reports are manual to save Firebase traffic ===
+// === Admin fix_102: reports are manual to save Firebase traffic ===
 (function(){
   function q(id){ return document.getElementById(id); }
   function setReportsStatus(text){ const el=q('reportsStatus'); if(el) el.textContent = text || 'Отчёты'; }
@@ -12899,7 +12921,7 @@ window.applyReadOnlyMode = applyReadOnlyMode;
     clearReportsUi('Нажми «Обновить отчёты»');
   });
 })();
-// === /Admin fix_101 ===
+// === /Admin fix_102 ===
 </script>
 
 </body></html>
