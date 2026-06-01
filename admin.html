@@ -13101,6 +13101,181 @@ window.applyReadOnlyMode = applyReadOnlyMode;
   }, true);
   setTimeout(install, 1500);
 })();
+
+
+/* === Admin fix_111: live countdown/realtime sync for admin-created and app-created links === */
+let fix111OwnerUnsub = null;
+let fix111SessionUnsub = null;
+let fix111LiveControlUnsub = null;
+let fix111WatchedUid = '';
+let fix111WatchedToken = '';
+let fix111ActiveUiTimer = null;
+
+function fix111SafeString(v){ return String(v ?? '').trim(); }
+function fix111SelectedUid(){ return fix111SafeString(selectedUid || qs('userSelect')?.value || ''); }
+function fix111SafeToken(v){ const s = fix111SafeString(v); return /^[A-Za-z0-9_-]{16,128}$/.test(s) ? s : ''; }
+function fix111SessionRoot(token){ return token && allSessions ? getSessionRoot(allSessions[token]) : null; }
+function fix111LiveControl(uid){ return uid ? (liveByUid?.[uid] || null) : null; }
+function fix111ControlToken(control){ return fix111SafeToken(control?.activeSessionId || control?.sessionId || control?.liveSessionId || control?.token || ''); }
+function fix111MetaFromControl(uid, control){
+  if(!uid || !control) return null;
+  const token = fix111ControlToken(control);
+  if(!token) return null;
+  return {
+    active: control.active === true,
+    paused: control.paused === true,
+    status: control.status || control.linkStatus || (control.paused ? 'paused' : (control.active === true ? 'active' : '')),
+    linkStatus: control.linkStatus || control.status || '',
+    ownerUid: uid,
+    createdAt: Number(control.createdAt || control.startedAt || 0),
+    startedAt: Number(control.startedAt || control.createdAt || 0),
+    expiresAt: Number(control.expiresAt || 0),
+    remainingMs: Number(control.remainingMs || 0),
+    liveUrl: control.liveUrl || control.link || control.url || buildShareUrl(token)
+  };
+}
+function fix111MetaState(meta){
+  const now = Date.now();
+  const active = meta?.active === true;
+  const paused = active && meta?.paused === true;
+  const expiresAt = Number(meta?.expiresAt || 0);
+  const remainingMs = Number(meta?.remainingMs || 0);
+  const rawStatus = String(meta?.status || meta?.linkStatus || '').toLowerCase();
+  const ended = ['ended','stopped','stop','expired','finished'].includes(rawStatus) || meta?.endedAt;
+  if(!active || ended) return {active:false, paused:false, leftMs:0, expired:expiresAt && expiresAt <= now};
+  if(paused) return {active:true, paused:true, leftMs:Math.max(0, remainingMs || Math.max(0, expiresAt - now)), expired:false};
+  return {active: expiresAt > now, paused:false, leftMs:Math.max(0, expiresAt - now), expired: expiresAt > 0 && expiresAt <= now};
+}
+function fix111MergedSessionFor(uid, token){
+  token = fix111SafeToken(token);
+  if(!uid || !token) return null;
+  const root = fix111SessionRoot(token);
+  const control = fix111LiveControl(uid);
+  const controlToken = fix111ControlToken(control);
+  const controlMeta = controlToken === token ? fix111MetaFromControl(uid, control) : null;
+  if(root){
+    const cloned = { ...root, meta:{ ...(root.meta || {}) } };
+    if(controlMeta){
+      const sessionUpdatedAt = Number(cloned.meta.updatedAt || cloned.meta.lastSyncedAt || cloned.meta.pausedAt || cloned.meta.resumedAt || 0);
+      const controlUpdatedAt = Number(control.updatedAt || control.pausedAt || control.resumedAt || 0);
+      if(controlUpdatedAt >= sessionUpdatedAt || controlMeta.paused || String(controlMeta.status).toLowerCase() === 'paused'){
+        cloned.meta = { ...cloned.meta, ...controlMeta, ownerUid: cloned.meta.ownerUid || uid };
+      }
+    }
+    return cloned;
+  }
+  if(controlMeta) return { meta: controlMeta, public:{ lastPoint: control?.lastPoint || control?.point || null } };
+  return null;
+}
+function fix111FindSelectedActiveEntry(){
+  const uid = fix111SelectedUid();
+  if(!uid) return null;
+  const control = fix111LiveControl(uid);
+  const ownerToken = fix111SafeToken(window.liveOwnersByUid?.[uid]?.activeSessionId || window.liveOwnersByUid?.[uid]?.sessionId || window.liveOwnersByUid?.[uid]?.token || '');
+  const controlToken = fix111ControlToken(control);
+  const candidates = [ownerToken, controlToken, fix111WatchedToken].filter(Boolean);
+  for(const token of candidates){
+    const session = fix111MergedSessionFor(uid, token);
+    const st = fix111MetaState(session?.meta || {});
+    if(st.active) return [token, session];
+  }
+  const entries = Object.entries(allSessions || {}).filter(([token]) => token !== '_init');
+  const entry = entries
+    .map(([token, session]) => [token, getSessionRoot(session)])
+    .filter(([token, session]) => (session?.meta?.ownerUid === uid) && fix111MetaState(session?.meta || {}).active)
+    .sort((a,b)=>Number(b[1]?.meta?.createdAt||0)-Number(a[1]?.meta?.createdAt||0))[0] || null;
+  return entry;
+}
+
+const fix111OldGetSelectedActiveSessionEntry = typeof getSelectedActiveSessionEntry === 'function' ? getSelectedActiveSessionEntry : null;
+getSelectedActiveSessionEntry = function(){
+  return fix111FindSelectedActiveEntry() || (fix111OldGetSelectedActiveSessionEntry ? fix111OldGetSelectedActiveSessionEntry.apply(this, arguments) : null);
+};
+
+function fix111PaintLiveUi(){
+  try{ updateActiveSessionNotice?.(); }catch(e){ recordError?.('fix111Notice', e); }
+  try{ updateActiveSessionToast?.(); }catch(e){ recordError?.('fix111Toast', e); }
+  try{ renderSessions?.(); }catch(e){ recordError?.('fix111RenderSessions', e); }
+  try{ updateNowFromAvailableSources?.(); }catch(e){}
+}
+function fix111SubscribeSession(token){
+  token = fix111SafeToken(token);
+  if(token === fix111WatchedToken) return;
+  if(fix111SessionUnsub){ try{ fix111SessionUnsub(); }catch(e){} fix111SessionUnsub = null; }
+  fix111WatchedToken = token || '';
+  if(!token){ fix111PaintLiveUi(); return; }
+  fix111SessionUnsub = onValue(ref(db, `liveSessions/${token}`), snap => {
+    const val = snap.val();
+    if(!allSessions || typeof allSessions !== 'object') allSessions = {};
+    if(val) allSessions[token] = val;
+    else delete allSessions[token];
+    fix111PaintLiveUi();
+  }, e => recordError?.('fix111LiveSessionSync', e));
+}
+function fix111SubscribeSelectedLive(){
+  const uid = fix111SelectedUid();
+  if(uid === fix111WatchedUid) return;
+  if(fix111OwnerUnsub){ try{ fix111OwnerUnsub(); }catch(e){} fix111OwnerUnsub = null; }
+  if(fix111LiveControlUnsub){ try{ fix111LiveControlUnsub(); }catch(e){} fix111LiveControlUnsub = null; }
+  if(fix111SessionUnsub){ try{ fix111SessionUnsub(); }catch(e){} fix111SessionUnsub = null; }
+  fix111WatchedUid = uid;
+  fix111WatchedToken = '';
+  if(!uid){ fix111PaintLiveUi(); return; }
+  fix111OwnerUnsub = onValue(ref(db, `liveOwners/${uid}/activeSessionId`), snap => {
+    if(!window.liveOwnersByUid) window.liveOwnersByUid = {};
+    if(!window.liveOwnersByUid[uid]) window.liveOwnersByUid[uid] = {};
+    window.liveOwnersByUid[uid].activeSessionId = fix111SafeString(snap.val());
+    fix111SubscribeSession(fix111SafeString(snap.val()));
+  }, e => recordError?.('fix111LiveOwnerSync', e));
+  fix111LiveControlUnsub = onValue(ref(db, `live/${uid}`), snap => {
+    if(!liveByUid || typeof liveByUid !== 'object') liveByUid = {};
+    liveByUid[uid] = snap.val() || {};
+    const token = fix111ControlToken(liveByUid[uid]);
+    if(token && !fix111WatchedToken) fix111SubscribeSession(token);
+    fix111PaintLiveUi();
+  }, e => recordError?.('fix111LiveControlSync', e));
+}
+
+const fix111OldCreateLiveSession = typeof createLiveSession === 'function' ? createLiveSession : null;
+if(fix111OldCreateLiveSession){
+  createLiveSession = async function(){
+    const r = await fix111OldCreateLiveSession.apply(this, arguments);
+    try{
+      const uid = fix111SelectedUid();
+      if(uid){
+        const ownerSnap = await get(ref(db, `liveOwners/${uid}/activeSessionId`));
+        const token = fix111SafeToken(ownerSnap.val());
+        if(token){
+          const sSnap = await get(ref(db, `liveSessions/${token}`));
+          if(!allSessions || typeof allSessions !== 'object') allSessions = {};
+          if(sSnap.exists()) allSessions[token] = sSnap.val();
+          fix111SubscribeSession(token);
+        }
+      }
+      fix111PaintLiveUi();
+    }catch(e){ recordError?.('fix111CreateLiveAfterSync', e); }
+    return r;
+  };
+}
+
+const fix111OldUserSelectChange = qs('userSelect')?.onchange;
+if(qs('userSelect')){
+  qs('userSelect').onchange = function(ev){
+    const r = fix111OldUserSelectChange ? fix111OldUserSelectChange.call(this, ev) : undefined;
+    setTimeout(fix111SubscribeSelectedLive, 0);
+    return r;
+  };
+}
+window.addEventListener('load', () => {
+  setTimeout(fix111SubscribeSelectedLive, 1200);
+  clearInterval(fix111ActiveUiTimer);
+  fix111ActiveUiTimer = setInterval(() => {
+    fix111SubscribeSelectedLive();
+    fix111PaintLiveUi();
+  }, 1000);
+});
+/* === /Admin fix_111 === */
+
 </script>
 <!-- === /Admin fix_79 === -->
 
