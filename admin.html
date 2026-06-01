@@ -6607,7 +6607,12 @@ async function createLiveSession(){
     try{ updateActiveSessionNotice(); }catch(e){}
     try{ updateActiveSessionToast(); }catch(e){}
     try{ refreshSessionsUiAfterLocalChange(); }catch(e){}
-    loadSessions().catch(e=>recordError("loadSessionsAfterCreateLiveSession", e));
+    try{
+      if(typeof updateLiveCreatePanelForSelectedUser === "function") updateLiveCreatePanelForSelectedUser();
+      if(typeof fix117SubscribeSelectedLive === "function") fix117SubscribeSelectedLive();
+      if(typeof fix117RefreshLiveCreateUi === "function") fix117RefreshLiveCreateUi();
+    }catch(e){}
+    Promise.resolve(typeof loadSessions === "function" ? loadSessions() : null).catch(e=>recordError("loadSessionsAfterCreateLiveSession", e));
     showToast("Live-ссылка создана","success");
   }catch(e){
     recordError("createLiveSession", e); showToast("Создание live-ссылки: "+errText(e),"error",3600);
@@ -6766,7 +6771,7 @@ async function endSession(token){
     markSessionEndedLocally(token, endedAt);
     refreshSessionsUiAfterLocalChange();
     await logAction("session_end", `Завершена live-сессия ${token}`);
-    loadSessions().catch(e=>recordError("loadSessionsAfterEndSession", e));
+    Promise.resolve(typeof loadSessions === "function" ? loadSessions() : null).catch(e=>recordError("loadSessionsAfterEndSession", e));
     showToast("Сессия завершена","success");
   }catch(e){ recordError("endSession", e); showToast("Завершение live-сессии: "+errText(e),"error",3600); }
 }
@@ -6796,7 +6801,7 @@ async function endAllActiveSessions(){
     }
     refreshSessionsUiAfterLocalChange();
     await logAction("session_end_all", `Остановлено активных сессий: ${activeTokens.length}`);
-    loadSessions().catch(e=>recordError("loadSessionsAfterEndAllSessions", e));
+    Promise.resolve(typeof loadSessions === "function" ? loadSessions() : null).catch(e=>recordError("loadSessionsAfterEndAllSessions", e));
     showToast("Активные сессии остановлены","success");
   }catch(e){ recordError("endAllActiveSessions", e); showToast("Остановка всех активных: "+errText(e),"error",3600); }
 }
@@ -9252,9 +9257,9 @@ setTimeout(() => {
       loadSessions = function(...args){
         if(!__manualHeavyLoad.sessions){
           console.log("Traffic guard: sessions auto-load skipped");
-          return;
+          return Promise.resolve(null);
         }
-        return originalLoadSessions.apply(this, args);
+        return Promise.resolve(originalLoadSessions.apply(this, args));
       };
       loadSessions.__trafficGuarded = true;
     }
