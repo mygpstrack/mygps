@@ -2865,15 +2865,9 @@ async function updateHeaderWeather(){
   const lon = Number(window.currentPointForHeader.lon);
 
   try{
+    // fix_116: do not call public reverse-geocoding services from the browser.
+    // Nominatim was returning CORS/429 and flooding the console; keep weather by point only.
     let city = "По точке";
-    try{
-      const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&accept-language=ru`, { cache: "no-store" });
-      if(geoRes.ok){
-        const geo = await geoRes.json();
-        const a = geo?.address || {};
-        city = a.city || a.town || a.village || a.municipality || a.suburb || a.county || "По точке";
-      }
-    }catch(e){}
 
     const w = await fetchWeatherPayload(lat, lon);
     const dirs=["С","СВ","В","ЮВ","Ю","ЮЗ","З","СЗ"];
@@ -4223,31 +4217,13 @@ async function reverseGeocode(lat, lon){
   const key = `${latNum.toFixed(5)},${lonNum.toFixed(5)}`;
   if (geocodeCache[key]) return geocodeCache[key];
 
-  const task = async () => {
-    const urls = [
-      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(latNum)}&lon=${encodeURIComponent(lonNum)}&accept-language=ru&zoom=18&addressdetails=1`,
-      `https://geocode.maps.co/reverse?lat=${encodeURIComponent(latNum)}&lon=${encodeURIComponent(lonNum)}&accept-language=ru`
-    ];
-    for(const url of urls){
-      try {
-        const res = await fetch(url, { headers: { "Accept": "application/json" }, cache: "no-store" });
-        if (!res.ok) continue;
-        const json = await res.json();
-        const addr = json?.display_name || json?.address?.road || "";
-        if(addr){
-          geocodeCache[key] = addr;
-          try { localStorage.setItem("geocodeCache", JSON.stringify(geocodeCache)); } catch (e) {}
-          return addr;
-        }
-      } catch (e) {
-        console.warn("reverseGeocode provider error", e);
-      }
-    }
-    return `${latNum.toFixed(5)}, ${lonNum.toFixed(5)}`;
-  };
-
-  geocodeQueue = geocodeQueue.then(() => new Promise(r => setTimeout(r, 400))).then(task);
-  return geocodeQueue;
+  // fix_116: external browser reverse geocoding disabled.
+  // Direct calls to Nominatim/geocode providers caused repeated CORS/429 errors.
+  // Return coordinates instead of making network requests; live, history and timer logic remain untouched.
+  const fallback = `${latNum.toFixed(5)}, ${lonNum.toFixed(5)}`;
+  geocodeCache[key] = fallback;
+  try { localStorage.setItem("geocodeCache", JSON.stringify(geocodeCache)); } catch (e) {}
+  return fallback;
 }
 
 function distanceMeters(a,b){
