@@ -2025,108 +2025,6 @@ window.addEventListener('load',()=>setTimeout(fix71Install,400));
 setTimeout(fix71Install,1800);
 setTimeout(fix71Install,3500);
 /* === /Admin fix_72 === */
-
-
-/* === Admin fix_112: robust live create/sync countdown === */
-(function(){
-  const byId = (id) => document.getElementById(id);
-  const safeCall = (fn, name) => { try { if (typeof fn === 'function') fn(); } catch(e){ try{ recordError?.(name || 'fix112', e); }catch(_){} } };
-  const nowMs = () => Date.now();
-  function selected(){ return (typeof selectedUid !== 'undefined' && selectedUid) ? selectedUid : (byId('userSelect')?.value || ''); }
-  function metaStatus(meta){
-    const now = nowMs();
-    const active = meta?.active === true;
-    const paused = meta?.paused === true || String(meta?.status||'').toLowerCase() === 'paused' || String(meta?.linkStatus||'').toLowerCase() === 'paused';
-    const expiresAt = Number(meta?.expiresAt || 0);
-    if(paused && active && expiresAt > now) return 'paused';
-    if(active && expiresAt > now) return 'active';
-    if(!active && expiresAt > now) return 'ended';
-    return 'expired';
-  }
-  function rootOf(session){
-    try { return typeof getSessionRoot === 'function' ? getSessionRoot(session) : (session || {}); } catch(e){ return session || {}; }
-  }
-  function activeEntry(){
-    const uid = selected();
-    const now = nowMs();
-    const ownerToken = uid ? (window.liveOwnersByUid?.[uid]?.activeSessionId || '') : '';
-    if(ownerToken && allSessions?.[ownerToken]){
-      const r = rootOf(allSessions[ownerToken]);
-      const m = r?.meta || {};
-      if(m.active === true && Number(m.expiresAt || 0) > now) return [ownerToken, r];
-    }
-    return Object.entries(allSessions || {})
-      .filter(([token]) => token !== '_init')
-      .map(([token, session]) => [token, rootOf(session)])
-      .filter(([token, root]) => {
-        const m = root?.meta || {};
-        return (!uid || m.ownerUid === uid) && m.active === true && Number(m.expiresAt || 0) > now;
-      })
-      .sort((a,b)=>Number(b[1]?.meta?.createdAt||0)-Number(a[1]?.meta?.createdAt||0))[0] || null;
-  }
-  window.fix112RefreshLiveCreateUi = function(){
-    const createBtn = byId('createShareBtn');
-    const notice = byId('activeSessionNotice');
-    const entry = activeEntry();
-    if(createBtn){
-      createBtn.disabled = !!entry;
-      createBtn.textContent = entry ? 'Есть активная ссылка' : 'Создать live-ссылку';
-    }
-    if(notice){
-      if(!entry){
-        notice.classList.add('hidden');
-        notice.innerHTML = '';
-      }else{
-        const [token, root] = entry;
-        const meta = root?.meta || {};
-        const st = metaStatus(meta);
-        const left = meta.paused ? Number(meta.remainingMs || 0) : Math.max(0, Number(meta.expiresAt || 0) - Date.now());
-        const fmt = (typeof fmtRemainingCompact === 'function') ? fmtRemainingCompact : (ms)=>{
-          const sec = Math.max(0, Math.floor(Number(ms||0)/1000));
-          return Math.floor(sec/60)+'м '+String(sec%60).padStart(2,'0')+'с';
-        };
-        const url = (typeof buildShareUrl === 'function') ? buildShareUrl(token) : token;
-        notice.classList.remove('hidden');
-        notice.innerHTML = `<strong>${st === 'paused' ? 'Live-сессия на паузе' : 'Live-сессия активна'}</strong><div style="margin-top:6px">Осталось: <b>${fmt(left)}</b></div><div style="margin-top:6px" class="mono">${url}</div>`;
-      }
-    }
-  };
-  const oldNotice = (typeof updateActiveSessionNotice === 'function') ? updateActiveSessionNotice : null;
-  updateActiveSessionNotice = function(){
-    try { window.fix112RefreshLiveCreateUi(); } catch(e){ try{ recordError?.('fix112UpdateNotice', e); }catch(_){} if(oldNotice) oldNotice(); }
-  };
-  const oldRender = (typeof renderSessions === 'function') ? renderSessions : null;
-  if(oldRender){
-    renderSessions = function(){
-      const res = oldRender.apply(this, arguments);
-      setTimeout(()=>window.fix112RefreshLiveCreateUi?.(), 0);
-      return res;
-    };
-  }
-  const oldCreate = (typeof createLiveSession === 'function') ? createLiveSession : null;
-  if(oldCreate){
-    createLiveSession = async function(){
-      const res = await oldCreate.apply(this, arguments);
-      try{
-        const uid = selected();
-        if(uid){
-          const ownerSnap = await get(ref(db, `liveOwners/${uid}/activeSessionId`));
-          const token = String(ownerSnap.val() || '');
-          if(token){
-            const sSnap = await get(ref(db, `liveSessions/${token}`));
-            if(!allSessions || typeof allSessions !== 'object') allSessions = {};
-            if(sSnap.exists()) allSessions[token] = sSnap.val();
-          }
-        }
-      }catch(e){ try{ recordError?.('fix112CreateRefresh', e); }catch(_){} }
-      window.fix112RefreshLiveCreateUi();
-      return res;
-    };
-  }
-  setInterval(()=>window.fix112RefreshLiveCreateUi?.(), 1000);
-})();
-/* === /Admin fix_112 === */
-
 </script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js">
 function setupJournalQuickFilters(){
@@ -2154,108 +2052,6 @@ function setupJournalQuickFilters(){
 }
 
 window.addEventListener("load", setupJournalQuickFilters);
-
-
-/* === Admin fix_112: robust live create/sync countdown === */
-(function(){
-  const byId = (id) => document.getElementById(id);
-  const safeCall = (fn, name) => { try { if (typeof fn === 'function') fn(); } catch(e){ try{ recordError?.(name || 'fix112', e); }catch(_){} } };
-  const nowMs = () => Date.now();
-  function selected(){ return (typeof selectedUid !== 'undefined' && selectedUid) ? selectedUid : (byId('userSelect')?.value || ''); }
-  function metaStatus(meta){
-    const now = nowMs();
-    const active = meta?.active === true;
-    const paused = meta?.paused === true || String(meta?.status||'').toLowerCase() === 'paused' || String(meta?.linkStatus||'').toLowerCase() === 'paused';
-    const expiresAt = Number(meta?.expiresAt || 0);
-    if(paused && active && expiresAt > now) return 'paused';
-    if(active && expiresAt > now) return 'active';
-    if(!active && expiresAt > now) return 'ended';
-    return 'expired';
-  }
-  function rootOf(session){
-    try { return typeof getSessionRoot === 'function' ? getSessionRoot(session) : (session || {}); } catch(e){ return session || {}; }
-  }
-  function activeEntry(){
-    const uid = selected();
-    const now = nowMs();
-    const ownerToken = uid ? (window.liveOwnersByUid?.[uid]?.activeSessionId || '') : '';
-    if(ownerToken && allSessions?.[ownerToken]){
-      const r = rootOf(allSessions[ownerToken]);
-      const m = r?.meta || {};
-      if(m.active === true && Number(m.expiresAt || 0) > now) return [ownerToken, r];
-    }
-    return Object.entries(allSessions || {})
-      .filter(([token]) => token !== '_init')
-      .map(([token, session]) => [token, rootOf(session)])
-      .filter(([token, root]) => {
-        const m = root?.meta || {};
-        return (!uid || m.ownerUid === uid) && m.active === true && Number(m.expiresAt || 0) > now;
-      })
-      .sort((a,b)=>Number(b[1]?.meta?.createdAt||0)-Number(a[1]?.meta?.createdAt||0))[0] || null;
-  }
-  window.fix112RefreshLiveCreateUi = function(){
-    const createBtn = byId('createShareBtn');
-    const notice = byId('activeSessionNotice');
-    const entry = activeEntry();
-    if(createBtn){
-      createBtn.disabled = !!entry;
-      createBtn.textContent = entry ? 'Есть активная ссылка' : 'Создать live-ссылку';
-    }
-    if(notice){
-      if(!entry){
-        notice.classList.add('hidden');
-        notice.innerHTML = '';
-      }else{
-        const [token, root] = entry;
-        const meta = root?.meta || {};
-        const st = metaStatus(meta);
-        const left = meta.paused ? Number(meta.remainingMs || 0) : Math.max(0, Number(meta.expiresAt || 0) - Date.now());
-        const fmt = (typeof fmtRemainingCompact === 'function') ? fmtRemainingCompact : (ms)=>{
-          const sec = Math.max(0, Math.floor(Number(ms||0)/1000));
-          return Math.floor(sec/60)+'м '+String(sec%60).padStart(2,'0')+'с';
-        };
-        const url = (typeof buildShareUrl === 'function') ? buildShareUrl(token) : token;
-        notice.classList.remove('hidden');
-        notice.innerHTML = `<strong>${st === 'paused' ? 'Live-сессия на паузе' : 'Live-сессия активна'}</strong><div style="margin-top:6px">Осталось: <b>${fmt(left)}</b></div><div style="margin-top:6px" class="mono">${url}</div>`;
-      }
-    }
-  };
-  const oldNotice = (typeof updateActiveSessionNotice === 'function') ? updateActiveSessionNotice : null;
-  updateActiveSessionNotice = function(){
-    try { window.fix112RefreshLiveCreateUi(); } catch(e){ try{ recordError?.('fix112UpdateNotice', e); }catch(_){} if(oldNotice) oldNotice(); }
-  };
-  const oldRender = (typeof renderSessions === 'function') ? renderSessions : null;
-  if(oldRender){
-    renderSessions = function(){
-      const res = oldRender.apply(this, arguments);
-      setTimeout(()=>window.fix112RefreshLiveCreateUi?.(), 0);
-      return res;
-    };
-  }
-  const oldCreate = (typeof createLiveSession === 'function') ? createLiveSession : null;
-  if(oldCreate){
-    createLiveSession = async function(){
-      const res = await oldCreate.apply(this, arguments);
-      try{
-        const uid = selected();
-        if(uid){
-          const ownerSnap = await get(ref(db, `liveOwners/${uid}/activeSessionId`));
-          const token = String(ownerSnap.val() || '');
-          if(token){
-            const sSnap = await get(ref(db, `liveSessions/${token}`));
-            if(!allSessions || typeof allSessions !== 'object') allSessions = {};
-            if(sSnap.exists()) allSessions[token] = sSnap.val();
-          }
-        }
-      }catch(e){ try{ recordError?.('fix112CreateRefresh', e); }catch(_){} }
-      window.fix112RefreshLiveCreateUi();
-      return res;
-    };
-  }
-  setInterval(()=>window.fix112RefreshLiveCreateUi?.(), 1000);
-})();
-/* === /Admin fix_112 === */
-
 </script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js">
 function setupJournalQuickFilters(){
@@ -2283,108 +2079,6 @@ function setupJournalQuickFilters(){
 }
 
 window.addEventListener("load", setupJournalQuickFilters);
-
-
-/* === Admin fix_112: robust live create/sync countdown === */
-(function(){
-  const byId = (id) => document.getElementById(id);
-  const safeCall = (fn, name) => { try { if (typeof fn === 'function') fn(); } catch(e){ try{ recordError?.(name || 'fix112', e); }catch(_){} } };
-  const nowMs = () => Date.now();
-  function selected(){ return (typeof selectedUid !== 'undefined' && selectedUid) ? selectedUid : (byId('userSelect')?.value || ''); }
-  function metaStatus(meta){
-    const now = nowMs();
-    const active = meta?.active === true;
-    const paused = meta?.paused === true || String(meta?.status||'').toLowerCase() === 'paused' || String(meta?.linkStatus||'').toLowerCase() === 'paused';
-    const expiresAt = Number(meta?.expiresAt || 0);
-    if(paused && active && expiresAt > now) return 'paused';
-    if(active && expiresAt > now) return 'active';
-    if(!active && expiresAt > now) return 'ended';
-    return 'expired';
-  }
-  function rootOf(session){
-    try { return typeof getSessionRoot === 'function' ? getSessionRoot(session) : (session || {}); } catch(e){ return session || {}; }
-  }
-  function activeEntry(){
-    const uid = selected();
-    const now = nowMs();
-    const ownerToken = uid ? (window.liveOwnersByUid?.[uid]?.activeSessionId || '') : '';
-    if(ownerToken && allSessions?.[ownerToken]){
-      const r = rootOf(allSessions[ownerToken]);
-      const m = r?.meta || {};
-      if(m.active === true && Number(m.expiresAt || 0) > now) return [ownerToken, r];
-    }
-    return Object.entries(allSessions || {})
-      .filter(([token]) => token !== '_init')
-      .map(([token, session]) => [token, rootOf(session)])
-      .filter(([token, root]) => {
-        const m = root?.meta || {};
-        return (!uid || m.ownerUid === uid) && m.active === true && Number(m.expiresAt || 0) > now;
-      })
-      .sort((a,b)=>Number(b[1]?.meta?.createdAt||0)-Number(a[1]?.meta?.createdAt||0))[0] || null;
-  }
-  window.fix112RefreshLiveCreateUi = function(){
-    const createBtn = byId('createShareBtn');
-    const notice = byId('activeSessionNotice');
-    const entry = activeEntry();
-    if(createBtn){
-      createBtn.disabled = !!entry;
-      createBtn.textContent = entry ? 'Есть активная ссылка' : 'Создать live-ссылку';
-    }
-    if(notice){
-      if(!entry){
-        notice.classList.add('hidden');
-        notice.innerHTML = '';
-      }else{
-        const [token, root] = entry;
-        const meta = root?.meta || {};
-        const st = metaStatus(meta);
-        const left = meta.paused ? Number(meta.remainingMs || 0) : Math.max(0, Number(meta.expiresAt || 0) - Date.now());
-        const fmt = (typeof fmtRemainingCompact === 'function') ? fmtRemainingCompact : (ms)=>{
-          const sec = Math.max(0, Math.floor(Number(ms||0)/1000));
-          return Math.floor(sec/60)+'м '+String(sec%60).padStart(2,'0')+'с';
-        };
-        const url = (typeof buildShareUrl === 'function') ? buildShareUrl(token) : token;
-        notice.classList.remove('hidden');
-        notice.innerHTML = `<strong>${st === 'paused' ? 'Live-сессия на паузе' : 'Live-сессия активна'}</strong><div style="margin-top:6px">Осталось: <b>${fmt(left)}</b></div><div style="margin-top:6px" class="mono">${url}</div>`;
-      }
-    }
-  };
-  const oldNotice = (typeof updateActiveSessionNotice === 'function') ? updateActiveSessionNotice : null;
-  updateActiveSessionNotice = function(){
-    try { window.fix112RefreshLiveCreateUi(); } catch(e){ try{ recordError?.('fix112UpdateNotice', e); }catch(_){} if(oldNotice) oldNotice(); }
-  };
-  const oldRender = (typeof renderSessions === 'function') ? renderSessions : null;
-  if(oldRender){
-    renderSessions = function(){
-      const res = oldRender.apply(this, arguments);
-      setTimeout(()=>window.fix112RefreshLiveCreateUi?.(), 0);
-      return res;
-    };
-  }
-  const oldCreate = (typeof createLiveSession === 'function') ? createLiveSession : null;
-  if(oldCreate){
-    createLiveSession = async function(){
-      const res = await oldCreate.apply(this, arguments);
-      try{
-        const uid = selected();
-        if(uid){
-          const ownerSnap = await get(ref(db, `liveOwners/${uid}/activeSessionId`));
-          const token = String(ownerSnap.val() || '');
-          if(token){
-            const sSnap = await get(ref(db, `liveSessions/${token}`));
-            if(!allSessions || typeof allSessions !== 'object') allSessions = {};
-            if(sSnap.exists()) allSessions[token] = sSnap.val();
-          }
-        }
-      }catch(e){ try{ recordError?.('fix112CreateRefresh', e); }catch(_){} }
-      window.fix112RefreshLiveCreateUi();
-      return res;
-    };
-  }
-  setInterval(()=>window.fix112RefreshLiveCreateUi?.(), 1000);
-})();
-/* === /Admin fix_112 === */
-
 </script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js">
 function setupJournalQuickFilters(){
@@ -2412,108 +2106,6 @@ function setupJournalQuickFilters(){
 }
 
 window.addEventListener("load", setupJournalQuickFilters);
-
-
-/* === Admin fix_112: robust live create/sync countdown === */
-(function(){
-  const byId = (id) => document.getElementById(id);
-  const safeCall = (fn, name) => { try { if (typeof fn === 'function') fn(); } catch(e){ try{ recordError?.(name || 'fix112', e); }catch(_){} } };
-  const nowMs = () => Date.now();
-  function selected(){ return (typeof selectedUid !== 'undefined' && selectedUid) ? selectedUid : (byId('userSelect')?.value || ''); }
-  function metaStatus(meta){
-    const now = nowMs();
-    const active = meta?.active === true;
-    const paused = meta?.paused === true || String(meta?.status||'').toLowerCase() === 'paused' || String(meta?.linkStatus||'').toLowerCase() === 'paused';
-    const expiresAt = Number(meta?.expiresAt || 0);
-    if(paused && active && expiresAt > now) return 'paused';
-    if(active && expiresAt > now) return 'active';
-    if(!active && expiresAt > now) return 'ended';
-    return 'expired';
-  }
-  function rootOf(session){
-    try { return typeof getSessionRoot === 'function' ? getSessionRoot(session) : (session || {}); } catch(e){ return session || {}; }
-  }
-  function activeEntry(){
-    const uid = selected();
-    const now = nowMs();
-    const ownerToken = uid ? (window.liveOwnersByUid?.[uid]?.activeSessionId || '') : '';
-    if(ownerToken && allSessions?.[ownerToken]){
-      const r = rootOf(allSessions[ownerToken]);
-      const m = r?.meta || {};
-      if(m.active === true && Number(m.expiresAt || 0) > now) return [ownerToken, r];
-    }
-    return Object.entries(allSessions || {})
-      .filter(([token]) => token !== '_init')
-      .map(([token, session]) => [token, rootOf(session)])
-      .filter(([token, root]) => {
-        const m = root?.meta || {};
-        return (!uid || m.ownerUid === uid) && m.active === true && Number(m.expiresAt || 0) > now;
-      })
-      .sort((a,b)=>Number(b[1]?.meta?.createdAt||0)-Number(a[1]?.meta?.createdAt||0))[0] || null;
-  }
-  window.fix112RefreshLiveCreateUi = function(){
-    const createBtn = byId('createShareBtn');
-    const notice = byId('activeSessionNotice');
-    const entry = activeEntry();
-    if(createBtn){
-      createBtn.disabled = !!entry;
-      createBtn.textContent = entry ? 'Есть активная ссылка' : 'Создать live-ссылку';
-    }
-    if(notice){
-      if(!entry){
-        notice.classList.add('hidden');
-        notice.innerHTML = '';
-      }else{
-        const [token, root] = entry;
-        const meta = root?.meta || {};
-        const st = metaStatus(meta);
-        const left = meta.paused ? Number(meta.remainingMs || 0) : Math.max(0, Number(meta.expiresAt || 0) - Date.now());
-        const fmt = (typeof fmtRemainingCompact === 'function') ? fmtRemainingCompact : (ms)=>{
-          const sec = Math.max(0, Math.floor(Number(ms||0)/1000));
-          return Math.floor(sec/60)+'м '+String(sec%60).padStart(2,'0')+'с';
-        };
-        const url = (typeof buildShareUrl === 'function') ? buildShareUrl(token) : token;
-        notice.classList.remove('hidden');
-        notice.innerHTML = `<strong>${st === 'paused' ? 'Live-сессия на паузе' : 'Live-сессия активна'}</strong><div style="margin-top:6px">Осталось: <b>${fmt(left)}</b></div><div style="margin-top:6px" class="mono">${url}</div>`;
-      }
-    }
-  };
-  const oldNotice = (typeof updateActiveSessionNotice === 'function') ? updateActiveSessionNotice : null;
-  updateActiveSessionNotice = function(){
-    try { window.fix112RefreshLiveCreateUi(); } catch(e){ try{ recordError?.('fix112UpdateNotice', e); }catch(_){} if(oldNotice) oldNotice(); }
-  };
-  const oldRender = (typeof renderSessions === 'function') ? renderSessions : null;
-  if(oldRender){
-    renderSessions = function(){
-      const res = oldRender.apply(this, arguments);
-      setTimeout(()=>window.fix112RefreshLiveCreateUi?.(), 0);
-      return res;
-    };
-  }
-  const oldCreate = (typeof createLiveSession === 'function') ? createLiveSession : null;
-  if(oldCreate){
-    createLiveSession = async function(){
-      const res = await oldCreate.apply(this, arguments);
-      try{
-        const uid = selected();
-        if(uid){
-          const ownerSnap = await get(ref(db, `liveOwners/${uid}/activeSessionId`));
-          const token = String(ownerSnap.val() || '');
-          if(token){
-            const sSnap = await get(ref(db, `liveSessions/${token}`));
-            if(!allSessions || typeof allSessions !== 'object') allSessions = {};
-            if(sSnap.exists()) allSessions[token] = sSnap.val();
-          }
-        }
-      }catch(e){ try{ recordError?.('fix112CreateRefresh', e); }catch(_){} }
-      window.fix112RefreshLiveCreateUi();
-      return res;
-    };
-  }
-  setInterval(()=>window.fix112RefreshLiveCreateUi?.(), 1000);
-})();
-/* === /Admin fix_112 === */
-
 </script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js">
 function setupJournalQuickFilters(){
@@ -2541,108 +2133,6 @@ function setupJournalQuickFilters(){
 }
 
 window.addEventListener("load", setupJournalQuickFilters);
-
-
-/* === Admin fix_112: robust live create/sync countdown === */
-(function(){
-  const byId = (id) => document.getElementById(id);
-  const safeCall = (fn, name) => { try { if (typeof fn === 'function') fn(); } catch(e){ try{ recordError?.(name || 'fix112', e); }catch(_){} } };
-  const nowMs = () => Date.now();
-  function selected(){ return (typeof selectedUid !== 'undefined' && selectedUid) ? selectedUid : (byId('userSelect')?.value || ''); }
-  function metaStatus(meta){
-    const now = nowMs();
-    const active = meta?.active === true;
-    const paused = meta?.paused === true || String(meta?.status||'').toLowerCase() === 'paused' || String(meta?.linkStatus||'').toLowerCase() === 'paused';
-    const expiresAt = Number(meta?.expiresAt || 0);
-    if(paused && active && expiresAt > now) return 'paused';
-    if(active && expiresAt > now) return 'active';
-    if(!active && expiresAt > now) return 'ended';
-    return 'expired';
-  }
-  function rootOf(session){
-    try { return typeof getSessionRoot === 'function' ? getSessionRoot(session) : (session || {}); } catch(e){ return session || {}; }
-  }
-  function activeEntry(){
-    const uid = selected();
-    const now = nowMs();
-    const ownerToken = uid ? (window.liveOwnersByUid?.[uid]?.activeSessionId || '') : '';
-    if(ownerToken && allSessions?.[ownerToken]){
-      const r = rootOf(allSessions[ownerToken]);
-      const m = r?.meta || {};
-      if(m.active === true && Number(m.expiresAt || 0) > now) return [ownerToken, r];
-    }
-    return Object.entries(allSessions || {})
-      .filter(([token]) => token !== '_init')
-      .map(([token, session]) => [token, rootOf(session)])
-      .filter(([token, root]) => {
-        const m = root?.meta || {};
-        return (!uid || m.ownerUid === uid) && m.active === true && Number(m.expiresAt || 0) > now;
-      })
-      .sort((a,b)=>Number(b[1]?.meta?.createdAt||0)-Number(a[1]?.meta?.createdAt||0))[0] || null;
-  }
-  window.fix112RefreshLiveCreateUi = function(){
-    const createBtn = byId('createShareBtn');
-    const notice = byId('activeSessionNotice');
-    const entry = activeEntry();
-    if(createBtn){
-      createBtn.disabled = !!entry;
-      createBtn.textContent = entry ? 'Есть активная ссылка' : 'Создать live-ссылку';
-    }
-    if(notice){
-      if(!entry){
-        notice.classList.add('hidden');
-        notice.innerHTML = '';
-      }else{
-        const [token, root] = entry;
-        const meta = root?.meta || {};
-        const st = metaStatus(meta);
-        const left = meta.paused ? Number(meta.remainingMs || 0) : Math.max(0, Number(meta.expiresAt || 0) - Date.now());
-        const fmt = (typeof fmtRemainingCompact === 'function') ? fmtRemainingCompact : (ms)=>{
-          const sec = Math.max(0, Math.floor(Number(ms||0)/1000));
-          return Math.floor(sec/60)+'м '+String(sec%60).padStart(2,'0')+'с';
-        };
-        const url = (typeof buildShareUrl === 'function') ? buildShareUrl(token) : token;
-        notice.classList.remove('hidden');
-        notice.innerHTML = `<strong>${st === 'paused' ? 'Live-сессия на паузе' : 'Live-сессия активна'}</strong><div style="margin-top:6px">Осталось: <b>${fmt(left)}</b></div><div style="margin-top:6px" class="mono">${url}</div>`;
-      }
-    }
-  };
-  const oldNotice = (typeof updateActiveSessionNotice === 'function') ? updateActiveSessionNotice : null;
-  updateActiveSessionNotice = function(){
-    try { window.fix112RefreshLiveCreateUi(); } catch(e){ try{ recordError?.('fix112UpdateNotice', e); }catch(_){} if(oldNotice) oldNotice(); }
-  };
-  const oldRender = (typeof renderSessions === 'function') ? renderSessions : null;
-  if(oldRender){
-    renderSessions = function(){
-      const res = oldRender.apply(this, arguments);
-      setTimeout(()=>window.fix112RefreshLiveCreateUi?.(), 0);
-      return res;
-    };
-  }
-  const oldCreate = (typeof createLiveSession === 'function') ? createLiveSession : null;
-  if(oldCreate){
-    createLiveSession = async function(){
-      const res = await oldCreate.apply(this, arguments);
-      try{
-        const uid = selected();
-        if(uid){
-          const ownerSnap = await get(ref(db, `liveOwners/${uid}/activeSessionId`));
-          const token = String(ownerSnap.val() || '');
-          if(token){
-            const sSnap = await get(ref(db, `liveSessions/${token}`));
-            if(!allSessions || typeof allSessions !== 'object') allSessions = {};
-            if(sSnap.exists()) allSessions[token] = sSnap.val();
-          }
-        }
-      }catch(e){ try{ recordError?.('fix112CreateRefresh', e); }catch(_){} }
-      window.fix112RefreshLiveCreateUi();
-      return res;
-    };
-  }
-  setInterval(()=>window.fix112RefreshLiveCreateUi?.(), 1000);
-})();
-/* === /Admin fix_112 === */
-
 </script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js">
 function setupJournalQuickFilters(){
@@ -2670,108 +2160,6 @@ function setupJournalQuickFilters(){
 }
 
 window.addEventListener("load", setupJournalQuickFilters);
-
-
-/* === Admin fix_112: robust live create/sync countdown === */
-(function(){
-  const byId = (id) => document.getElementById(id);
-  const safeCall = (fn, name) => { try { if (typeof fn === 'function') fn(); } catch(e){ try{ recordError?.(name || 'fix112', e); }catch(_){} } };
-  const nowMs = () => Date.now();
-  function selected(){ return (typeof selectedUid !== 'undefined' && selectedUid) ? selectedUid : (byId('userSelect')?.value || ''); }
-  function metaStatus(meta){
-    const now = nowMs();
-    const active = meta?.active === true;
-    const paused = meta?.paused === true || String(meta?.status||'').toLowerCase() === 'paused' || String(meta?.linkStatus||'').toLowerCase() === 'paused';
-    const expiresAt = Number(meta?.expiresAt || 0);
-    if(paused && active && expiresAt > now) return 'paused';
-    if(active && expiresAt > now) return 'active';
-    if(!active && expiresAt > now) return 'ended';
-    return 'expired';
-  }
-  function rootOf(session){
-    try { return typeof getSessionRoot === 'function' ? getSessionRoot(session) : (session || {}); } catch(e){ return session || {}; }
-  }
-  function activeEntry(){
-    const uid = selected();
-    const now = nowMs();
-    const ownerToken = uid ? (window.liveOwnersByUid?.[uid]?.activeSessionId || '') : '';
-    if(ownerToken && allSessions?.[ownerToken]){
-      const r = rootOf(allSessions[ownerToken]);
-      const m = r?.meta || {};
-      if(m.active === true && Number(m.expiresAt || 0) > now) return [ownerToken, r];
-    }
-    return Object.entries(allSessions || {})
-      .filter(([token]) => token !== '_init')
-      .map(([token, session]) => [token, rootOf(session)])
-      .filter(([token, root]) => {
-        const m = root?.meta || {};
-        return (!uid || m.ownerUid === uid) && m.active === true && Number(m.expiresAt || 0) > now;
-      })
-      .sort((a,b)=>Number(b[1]?.meta?.createdAt||0)-Number(a[1]?.meta?.createdAt||0))[0] || null;
-  }
-  window.fix112RefreshLiveCreateUi = function(){
-    const createBtn = byId('createShareBtn');
-    const notice = byId('activeSessionNotice');
-    const entry = activeEntry();
-    if(createBtn){
-      createBtn.disabled = !!entry;
-      createBtn.textContent = entry ? 'Есть активная ссылка' : 'Создать live-ссылку';
-    }
-    if(notice){
-      if(!entry){
-        notice.classList.add('hidden');
-        notice.innerHTML = '';
-      }else{
-        const [token, root] = entry;
-        const meta = root?.meta || {};
-        const st = metaStatus(meta);
-        const left = meta.paused ? Number(meta.remainingMs || 0) : Math.max(0, Number(meta.expiresAt || 0) - Date.now());
-        const fmt = (typeof fmtRemainingCompact === 'function') ? fmtRemainingCompact : (ms)=>{
-          const sec = Math.max(0, Math.floor(Number(ms||0)/1000));
-          return Math.floor(sec/60)+'м '+String(sec%60).padStart(2,'0')+'с';
-        };
-        const url = (typeof buildShareUrl === 'function') ? buildShareUrl(token) : token;
-        notice.classList.remove('hidden');
-        notice.innerHTML = `<strong>${st === 'paused' ? 'Live-сессия на паузе' : 'Live-сессия активна'}</strong><div style="margin-top:6px">Осталось: <b>${fmt(left)}</b></div><div style="margin-top:6px" class="mono">${url}</div>`;
-      }
-    }
-  };
-  const oldNotice = (typeof updateActiveSessionNotice === 'function') ? updateActiveSessionNotice : null;
-  updateActiveSessionNotice = function(){
-    try { window.fix112RefreshLiveCreateUi(); } catch(e){ try{ recordError?.('fix112UpdateNotice', e); }catch(_){} if(oldNotice) oldNotice(); }
-  };
-  const oldRender = (typeof renderSessions === 'function') ? renderSessions : null;
-  if(oldRender){
-    renderSessions = function(){
-      const res = oldRender.apply(this, arguments);
-      setTimeout(()=>window.fix112RefreshLiveCreateUi?.(), 0);
-      return res;
-    };
-  }
-  const oldCreate = (typeof createLiveSession === 'function') ? createLiveSession : null;
-  if(oldCreate){
-    createLiveSession = async function(){
-      const res = await oldCreate.apply(this, arguments);
-      try{
-        const uid = selected();
-        if(uid){
-          const ownerSnap = await get(ref(db, `liveOwners/${uid}/activeSessionId`));
-          const token = String(ownerSnap.val() || '');
-          if(token){
-            const sSnap = await get(ref(db, `liveSessions/${token}`));
-            if(!allSessions || typeof allSessions !== 'object') allSessions = {};
-            if(sSnap.exists()) allSessions[token] = sSnap.val();
-          }
-        }
-      }catch(e){ try{ recordError?.('fix112CreateRefresh', e); }catch(_){} }
-      window.fix112RefreshLiveCreateUi();
-      return res;
-    };
-  }
-  setInterval(()=>window.fix112RefreshLiveCreateUi?.(), 1000);
-})();
-/* === /Admin fix_112 === */
-
 </script>
 
 <script type="module">
@@ -13409,108 +12797,6 @@ document.addEventListener('click', ev=>{
   if(dl){ ev.preventDefault(); downloadSecurityReport(); return; }
 }, true);
 // === /Admin fix_110 ===
-
-
-/* === Admin fix_112: robust live create/sync countdown === */
-(function(){
-  const byId = (id) => document.getElementById(id);
-  const safeCall = (fn, name) => { try { if (typeof fn === 'function') fn(); } catch(e){ try{ recordError?.(name || 'fix112', e); }catch(_){} } };
-  const nowMs = () => Date.now();
-  function selected(){ return (typeof selectedUid !== 'undefined' && selectedUid) ? selectedUid : (byId('userSelect')?.value || ''); }
-  function metaStatus(meta){
-    const now = nowMs();
-    const active = meta?.active === true;
-    const paused = meta?.paused === true || String(meta?.status||'').toLowerCase() === 'paused' || String(meta?.linkStatus||'').toLowerCase() === 'paused';
-    const expiresAt = Number(meta?.expiresAt || 0);
-    if(paused && active && expiresAt > now) return 'paused';
-    if(active && expiresAt > now) return 'active';
-    if(!active && expiresAt > now) return 'ended';
-    return 'expired';
-  }
-  function rootOf(session){
-    try { return typeof getSessionRoot === 'function' ? getSessionRoot(session) : (session || {}); } catch(e){ return session || {}; }
-  }
-  function activeEntry(){
-    const uid = selected();
-    const now = nowMs();
-    const ownerToken = uid ? (window.liveOwnersByUid?.[uid]?.activeSessionId || '') : '';
-    if(ownerToken && allSessions?.[ownerToken]){
-      const r = rootOf(allSessions[ownerToken]);
-      const m = r?.meta || {};
-      if(m.active === true && Number(m.expiresAt || 0) > now) return [ownerToken, r];
-    }
-    return Object.entries(allSessions || {})
-      .filter(([token]) => token !== '_init')
-      .map(([token, session]) => [token, rootOf(session)])
-      .filter(([token, root]) => {
-        const m = root?.meta || {};
-        return (!uid || m.ownerUid === uid) && m.active === true && Number(m.expiresAt || 0) > now;
-      })
-      .sort((a,b)=>Number(b[1]?.meta?.createdAt||0)-Number(a[1]?.meta?.createdAt||0))[0] || null;
-  }
-  window.fix112RefreshLiveCreateUi = function(){
-    const createBtn = byId('createShareBtn');
-    const notice = byId('activeSessionNotice');
-    const entry = activeEntry();
-    if(createBtn){
-      createBtn.disabled = !!entry;
-      createBtn.textContent = entry ? 'Есть активная ссылка' : 'Создать live-ссылку';
-    }
-    if(notice){
-      if(!entry){
-        notice.classList.add('hidden');
-        notice.innerHTML = '';
-      }else{
-        const [token, root] = entry;
-        const meta = root?.meta || {};
-        const st = metaStatus(meta);
-        const left = meta.paused ? Number(meta.remainingMs || 0) : Math.max(0, Number(meta.expiresAt || 0) - Date.now());
-        const fmt = (typeof fmtRemainingCompact === 'function') ? fmtRemainingCompact : (ms)=>{
-          const sec = Math.max(0, Math.floor(Number(ms||0)/1000));
-          return Math.floor(sec/60)+'м '+String(sec%60).padStart(2,'0')+'с';
-        };
-        const url = (typeof buildShareUrl === 'function') ? buildShareUrl(token) : token;
-        notice.classList.remove('hidden');
-        notice.innerHTML = `<strong>${st === 'paused' ? 'Live-сессия на паузе' : 'Live-сессия активна'}</strong><div style="margin-top:6px">Осталось: <b>${fmt(left)}</b></div><div style="margin-top:6px" class="mono">${url}</div>`;
-      }
-    }
-  };
-  const oldNotice = (typeof updateActiveSessionNotice === 'function') ? updateActiveSessionNotice : null;
-  updateActiveSessionNotice = function(){
-    try { window.fix112RefreshLiveCreateUi(); } catch(e){ try{ recordError?.('fix112UpdateNotice', e); }catch(_){} if(oldNotice) oldNotice(); }
-  };
-  const oldRender = (typeof renderSessions === 'function') ? renderSessions : null;
-  if(oldRender){
-    renderSessions = function(){
-      const res = oldRender.apply(this, arguments);
-      setTimeout(()=>window.fix112RefreshLiveCreateUi?.(), 0);
-      return res;
-    };
-  }
-  const oldCreate = (typeof createLiveSession === 'function') ? createLiveSession : null;
-  if(oldCreate){
-    createLiveSession = async function(){
-      const res = await oldCreate.apply(this, arguments);
-      try{
-        const uid = selected();
-        if(uid){
-          const ownerSnap = await get(ref(db, `liveOwners/${uid}/activeSessionId`));
-          const token = String(ownerSnap.val() || '');
-          if(token){
-            const sSnap = await get(ref(db, `liveSessions/${token}`));
-            if(!allSessions || typeof allSessions !== 'object') allSessions = {};
-            if(sSnap.exists()) allSessions[token] = sSnap.val();
-          }
-        }
-      }catch(e){ try{ recordError?.('fix112CreateRefresh', e); }catch(_){} }
-      window.fix112RefreshLiveCreateUi();
-      return res;
-    };
-  }
-  setInterval(()=>window.fix112RefreshLiveCreateUi?.(), 1000);
-})();
-/* === /Admin fix_112 === */
-
 </script>
 
 
@@ -13703,110 +12989,6 @@ document.addEventListener('click', (ev)=>{
 setInterval(applyReadOnlyMode, 3000);
 window.applyReadOnlyMode = applyReadOnlyMode;
 // === /Admin fix_110 ===
-
-
-
-
-/* === Admin fix_112: robust live create/sync countdown === */
-(function(){
-  const byId = (id) => document.getElementById(id);
-  const safeCall = (fn, name) => { try { if (typeof fn === 'function') fn(); } catch(e){ try{ recordError?.(name || 'fix112', e); }catch(_){} } };
-  const nowMs = () => Date.now();
-  function selected(){ return (typeof selectedUid !== 'undefined' && selectedUid) ? selectedUid : (byId('userSelect')?.value || ''); }
-  function metaStatus(meta){
-    const now = nowMs();
-    const active = meta?.active === true;
-    const paused = meta?.paused === true || String(meta?.status||'').toLowerCase() === 'paused' || String(meta?.linkStatus||'').toLowerCase() === 'paused';
-    const expiresAt = Number(meta?.expiresAt || 0);
-    if(paused && active && expiresAt > now) return 'paused';
-    if(active && expiresAt > now) return 'active';
-    if(!active && expiresAt > now) return 'ended';
-    return 'expired';
-  }
-  function rootOf(session){
-    try { return typeof getSessionRoot === 'function' ? getSessionRoot(session) : (session || {}); } catch(e){ return session || {}; }
-  }
-  function activeEntry(){
-    const uid = selected();
-    const now = nowMs();
-    const ownerToken = uid ? (window.liveOwnersByUid?.[uid]?.activeSessionId || '') : '';
-    if(ownerToken && allSessions?.[ownerToken]){
-      const r = rootOf(allSessions[ownerToken]);
-      const m = r?.meta || {};
-      if(m.active === true && Number(m.expiresAt || 0) > now) return [ownerToken, r];
-    }
-    return Object.entries(allSessions || {})
-      .filter(([token]) => token !== '_init')
-      .map(([token, session]) => [token, rootOf(session)])
-      .filter(([token, root]) => {
-        const m = root?.meta || {};
-        return (!uid || m.ownerUid === uid) && m.active === true && Number(m.expiresAt || 0) > now;
-      })
-      .sort((a,b)=>Number(b[1]?.meta?.createdAt||0)-Number(a[1]?.meta?.createdAt||0))[0] || null;
-  }
-  window.fix112RefreshLiveCreateUi = function(){
-    const createBtn = byId('createShareBtn');
-    const notice = byId('activeSessionNotice');
-    const entry = activeEntry();
-    if(createBtn){
-      createBtn.disabled = !!entry;
-      createBtn.textContent = entry ? 'Есть активная ссылка' : 'Создать live-ссылку';
-    }
-    if(notice){
-      if(!entry){
-        notice.classList.add('hidden');
-        notice.innerHTML = '';
-      }else{
-        const [token, root] = entry;
-        const meta = root?.meta || {};
-        const st = metaStatus(meta);
-        const left = meta.paused ? Number(meta.remainingMs || 0) : Math.max(0, Number(meta.expiresAt || 0) - Date.now());
-        const fmt = (typeof fmtRemainingCompact === 'function') ? fmtRemainingCompact : (ms)=>{
-          const sec = Math.max(0, Math.floor(Number(ms||0)/1000));
-          return Math.floor(sec/60)+'м '+String(sec%60).padStart(2,'0')+'с';
-        };
-        const url = (typeof buildShareUrl === 'function') ? buildShareUrl(token) : token;
-        notice.classList.remove('hidden');
-        notice.innerHTML = `<strong>${st === 'paused' ? 'Live-сессия на паузе' : 'Live-сессия активна'}</strong><div style="margin-top:6px">Осталось: <b>${fmt(left)}</b></div><div style="margin-top:6px" class="mono">${url}</div>`;
-      }
-    }
-  };
-  const oldNotice = (typeof updateActiveSessionNotice === 'function') ? updateActiveSessionNotice : null;
-  updateActiveSessionNotice = function(){
-    try { window.fix112RefreshLiveCreateUi(); } catch(e){ try{ recordError?.('fix112UpdateNotice', e); }catch(_){} if(oldNotice) oldNotice(); }
-  };
-  const oldRender = (typeof renderSessions === 'function') ? renderSessions : null;
-  if(oldRender){
-    renderSessions = function(){
-      const res = oldRender.apply(this, arguments);
-      setTimeout(()=>window.fix112RefreshLiveCreateUi?.(), 0);
-      return res;
-    };
-  }
-  const oldCreate = (typeof createLiveSession === 'function') ? createLiveSession : null;
-  if(oldCreate){
-    createLiveSession = async function(){
-      const res = await oldCreate.apply(this, arguments);
-      try{
-        const uid = selected();
-        if(uid){
-          const ownerSnap = await get(ref(db, `liveOwners/${uid}/activeSessionId`));
-          const token = String(ownerSnap.val() || '');
-          if(token){
-            const sSnap = await get(ref(db, `liveSessions/${token}`));
-            if(!allSessions || typeof allSessions !== 'object') allSessions = {};
-            if(sSnap.exists()) allSessions[token] = sSnap.val();
-          }
-        }
-      }catch(e){ try{ recordError?.('fix112CreateRefresh', e); }catch(_){} }
-      window.fix112RefreshLiveCreateUi();
-      return res;
-    };
-  }
-  setInterval(()=>window.fix112RefreshLiveCreateUi?.(), 1000);
-})();
-/* === /Admin fix_112 === */
-
 </script>
 
 
@@ -13911,7 +13093,7 @@ window.applyReadOnlyMode = applyReadOnlyMode;
 })();
 
 
-/* === Admin fix_112: live countdown/realtime sync for admin-created and app-created links === */
+/* === Admin fix_113: live countdown/realtime sync for admin-created and app-created links === */
 let fix112OwnerUnsub = null;
 let fix112SessionUnsub = null;
 let fix112LiveControlUnsub = null;
@@ -14001,9 +13183,9 @@ getSelectedActiveSessionEntry = function(){
 };
 
 function fix112PaintLiveUi(){
-  try{ updateActiveSessionNotice?.(); }catch(e){ recordError?.('fix112Notice', e); }
-  try{ updateActiveSessionToast?.(); }catch(e){ recordError?.('fix112Toast', e); }
-  try{ renderSessions?.(); }catch(e){ recordError?.('fix112RenderSessions', e); }
+  try{ updateActiveSessionNotice?.(); }catch(e){ (typeof recordError === 'function' ? recordError('fix112Notice', e) : console.warn('fix112Notice', e)); }
+  try{ updateActiveSessionToast?.(); }catch(e){ (typeof recordError === 'function' ? recordError('fix112Toast', e) : console.warn('fix112Toast', e)); }
+  try{ renderSessions?.(); }catch(e){ (typeof recordError === 'function' ? recordError('fix112RenderSessions', e) : console.warn('fix112RenderSessions', e)); }
   try{ updateNowFromAvailableSources?.(); }catch(e){}
 }
 function fix112SubscribeSession(token){
@@ -14018,7 +13200,7 @@ function fix112SubscribeSession(token){
     if(val) allSessions[token] = val;
     else delete allSessions[token];
     fix112PaintLiveUi();
-  }, e => recordError?.('fix112LiveSessionSync', e));
+  }, e => (typeof recordError === 'function' ? recordError('fix112LiveSessionSync', e) : console.warn('fix112LiveSessionSync', e)));
 }
 function fix112SubscribeSelectedLive(){
   const uid = fix112SelectedUid();
@@ -14034,14 +13216,14 @@ function fix112SubscribeSelectedLive(){
     if(!window.liveOwnersByUid[uid]) window.liveOwnersByUid[uid] = {};
     window.liveOwnersByUid[uid].activeSessionId = fix112SafeString(snap.val());
     fix112SubscribeSession(fix112SafeString(snap.val()));
-  }, e => recordError?.('fix112LiveOwnerSync', e));
+  }, e => (typeof recordError === 'function' ? recordError('fix112LiveOwnerSync', e) : console.warn('fix112LiveOwnerSync', e)));
   fix112LiveControlUnsub = onValue(ref(db, `live/${uid}`), snap => {
     if(!liveByUid || typeof liveByUid !== 'object') liveByUid = {};
     liveByUid[uid] = snap.val() || {};
     const token = fix112ControlToken(liveByUid[uid]);
     if(token && !fix112WatchedToken) fix112SubscribeSession(token);
     fix112PaintLiveUi();
-  }, e => recordError?.('fix112LiveControlSync', e));
+  }, e => (typeof recordError === 'function' ? recordError('fix112LiveControlSync', e) : console.warn('fix112LiveControlSync', e)));
 }
 
 const fix112OldCreateLiveSession = typeof createLiveSession === 'function' ? createLiveSession : null;
@@ -14061,7 +13243,7 @@ if(fix112OldCreateLiveSession){
         }
       }
       fix112PaintLiveUi();
-    }catch(e){ recordError?.('fix112CreateLiveAfterSync', e); }
+    }catch(e){ (typeof recordError === 'function' ? recordError('fix112CreateLiveAfterSync', e) : console.warn('fix112CreateLiveAfterSync', e)); }
     return r;
   };
 }
@@ -14083,109 +13265,7 @@ window.addEventListener('load', () => {
     fix112PaintLiveUi();
   }, 1000);
 });
-/* === /Admin fix_112 === */
-
-
-/* === Admin fix_112: robust live create/sync countdown === */
-(function(){
-  const byId = (id) => document.getElementById(id);
-  const safeCall = (fn, name) => { try { if (typeof fn === 'function') fn(); } catch(e){ try{ recordError?.(name || 'fix112', e); }catch(_){} } };
-  const nowMs = () => Date.now();
-  function selected(){ return (typeof selectedUid !== 'undefined' && selectedUid) ? selectedUid : (byId('userSelect')?.value || ''); }
-  function metaStatus(meta){
-    const now = nowMs();
-    const active = meta?.active === true;
-    const paused = meta?.paused === true || String(meta?.status||'').toLowerCase() === 'paused' || String(meta?.linkStatus||'').toLowerCase() === 'paused';
-    const expiresAt = Number(meta?.expiresAt || 0);
-    if(paused && active && expiresAt > now) return 'paused';
-    if(active && expiresAt > now) return 'active';
-    if(!active && expiresAt > now) return 'ended';
-    return 'expired';
-  }
-  function rootOf(session){
-    try { return typeof getSessionRoot === 'function' ? getSessionRoot(session) : (session || {}); } catch(e){ return session || {}; }
-  }
-  function activeEntry(){
-    const uid = selected();
-    const now = nowMs();
-    const ownerToken = uid ? (window.liveOwnersByUid?.[uid]?.activeSessionId || '') : '';
-    if(ownerToken && allSessions?.[ownerToken]){
-      const r = rootOf(allSessions[ownerToken]);
-      const m = r?.meta || {};
-      if(m.active === true && Number(m.expiresAt || 0) > now) return [ownerToken, r];
-    }
-    return Object.entries(allSessions || {})
-      .filter(([token]) => token !== '_init')
-      .map(([token, session]) => [token, rootOf(session)])
-      .filter(([token, root]) => {
-        const m = root?.meta || {};
-        return (!uid || m.ownerUid === uid) && m.active === true && Number(m.expiresAt || 0) > now;
-      })
-      .sort((a,b)=>Number(b[1]?.meta?.createdAt||0)-Number(a[1]?.meta?.createdAt||0))[0] || null;
-  }
-  window.fix112RefreshLiveCreateUi = function(){
-    const createBtn = byId('createShareBtn');
-    const notice = byId('activeSessionNotice');
-    const entry = activeEntry();
-    if(createBtn){
-      createBtn.disabled = !!entry;
-      createBtn.textContent = entry ? 'Есть активная ссылка' : 'Создать live-ссылку';
-    }
-    if(notice){
-      if(!entry){
-        notice.classList.add('hidden');
-        notice.innerHTML = '';
-      }else{
-        const [token, root] = entry;
-        const meta = root?.meta || {};
-        const st = metaStatus(meta);
-        const left = meta.paused ? Number(meta.remainingMs || 0) : Math.max(0, Number(meta.expiresAt || 0) - Date.now());
-        const fmt = (typeof fmtRemainingCompact === 'function') ? fmtRemainingCompact : (ms)=>{
-          const sec = Math.max(0, Math.floor(Number(ms||0)/1000));
-          return Math.floor(sec/60)+'м '+String(sec%60).padStart(2,'0')+'с';
-        };
-        const url = (typeof buildShareUrl === 'function') ? buildShareUrl(token) : token;
-        notice.classList.remove('hidden');
-        notice.innerHTML = `<strong>${st === 'paused' ? 'Live-сессия на паузе' : 'Live-сессия активна'}</strong><div style="margin-top:6px">Осталось: <b>${fmt(left)}</b></div><div style="margin-top:6px" class="mono">${url}</div>`;
-      }
-    }
-  };
-  const oldNotice = (typeof updateActiveSessionNotice === 'function') ? updateActiveSessionNotice : null;
-  updateActiveSessionNotice = function(){
-    try { window.fix112RefreshLiveCreateUi(); } catch(e){ try{ recordError?.('fix112UpdateNotice', e); }catch(_){} if(oldNotice) oldNotice(); }
-  };
-  const oldRender = (typeof renderSessions === 'function') ? renderSessions : null;
-  if(oldRender){
-    renderSessions = function(){
-      const res = oldRender.apply(this, arguments);
-      setTimeout(()=>window.fix112RefreshLiveCreateUi?.(), 0);
-      return res;
-    };
-  }
-  const oldCreate = (typeof createLiveSession === 'function') ? createLiveSession : null;
-  if(oldCreate){
-    createLiveSession = async function(){
-      const res = await oldCreate.apply(this, arguments);
-      try{
-        const uid = selected();
-        if(uid){
-          const ownerSnap = await get(ref(db, `liveOwners/${uid}/activeSessionId`));
-          const token = String(ownerSnap.val() || '');
-          if(token){
-            const sSnap = await get(ref(db, `liveSessions/${token}`));
-            if(!allSessions || typeof allSessions !== 'object') allSessions = {};
-            if(sSnap.exists()) allSessions[token] = sSnap.val();
-          }
-        }
-      }catch(e){ try{ recordError?.('fix112CreateRefresh', e); }catch(_){} }
-      window.fix112RefreshLiveCreateUi();
-      return res;
-    };
-  }
-  setInterval(()=>window.fix112RefreshLiveCreateUi?.(), 1000);
-})();
-/* === /Admin fix_112 === */
-
+/* === /Admin fix_113 === */
 </script>
 <!-- === /Admin fix_79 === -->
 
@@ -14246,107 +13326,8 @@ window.addEventListener('load', () => {
   });
 })();
 // === /Admin fix_110 ===
-
-/* === Admin fix_112: robust live create/sync countdown === */
-(function(){
-  const byId = (id) => document.getElementById(id);
-  const safeCall = (fn, name) => { try { if (typeof fn === 'function') fn(); } catch(e){ try{ recordError?.(name || 'fix112', e); }catch(_){} } };
-  const nowMs = () => Date.now();
-  function selected(){ return (typeof selectedUid !== 'undefined' && selectedUid) ? selectedUid : (byId('userSelect')?.value || ''); }
-  function metaStatus(meta){
-    const now = nowMs();
-    const active = meta?.active === true;
-    const paused = meta?.paused === true || String(meta?.status||'').toLowerCase() === 'paused' || String(meta?.linkStatus||'').toLowerCase() === 'paused';
-    const expiresAt = Number(meta?.expiresAt || 0);
-    if(paused && active && expiresAt > now) return 'paused';
-    if(active && expiresAt > now) return 'active';
-    if(!active && expiresAt > now) return 'ended';
-    return 'expired';
-  }
-  function rootOf(session){
-    try { return typeof getSessionRoot === 'function' ? getSessionRoot(session) : (session || {}); } catch(e){ return session || {}; }
-  }
-  function activeEntry(){
-    const uid = selected();
-    const now = nowMs();
-    const ownerToken = uid ? (window.liveOwnersByUid?.[uid]?.activeSessionId || '') : '';
-    if(ownerToken && allSessions?.[ownerToken]){
-      const r = rootOf(allSessions[ownerToken]);
-      const m = r?.meta || {};
-      if(m.active === true && Number(m.expiresAt || 0) > now) return [ownerToken, r];
-    }
-    return Object.entries(allSessions || {})
-      .filter(([token]) => token !== '_init')
-      .map(([token, session]) => [token, rootOf(session)])
-      .filter(([token, root]) => {
-        const m = root?.meta || {};
-        return (!uid || m.ownerUid === uid) && m.active === true && Number(m.expiresAt || 0) > now;
-      })
-      .sort((a,b)=>Number(b[1]?.meta?.createdAt||0)-Number(a[1]?.meta?.createdAt||0))[0] || null;
-  }
-  window.fix112RefreshLiveCreateUi = function(){
-    const createBtn = byId('createShareBtn');
-    const notice = byId('activeSessionNotice');
-    const entry = activeEntry();
-    if(createBtn){
-      createBtn.disabled = !!entry;
-      createBtn.textContent = entry ? 'Есть активная ссылка' : 'Создать live-ссылку';
-    }
-    if(notice){
-      if(!entry){
-        notice.classList.add('hidden');
-        notice.innerHTML = '';
-      }else{
-        const [token, root] = entry;
-        const meta = root?.meta || {};
-        const st = metaStatus(meta);
-        const left = meta.paused ? Number(meta.remainingMs || 0) : Math.max(0, Number(meta.expiresAt || 0) - Date.now());
-        const fmt = (typeof fmtRemainingCompact === 'function') ? fmtRemainingCompact : (ms)=>{
-          const sec = Math.max(0, Math.floor(Number(ms||0)/1000));
-          return Math.floor(sec/60)+'м '+String(sec%60).padStart(2,'0')+'с';
-        };
-        const url = (typeof buildShareUrl === 'function') ? buildShareUrl(token) : token;
-        notice.classList.remove('hidden');
-        notice.innerHTML = `<strong>${st === 'paused' ? 'Live-сессия на паузе' : 'Live-сессия активна'}</strong><div style="margin-top:6px">Осталось: <b>${fmt(left)}</b></div><div style="margin-top:6px" class="mono">${url}</div>`;
-      }
-    }
-  };
-  const oldNotice = (typeof updateActiveSessionNotice === 'function') ? updateActiveSessionNotice : null;
-  updateActiveSessionNotice = function(){
-    try { window.fix112RefreshLiveCreateUi(); } catch(e){ try{ recordError?.('fix112UpdateNotice', e); }catch(_){} if(oldNotice) oldNotice(); }
-  };
-  const oldRender = (typeof renderSessions === 'function') ? renderSessions : null;
-  if(oldRender){
-    renderSessions = function(){
-      const res = oldRender.apply(this, arguments);
-      setTimeout(()=>window.fix112RefreshLiveCreateUi?.(), 0);
-      return res;
-    };
-  }
-  const oldCreate = (typeof createLiveSession === 'function') ? createLiveSession : null;
-  if(oldCreate){
-    createLiveSession = async function(){
-      const res = await oldCreate.apply(this, arguments);
-      try{
-        const uid = selected();
-        if(uid){
-          const ownerSnap = await get(ref(db, `liveOwners/${uid}/activeSessionId`));
-          const token = String(ownerSnap.val() || '');
-          if(token){
-            const sSnap = await get(ref(db, `liveSessions/${token}`));
-            if(!allSessions || typeof allSessions !== 'object') allSessions = {};
-            if(sSnap.exists()) allSessions[token] = sSnap.val();
-          }
-        }
-      }catch(e){ try{ recordError?.('fix112CreateRefresh', e); }catch(_){} }
-      window.fix112RefreshLiveCreateUi();
-      return res;
-    };
-  }
-  setInterval(()=>window.fix112RefreshLiveCreateUi?.(), 1000);
-})();
-/* === /Admin fix_112 === */
-
 </script>
 
 </body></html>
+
+<!-- fix_113: removed broken duplicated fix112 live-sync blocks; restored stable fix67 live UI/sync. -->
