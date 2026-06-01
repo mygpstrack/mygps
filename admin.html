@@ -1610,7 +1610,7 @@ body.admin-normal-mode .tab-btn[data-tab="securityPanel"]{display:none!important
           <button id="downloadPostUpdateDiagBtn" class="secondary">Скачать диагностику</button>
         </div>
         <div class="postUpdateGrid">
-          <div class="postUpdateCard"><b>Admin version</b><span id="postAdminVersion">fix_110</span></div>
+          <div class="postUpdateCard"><b>Admin version</b><span id="postAdminVersion">fix_114</span></div>
           <div class="postUpdateCard"><b>Auth</b><span id="postAuthStatus">—</span></div>
           <div class="postUpdateCard"><b>Выбранный пользователь</b><span id="postSelectedUser">—</span></div>
           <div class="postUpdateCard"><b>GPS лог</b><span id="postGpsLogStatus">—</span></div>
@@ -13093,180 +13093,8 @@ window.applyReadOnlyMode = applyReadOnlyMode;
 })();
 
 
-/* === Admin fix_113: live countdown/realtime sync for admin-created and app-created links === */
-let fix112OwnerUnsub = null;
-let fix112SessionUnsub = null;
-let fix112LiveControlUnsub = null;
-let fix112WatchedUid = '';
-let fix112WatchedToken = '';
-let fix112ActiveUiTimer = null;
+<!-- fix_114: removed broken non-module fix112 live sync block; stable module live UI remains active. -->
 
-function fix112SafeString(v){ return String(v ?? '').trim(); }
-function fix112SelectedUid(){ return fix112SafeString(selectedUid || document.getElementById('userSelect')?.value || ''); }
-function fix112SafeToken(v){ const s = fix112SafeString(v); return /^[A-Za-z0-9_-]{16,128}$/.test(s) ? s : ''; }
-function fix112SessionRoot(token){ return token && allSessions ? getSessionRoot(allSessions[token]) : null; }
-function fix112LiveControl(uid){ return uid ? (liveByUid?.[uid] || null) : null; }
-function fix112ControlToken(control){ return fix112SafeToken(control?.activeSessionId || control?.sessionId || control?.liveSessionId || control?.token || ''); }
-function fix112MetaFromControl(uid, control){
-  if(!uid || !control) return null;
-  const token = fix112ControlToken(control);
-  if(!token) return null;
-  return {
-    active: control.active === true,
-    paused: control.paused === true,
-    status: control.status || control.linkStatus || (control.paused ? 'paused' : (control.active === true ? 'active' : '')),
-    linkStatus: control.linkStatus || control.status || '',
-    ownerUid: uid,
-    createdAt: Number(control.createdAt || control.startedAt || 0),
-    startedAt: Number(control.startedAt || control.createdAt || 0),
-    expiresAt: Number(control.expiresAt || 0),
-    remainingMs: Number(control.remainingMs || 0),
-    liveUrl: control.liveUrl || control.link || control.url || buildShareUrl(token)
-  };
-}
-function fix112MetaState(meta){
-  const now = Date.now();
-  const active = meta?.active === true;
-  const paused = active && meta?.paused === true;
-  const expiresAt = Number(meta?.expiresAt || 0);
-  const remainingMs = Number(meta?.remainingMs || 0);
-  const rawStatus = String(meta?.status || meta?.linkStatus || '').toLowerCase();
-  const ended = ['ended','stopped','stop','expired','finished'].includes(rawStatus) || meta?.endedAt;
-  if(!active || ended) return {active:false, paused:false, leftMs:0, expired:expiresAt && expiresAt <= now};
-  if(paused) return {active:true, paused:true, leftMs:Math.max(0, remainingMs || Math.max(0, expiresAt - now)), expired:false};
-  return {active: expiresAt > now, paused:false, leftMs:Math.max(0, expiresAt - now), expired: expiresAt > 0 && expiresAt <= now};
-}
-function fix112MergedSessionFor(uid, token){
-  token = fix112SafeToken(token);
-  if(!uid || !token) return null;
-  const root = fix112SessionRoot(token);
-  const control = fix112LiveControl(uid);
-  const controlToken = fix112ControlToken(control);
-  const controlMeta = controlToken === token ? fix112MetaFromControl(uid, control) : null;
-  if(root){
-    const cloned = { ...root, meta:{ ...(root.meta || {}) } };
-    if(controlMeta){
-      const sessionUpdatedAt = Number(cloned.meta.updatedAt || cloned.meta.lastSyncedAt || cloned.meta.pausedAt || cloned.meta.resumedAt || 0);
-      const controlUpdatedAt = Number(control.updatedAt || control.pausedAt || control.resumedAt || 0);
-      if(controlUpdatedAt >= sessionUpdatedAt || controlMeta.paused || String(controlMeta.status).toLowerCase() === 'paused'){
-        cloned.meta = { ...cloned.meta, ...controlMeta, ownerUid: cloned.meta.ownerUid || uid };
-      }
-    }
-    return cloned;
-  }
-  if(controlMeta) return { meta: controlMeta, public:{ lastPoint: control?.lastPoint || control?.point || null } };
-  return null;
-}
-function fix112FindSelectedActiveEntry(){
-  const uid = fix112SelectedUid();
-  if(!uid) return null;
-  const control = fix112LiveControl(uid);
-  const ownerToken = fix112SafeToken(window.liveOwnersByUid?.[uid]?.activeSessionId || window.liveOwnersByUid?.[uid]?.sessionId || window.liveOwnersByUid?.[uid]?.token || '');
-  const controlToken = fix112ControlToken(control);
-  const candidates = [ownerToken, controlToken, fix112WatchedToken].filter(Boolean);
-  for(const token of candidates){
-    const session = fix112MergedSessionFor(uid, token);
-    const st = fix112MetaState(session?.meta || {});
-    if(st.active) return [token, session];
-  }
-  const entries = Object.entries(allSessions || {}).filter(([token]) => token !== '_init');
-  const entry = entries
-    .map(([token, session]) => [token, getSessionRoot(session)])
-    .filter(([token, session]) => (session?.meta?.ownerUid === uid) && fix112MetaState(session?.meta || {}).active)
-    .sort((a,b)=>Number(b[1]?.meta?.createdAt||0)-Number(a[1]?.meta?.createdAt||0))[0] || null;
-  return entry;
-}
-
-const fix112OldGetSelectedActiveSessionEntry = typeof getSelectedActiveSessionEntry === 'function' ? getSelectedActiveSessionEntry : null;
-getSelectedActiveSessionEntry = function(){
-  return fix112FindSelectedActiveEntry() || (fix112OldGetSelectedActiveSessionEntry ? fix112OldGetSelectedActiveSessionEntry.apply(this, arguments) : null);
-};
-
-function fix112PaintLiveUi(){
-  try{ updateActiveSessionNotice?.(); }catch(e){ (typeof recordError === 'function' ? recordError('fix112Notice', e) : console.warn('fix112Notice', e)); }
-  try{ updateActiveSessionToast?.(); }catch(e){ (typeof recordError === 'function' ? recordError('fix112Toast', e) : console.warn('fix112Toast', e)); }
-  try{ renderSessions?.(); }catch(e){ (typeof recordError === 'function' ? recordError('fix112RenderSessions', e) : console.warn('fix112RenderSessions', e)); }
-  try{ updateNowFromAvailableSources?.(); }catch(e){}
-}
-function fix112SubscribeSession(token){
-  token = fix112SafeToken(token);
-  if(token === fix112WatchedToken) return;
-  if(fix112SessionUnsub){ try{ fix112SessionUnsub(); }catch(e){} fix112SessionUnsub = null; }
-  fix112WatchedToken = token || '';
-  if(!token){ fix112PaintLiveUi(); return; }
-  fix112SessionUnsub = onValue(ref(db, `liveSessions/${token}`), snap => {
-    const val = snap.val();
-    if(!allSessions || typeof allSessions !== 'object') allSessions = {};
-    if(val) allSessions[token] = val;
-    else delete allSessions[token];
-    fix112PaintLiveUi();
-  }, e => (typeof recordError === 'function' ? recordError('fix112LiveSessionSync', e) : console.warn('fix112LiveSessionSync', e)));
-}
-function fix112SubscribeSelectedLive(){
-  const uid = fix112SelectedUid();
-  if(uid === fix112WatchedUid) return;
-  if(fix112OwnerUnsub){ try{ fix112OwnerUnsub(); }catch(e){} fix112OwnerUnsub = null; }
-  if(fix112LiveControlUnsub){ try{ fix112LiveControlUnsub(); }catch(e){} fix112LiveControlUnsub = null; }
-  if(fix112SessionUnsub){ try{ fix112SessionUnsub(); }catch(e){} fix112SessionUnsub = null; }
-  fix112WatchedUid = uid;
-  fix112WatchedToken = '';
-  if(!uid){ fix112PaintLiveUi(); return; }
-  fix112OwnerUnsub = onValue(ref(db, `liveOwners/${uid}/activeSessionId`), snap => {
-    if(!window.liveOwnersByUid) window.liveOwnersByUid = {};
-    if(!window.liveOwnersByUid[uid]) window.liveOwnersByUid[uid] = {};
-    window.liveOwnersByUid[uid].activeSessionId = fix112SafeString(snap.val());
-    fix112SubscribeSession(fix112SafeString(snap.val()));
-  }, e => (typeof recordError === 'function' ? recordError('fix112LiveOwnerSync', e) : console.warn('fix112LiveOwnerSync', e)));
-  fix112LiveControlUnsub = onValue(ref(db, `live/${uid}`), snap => {
-    if(!liveByUid || typeof liveByUid !== 'object') liveByUid = {};
-    liveByUid[uid] = snap.val() || {};
-    const token = fix112ControlToken(liveByUid[uid]);
-    if(token && !fix112WatchedToken) fix112SubscribeSession(token);
-    fix112PaintLiveUi();
-  }, e => (typeof recordError === 'function' ? recordError('fix112LiveControlSync', e) : console.warn('fix112LiveControlSync', e)));
-}
-
-const fix112OldCreateLiveSession = typeof createLiveSession === 'function' ? createLiveSession : null;
-if(fix112OldCreateLiveSession){
-  createLiveSession = async function(){
-    const r = await fix112OldCreateLiveSession.apply(this, arguments);
-    try{
-      const uid = fix112SelectedUid();
-      if(uid){
-        const ownerSnap = await get(ref(db, `liveOwners/${uid}/activeSessionId`));
-        const token = fix112SafeToken(ownerSnap.val());
-        if(token){
-          const sSnap = await get(ref(db, `liveSessions/${token}`));
-          if(!allSessions || typeof allSessions !== 'object') allSessions = {};
-          if(sSnap.exists()) allSessions[token] = sSnap.val();
-          fix112SubscribeSession(token);
-        }
-      }
-      fix112PaintLiveUi();
-    }catch(e){ (typeof recordError === 'function' ? recordError('fix112CreateLiveAfterSync', e) : console.warn('fix112CreateLiveAfterSync', e)); }
-    return r;
-  };
-}
-
-const fix112UserSelectEl = document.getElementById('userSelect');
-const fix112OldUserSelectChange = fix112UserSelectEl?.onchange || null;
-if(fix112UserSelectEl){
-  fix112UserSelectEl.onchange = function(ev){
-    const r = fix112OldUserSelectChange ? fix112OldUserSelectChange.call(this, ev) : undefined;
-    setTimeout(fix112SubscribeSelectedLive, 0);
-    return r;
-  };
-}
-window.addEventListener('load', () => {
-  setTimeout(fix112SubscribeSelectedLive, 1200);
-  clearInterval(fix112ActiveUiTimer);
-  fix112ActiveUiTimer = setInterval(() => {
-    fix112SubscribeSelectedLive();
-    fix112PaintLiveUi();
-  }, 1000);
-});
-/* === /Admin fix_113 === */
-</script>
 <!-- === /Admin fix_79 === -->
 
 
@@ -13330,4 +13158,4 @@ window.addEventListener('load', () => {
 
 </body></html>
 
-<!-- fix_113: removed broken duplicated fix112 live-sync blocks; restored stable fix67 live UI/sync. -->
+<!-- fix_114: removed broken non-module fix112 live-sync block; active live timer uses stable module sync. -->
