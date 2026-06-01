@@ -6401,16 +6401,52 @@ async function createLiveSession(){
     public:{lastPoint,recentPoints:recentPointsObj},
     viewStats:{openCount:0,firstOpenAt:null,lastOpenAt:null}
   };
+  const liveUrl = buildShareUrl(token);
+  payload.meta.liveUrl = liveUrl;
+  payload.meta.link = liveUrl;
   try{
     await set(ref(db,`liveSessions/${token}`), payload);
-    await update(ref(db), { [`liveOwners/${selectedUid}/activeSessionId`]:token, [`liveOwners/${selectedUid}/lastCreatedAt`]:now });
+    await update(ref(db), {
+      [`liveOwners/${selectedUid}/activeSessionId`]: token,
+      [`liveOwners/${selectedUid}/lastCreatedAt`]: now,
+      [`live/${selectedUid}/active`]: true,
+      [`live/${selectedUid}/paused`]: false,
+      [`live/${selectedUid}/status`]: 'active',
+      [`live/${selectedUid}/linkStatus`]: 'active',
+      [`live/${selectedUid}/sessionId`]: token,
+      [`live/${selectedUid}/liveSessionId`]: token,
+      [`live/${selectedUid}/activeSessionId`]: token,
+      [`live/${selectedUid}/liveUrl`]: liveUrl,
+      [`live/${selectedUid}/link`]: liveUrl,
+      [`live/${selectedUid}/startedAt`]: now,
+      [`live/${selectedUid}/createdAt`]: now,
+      [`live/${selectedUid}/expiresAt`]: expiresAt,
+      [`live/${selectedUid}/remainingMs`]: durationMinutes*60*1000,
+      [`live/${selectedUid}/lastPoint`]: lastPoint,
+      [`live/${selectedUid}/updatedAt`]: now
+    });
     await logAction("session_create",`Создана live-сессия ${token} для ${selectedUid}`);
-    createdShareUrl = buildShareUrl(token);
+    createdShareUrl = liveUrl;
     qs("shareLinkText").textContent = createdShareUrl;
     qs("shareExpiresText").textContent = fmtTime(expiresAt);
     qs("shareResultBox").classList.remove("hidden");
-    await loadSessions();
-    updateActiveSessionNotice();
+    if(!allSessions || typeof allSessions !== 'object') allSessions = {};
+    allSessions[token] = payload;
+    if(!liveByUid || typeof liveByUid !== 'object') liveByUid = {};
+    liveByUid[selectedUid] = Object.assign({}, liveByUid[selectedUid] || {}, {
+      active:true, paused:false, status:'active', linkStatus:'active',
+      sessionId:token, liveSessionId:token, activeSessionId:token,
+      liveUrl, link:liveUrl, startedAt:now, createdAt:now, expiresAt,
+      remainingMs:durationMinutes*60*1000, lastPoint, updatedAt:now
+    });
+    try{ renderSessions(); }catch(e){}
+    try{ updateActiveSessionNotice(); }catch(e){}
+    try{ updateActiveSessionToast(); }catch(e){}
+    try{ updateNowFromAvailableSources(); }catch(e){}
+    try{
+      const sessionsReload = loadSessions();
+      if(sessionsReload && typeof sessionsReload.catch === 'function') sessionsReload.catch(e=>recordError('loadSessionsAfterCreateLiveSession', e));
+    }catch(e){ recordError('loadSessionsAfterCreateLiveSession', e); }
     showToast("Live-ссылка создана","success");
   }catch(e){
     recordError("createLiveSession", e); showToast("Создание live-ссылки: "+errText(e),"error",3600);
@@ -10951,6 +10987,57 @@ setInterval(() => {
   requireDeleteWord = function(){ return true; };
 })();
 
+// === Admin fix_120: no-refresh live timer repair (safe, no redeclare) ===
+(function(){
+  if(window.__mygpsFix120Installed) return;
+  window.__mygpsFix120Installed = true;
+  const state = { uid:null, ownerUnsub:null, sessionUnsub:null, liveUnsub:null, token:null };
+  function safeCall(fn){ try{ if(typeof fn === 'function') fn(); }catch(e){ try{ recordError('fix120SafeCall', e); }catch(_){} } }
+  function selected(){ return selectedUid || qs('userSelect')?.value || ''; }
+  function paint(){ safeCall(renderSessions); safeCall(updateActiveSessionNotice); safeCall(updateActiveSessionToast); safeCall(updateNowFromAvailableSources); }
+  function upsertSession(token, val){
+    if(!token) return;
+    if(!allSessions || typeof allSessions !== 'object') allSessions = {};
+    if(val) allSessions[token] = val; else delete allSessions[token];
+    paint();
+  }
+  function attachSession(token){
+    token = String(token || '').trim();
+    if(state.token === token && state.sessionUnsub) return;
+    if(state.sessionUnsub){ try{ state.sessionUnsub(); }catch(e){} state.sessionUnsub = null; }
+    state.token = token || null;
+    if(!token){ paint(); return; }
+    try{ state.sessionUnsub = onValue(ref(db, `liveSessions/${token}`), snap => upsertSession(token, snap.val()), e => { try{ recordError('fix120SessionListener', e); }catch(_){} }); }catch(e){ try{ recordError('fix120AttachSession', e); }catch(_){} }
+  }
+  function subscribe(){
+    const uid = selected();
+    if(state.uid === uid && (state.ownerUnsub || state.liveUnsub || !uid)) return;
+    if(state.ownerUnsub){ try{ state.ownerUnsub(); }catch(e){} state.ownerUnsub = null; }
+    if(state.liveUnsub){ try{ state.liveUnsub(); }catch(e){} state.liveUnsub = null; }
+    if(state.sessionUnsub){ try{ state.sessionUnsub(); }catch(e){} state.sessionUnsub = null; state.token = null; }
+    state.uid = uid;
+    if(!uid){ paint(); return; }
+    try{
+      state.ownerUnsub = onValue(ref(db, `liveOwners/${uid}/activeSessionId`), snap => {
+        const token = String(snap.val() || '').trim();
+        attachSession(token);
+      }, e => { try{ recordError('fix120OwnerListener', e); }catch(_){} });
+      state.liveUnsub = onValue(ref(db, `live/${uid}`), snap => {
+        const live = snap.val() || null;
+        if(!liveByUid || typeof liveByUid !== 'object') liveByUid = {};
+        if(live) liveByUid[uid] = live; else delete liveByUid[uid];
+        const token = String(live?.sessionId || live?.activeSessionId || live?.liveSessionId || '').trim();
+        if(token) attachSession(token);
+        paint();
+      }, e => { try{ recordError('fix120LiveListener', e); }catch(_){} });
+    }catch(e){ try{ recordError('fix120Subscribe', e); }catch(_){} }
+  }
+  document.addEventListener('change', ev=>{ if(ev.target?.id === 'userSelect') setTimeout(subscribe, 0); }, true);
+  document.addEventListener('click', ()=>setTimeout(subscribe, 0), true);
+  window.addEventListener('load', ()=>{ setTimeout(subscribe, 600); setInterval(()=>{ subscribe(); safeCall(updateActiveSessionNotice); safeCall(updateActiveSessionToast); }, 1000); });
+})();
+
+
 /* === GPS service log panel fix_64 === */
 let gpsServiceLogs = [];
 
@@ -12772,264 +12859,6 @@ document.addEventListener('click', ev=>{
   const dl=ev.target?.closest?.('#downloadSecurityReportBtn');
   if(dl){ ev.preventDefault(); downloadSecurityReport(); return; }
 }, true);
-
-
-// === Admin fix_119: stable live timer without page refresh ===
-(function(){
-  let fix119OwnerUnsub = null;
-  let fix119SessionUnsub = null;
-  let fix119LiveUnsub = null;
-  let fix119Uid = null;
-  let fix119Token = null;
-
-  function fix119Now(){ return Date.now(); }
-  function fix119Uid(){ return selectedUid || qs('userSelect')?.value || ''; }
-  function fix119Root(session){ try{ return getSessionRoot(session) || {}; }catch(e){ return session || {}; } }
-  function fix119Meta(session){ return fix119Root(session)?.meta || {}; }
-  function fix119Status(meta){
-    meta = meta || {};
-    const now = fix119Now();
-    const raw = String(meta.status || meta.linkStatus || '').toLowerCase();
-    const exp = Number(meta.expiresAt || 0);
-    const remaining = Number(meta.remainingMs || 0);
-    const stopped = meta.active === false || Number(meta.endedAt || 0) > 0 || ['stopped','stop','ended','expired','inactive','deleted'].includes(raw);
-    const paused = !stopped && (meta.paused === true || raw === 'paused' || raw === 'pause');
-    const expired = exp > 0 && exp <= now && !paused;
-    const active = !stopped && !expired && (paused || meta.active === true || raw === 'active' || exp > now);
-    const leftMs = paused ? Math.max(0, remaining || (exp > now ? exp - now : 0)) : Math.max(0, exp - now);
-    return { active, paused, stopped: stopped || expired, expired, leftMs, status: stopped ? 'stopped' : expired ? 'expired' : paused ? 'paused' : active ? 'active' : 'inactive' };
-  }
-  function fix119IsStoppedControl(live){
-    if(!live) return false;
-    const raw = String(live.status || live.linkStatus || '').toLowerCase();
-    return live.active === false || Number(live.endedAt || 0) > 0 || ['stopped','stop','ended','expired','inactive','deleted'].includes(raw);
-  }
-  function fix119ControlEntry(uid, live){
-    if(!uid || !live || fix119IsStoppedControl(live)) return null;
-    const token = String(live.sessionId || live.activeSessionId || live.liveSessionId || '').trim() || ('live_' + uid);
-    const meta = {
-      ownerUid: uid,
-      active: live.active === true || live.paused === true || ['active','paused','pause'].includes(String(live.status || live.linkStatus || '').toLowerCase()),
-      paused: live.paused === true || ['paused','pause'].includes(String(live.status || live.linkStatus || '').toLowerCase()),
-      status: live.paused ? 'paused' : (live.status || live.linkStatus || 'active'),
-      linkStatus: live.linkStatus || live.status || '',
-      createdAt: Number(live.createdAt || live.startedAt || live.updatedAt || 0),
-      startedAt: Number(live.startedAt || live.createdAt || 0),
-      expiresAt: Number(live.expiresAt || 0),
-      remainingMs: Number(live.remainingMs || 0),
-      liveUrl: live.liveUrl || live.link || live.url || (token ? buildShareUrl(token) : '')
-    };
-    if(!fix119Status(meta).active) return null;
-    return [token, {meta, public:{lastPoint:live.lastPoint || live.point || null}, viewStats:{}}];
-  }
-  function fix119SessionEntry(token){
-    token = String(token || '').trim();
-    if(!token || token === 'null' || token === 'undefined') return null;
-    const session = allSessions && allSessions[token];
-    if(!session) return null;
-    const st = fix119Status(fix119Meta(session));
-    return st.active ? [token, session] : null;
-  }
-  function fix119BestEntry(){
-    const uid = fix119Uid();
-    const live = uid ? (liveByUid?.[uid] || null) : null;
-    if(fix119IsStoppedControl(live)) return null;
-
-    const ownerToken = uid ? String(window.liveOwnersByUid?.[uid]?.activeSessionId || live?.activeSessionId || live?.sessionId || live?.liveSessionId || '').trim() : '';
-    const ownerEntry = fix119SessionEntry(ownerToken);
-    if(ownerEntry){
-      const meta = fix119Meta(ownerEntry[1]);
-      if(!uid || !meta.ownerUid || meta.ownerUid === uid) return ownerEntry;
-    }
-
-    const entries = Object.entries(allSessions || {}).filter(([token, session]) => {
-      if(token === '_init') return false;
-      const meta = fix119Meta(session);
-      if(uid && meta.ownerUid && meta.ownerUid !== uid) return false;
-      return fix119Status(meta).active;
-    }).sort((a,b)=>Number(fix119Meta(b[1]).createdAt || fix119Meta(b[1]).startedAt || 0)-Number(fix119Meta(a[1]).createdAt || fix119Meta(a[1]).startedAt || 0));
-    if(entries[0]) return entries[0];
-
-    return fix119ControlEntry(uid, live);
-  }
-  function fix119RemainingText(ms){
-    try{ return formatRemainingMs(ms); }catch(e){}
-    ms = Math.max(0, Number(ms || 0));
-    const s = Math.floor(ms / 1000), m = Math.floor(s / 60), h = Math.floor(m / 60), d = Math.floor(h / 24);
-    if(d) return `${d}д ${h%24}ч`;
-    if(h) return `${h}ч ${m%60}м`;
-    return `${m}м ${s%60}с`;
-  }
-  function fix119CompactText(ms){
-    try{ return fmtRemainingCompact(ms); }catch(e){ return fix119RemainingText(ms); }
-  }
-  function fix119SetText(id, value){ const el = qs(id); if(el) el.textContent = String(value ?? ''); }
-  function fix119Url(token, meta){ return meta?.liveUrl || meta?.link || meta?.url || buildShareUrl(token); }
-  function fix119Paint(){
-    const entry = fix119BestEntry();
-    const createBtn = qs('createShareBtn');
-    const notice = qs('activeSessionNotice');
-    let toast = document.getElementById('activeSessionToast');
-    if(!entry){
-      if(createBtn){ createBtn.disabled = false; createBtn.textContent = 'Создать live-ссылку'; }
-      if(notice){ notice.classList.add('hidden'); notice.innerHTML = ''; notice.dataset.liveToken = ''; }
-      if(toast){ try{ clearInterval(toast._timer); }catch(e){} toast.remove(); }
-      createdShareUrl = '';
-      return;
-    }
-    const [token, session] = entry;
-    const meta = fix119Meta(session);
-    const st = fix119Status(meta);
-    if(!st.active){
-      if(createBtn){ createBtn.disabled = false; createBtn.textContent = 'Создать live-ссылку'; }
-      if(notice){ notice.classList.add('hidden'); notice.innerHTML = ''; notice.dataset.liveToken = ''; }
-      if(toast){ try{ clearInterval(toast._timer); }catch(e){} toast.remove(); }
-      return;
-    }
-    const url = fix119Url(token, meta);
-    createdShareUrl = url;
-    if(createBtn){ createBtn.disabled = true; createBtn.textContent = st.paused ? 'Live на паузе' : 'Есть активная ссылка'; }
-    if(notice){
-      notice.classList.remove('hidden');
-      const pausedText = st.paused ? '1' : '0';
-      if(notice.dataset.liveToken !== token || notice.dataset.paused !== pausedText){
-        notice.dataset.liveToken = token;
-        notice.dataset.paused = pausedText;
-        notice.innerHTML = '<strong id="activeSessionNoticeTitle"></strong><div style="margin-top:6px"><span id="activeSessionNoticeLabel"></span>: <b id="activeSessionNoticeTime"></b></div><div style="margin-top:6px" class="mono" id="activeSessionNoticeUrl"></div>';
-      }
-      fix119SetText('activeSessionNoticeTitle', st.paused ? 'Live-сессия на паузе' : 'Live-сессия активна');
-      fix119SetText('activeSessionNoticeLabel', st.paused ? 'Пауза' : 'Осталось');
-      fix119SetText('activeSessionNoticeTime', fix119CompactText(st.leftMs));
-      fix119SetText('activeSessionNoticeUrl', url);
-    }
-    try{ applyToastPosition(); }catch(e){}
-    const host = (typeof getToastHost === 'function') ? getToastHost() : document.body;
-    toast = document.getElementById('activeSessionToast');
-    if(!toast){
-      toast = document.createElement('div');
-      toast.id = 'activeSessionToast';
-      toast.style.pointerEvents = 'auto';
-      toast.style.display = 'flex';
-      toast.style.flexDirection = 'column';
-      toast.style.gap = '8px';
-      toast.style.padding = '12px 14px';
-      toast.style.borderRadius = '14px';
-      toast.style.color = '#fff';
-      toast.style.boxShadow = '0 10px 28px rgba(0,0,0,.28)';
-      toast.style.fontWeight = '600';
-      toast.style.lineHeight = '1.35';
-      toast.style.wordBreak = 'break-word';
-      host.appendChild(toast);
-    }
-    toast.style.background = st.paused ? '#b45309' : '#2563eb';
-    const pausedText = st.paused ? '1' : '0';
-    if(toast.dataset.liveToken !== token || toast.dataset.paused !== pausedText){
-      toast.dataset.liveToken = token;
-      toast.dataset.paused = pausedText;
-      toast.innerHTML = '<div style="font-weight:800" id="activeSessionToastTitle"></div><div id="activeSessionToastTime" style="font-size:13px;opacity:.95"></div>';
-    }
-    fix119SetText('activeSessionToastTitle', st.paused ? 'Live-сессия на паузе' : 'Live-сессия активна');
-    fix119SetText('activeSessionToastTime', (st.paused ? 'Пауза: ' : 'Осталось: ') + fix119RemainingText(st.leftMs));
-  }
-  function fix119Upsert(token, val){
-    token = String(token || '').trim();
-    if(!token) return;
-    if(!allSessions || typeof allSessions !== 'object') allSessions = {};
-    if(val){ allSessions[token] = fix119Root(val); }
-    else { delete allSessions[token]; }
-    try{ renderSessions(); }catch(e){}
-    fix119Paint();
-  }
-  function fix119AttachSession(token){
-    token = String(token || '').trim();
-    if(fix119Token === token && fix119SessionUnsub) return;
-    if(fix119SessionUnsub){ try{ fix119SessionUnsub(); }catch(e){} fix119SessionUnsub = null; }
-    fix119Token = token || null;
-    if(!token){ fix119Paint(); return; }
-    try{
-      fix119SessionUnsub = onValue(ref(db, `liveSessions/${token}`), snap => fix119Upsert(token, snap.val()), e => { try{ recordError('fix119SelectedSession', e); }catch(_){} });
-    }catch(e){ try{ recordError('fix119AttachSession', e); }catch(_){} }
-  }
-  function fix119Subscribe(){
-    const uid = fix119Uid();
-    if(uid === fix119Uid && (fix119OwnerUnsub || !uid)) return;
-    if(fix119OwnerUnsub){ try{ fix119OwnerUnsub(); }catch(e){} fix119OwnerUnsub = null; }
-    if(fix119LiveUnsub){ try{ fix119LiveUnsub(); }catch(e){} fix119LiveUnsub = null; }
-    if(fix119SessionUnsub){ try{ fix119SessionUnsub(); }catch(e){} fix119SessionUnsub = null; fix119Token = null; }
-    fix119Uid = uid;
-    if(!uid){ fix119Paint(); return; }
-    try{
-      fix119OwnerUnsub = onValue(ref(db, `liveOwners/${uid}/activeSessionId`), async snap => {
-        if(!window.liveOwnersByUid) window.liveOwnersByUid = {};
-        window.liveOwnersByUid[uid] = window.liveOwnersByUid[uid] || {};
-        const token = String(snap.val() || '').trim();
-        window.liveOwnersByUid[uid].activeSessionId = token || null;
-        if(token){
-          fix119AttachSession(token);
-          try{ const ss = await get(ref(db, `liveSessions/${token}`)); fix119Upsert(token, ss.val()); }catch(e){}
-        }else{
-          fix119AttachSession(null);
-          fix119Paint();
-        }
-      }, e => { try{ recordError('fix119OwnerListener', e); }catch(_){} });
-      fix119LiveUnsub = onValue(ref(db, `live/${uid}`), snap => {
-        liveByUid = liveByUid || {};
-        const live = snap.val();
-        if(live) liveByUid[uid] = live; else delete liveByUid[uid];
-        const token = String(live?.activeSessionId || live?.sessionId || live?.liveSessionId || '').trim();
-        if(token) fix119AttachSession(token);
-        fix119Paint();
-      }, e => { try{ recordError('fix119LiveListener', e); }catch(_){} });
-    }catch(e){ try{ recordError('fix119Subscribe', e); }catch(_){} }
-  }
-
-  getSessionStatus = function(session){
-    const st = fix119Status(fix119Meta(session));
-    return st.status === 'paused' ? 'paused' : st.status === 'active' ? 'active' : st.status === 'expired' ? 'expired' : 'ended';
-  };
-  getSessionStatusLabel = function(status){
-    if(status === 'paused') return 'пауза';
-    if(status === 'active') return 'активна';
-    if(status === 'expired') return 'истекла';
-    return 'завершена';
-  };
-  getSelectedActiveSessionEntry = fix119BestEntry;
-  updateActiveSessionNotice = fix119Paint;
-  updateActiveSessionToast = fix119Paint;
-
-  const oldCreate119 = createLiveSession;
-  createLiveSession = async function(){
-    await oldCreate119();
-    try{
-      const uid = fix119Uid();
-      if(!uid) return;
-      let token = String(window.liveOwnersByUid?.[uid]?.activeSessionId || liveByUid?.[uid]?.activeSessionId || liveByUid?.[uid]?.sessionId || '').trim();
-      if(!token){
-        try{ const os = await get(ref(db, `liveOwners/${uid}/activeSessionId`)); token = String(os.val() || '').trim(); }catch(e){}
-      }
-      if(token){
-        const ss = await get(ref(db, `liveSessions/${token}`));
-        fix119Upsert(token, ss.val());
-      }else{
-        fix119Paint();
-      }
-      fix119Subscribe();
-    }catch(e){ try{ recordError('fix119AfterCreate', e); }catch(_){} fix119Paint(); }
-  };
-
-  const oldRender119 = renderSessions;
-  renderSessions = function(){
-    const result = oldRender119.apply(this, arguments);
-    fix119Paint();
-    return result;
-  };
-
-  ['change','click'].forEach(evt => document.addEventListener(evt, () => setTimeout(()=>{ fix119Subscribe(); fix119Paint(); }, 30), true));
-  window.addEventListener('load', () => { fix119Subscribe(); fix119Paint(); });
-  setInterval(() => { fix119Subscribe(); fix119Paint(); }, 1000);
-})();
-// === /Admin fix_119 ===
-
 // === /Admin fix_110 ===
 </script>
 
