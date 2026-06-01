@@ -507,6 +507,197 @@ tr.gpsLogRowWatchdog{background:rgba(147,51,234,.08)}
 
 
 
+/* === Admin fix_117: live timer immediate UI + selected live lightweight sync === */
+(function(){
+  let fix117LastSelectedUid = null;
+  let fix117OwnerUnsub = null;
+  let fix117SessionUnsub = null;
+  let fix117SessionToken = null;
+
+  function safeCall(fn){ try{ if(typeof fn === 'function') fn(); }catch(e){} }
+  function rootOf(session){ try{ return getSessionRoot(session) || {}; }catch(e){ return session || {}; } }
+  function metaOf(session){ return rootOf(session).meta || {}; }
+  function esc117(v){ return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  function isPaused117(meta){ return meta?.paused === true || meta?.status === 'paused' || meta?.status === 'pause' || meta?.linkStatus === 'paused'; }
+  function isEnded117(meta){ return meta?.active === false || ['ended','stopped','stop','expired','deleted'].includes(String(meta?.status || '').toLowerCase()) || Number(meta?.endedAt || 0) > 0; }
+  function remainingMs117(meta){
+    if(isPaused117(meta)){
+      const r = Number(meta?.remainingMs || 0);
+      if(Number.isFinite(r) && r > 0) return r;
+    }
+    return Math.max(0, Number(meta?.expiresAt || 0) - Date.now());
+  }
+  function status117(session){
+    const meta = metaOf(session);
+    const exp = Number(meta.expiresAt || 0);
+    if(isPaused117(meta) && !isEnded117(meta) && (!exp || exp > Date.now())) return 'paused';
+    if(!isEnded117(meta) && meta.active === true && exp > Date.now()) return 'active';
+    if(exp && exp <= Date.now()) return 'expired';
+    return 'ended';
+  }
+  function currentEntry117(){
+    const entries = Object.entries(allSessions || {}).filter(([token]) => token !== '_init');
+    const uid = selectedUid || qs('userSelect')?.value || '';
+    const prefer = entries.find(([token, session]) => {
+      const meta = metaOf(session);
+      return (!uid || meta.ownerUid === uid) && ['active','paused'].includes(status117(session));
+    });
+    if(prefer) return prefer;
+    return null;
+  }
+  function refresh117(){
+    safeCall(renderSessions);
+    safeCall(updateActiveSessionNotice);
+    safeCall(updateActiveSessionToast);
+    safeCall(updateNowFromAvailableSources);
+  }
+  function upsertSession117(token, val){
+    if(!token) return;
+    if(!allSessions || typeof allSessions !== 'object') allSessions = {};
+    if(val) allSessions[token] = rootOf(val);
+    else delete allSessions[token];
+    refresh117();
+  }
+  function attachSession117(token){
+    if(fix117SessionToken === token && fix117SessionUnsub) return;
+    if(fix117SessionUnsub){ try{ fix117SessionUnsub(); }catch(e){} fix117SessionUnsub = null; }
+    fix117SessionToken = token || null;
+    if(!token){ refresh117(); return; }
+    try{
+      fix117SessionUnsub = onValue(ref(db, `liveSessions/${token}`), snap => {
+        upsertSession117(token, snap.val());
+      }, e => { try{ recordError('fix117SelectedLiveSession', e); }catch(_){} });
+    }catch(e){ try{ recordError('fix117AttachSession', e); }catch(_){} }
+  }
+  function subscribeSelected117(){
+    const uid = selectedUid || qs('userSelect')?.value || '';
+    if(uid === fix117LastSelectedUid && fix117OwnerUnsub) return;
+    fix117LastSelectedUid = uid;
+    if(fix117OwnerUnsub){ try{ fix117OwnerUnsub(); }catch(e){} fix117OwnerUnsub = null; }
+    if(fix117SessionUnsub){ try{ fix117SessionUnsub(); }catch(e){} fix117SessionUnsub = null; fix117SessionToken = null; }
+    if(!uid){ refresh117(); return; }
+    try{
+      fix117OwnerUnsub = onValue(ref(db, `liveOwners/${uid}/activeSessionId`), async snap => {
+        const token = String(snap.val() || '');
+        if(!token){ attachSession117(null); return; }
+        attachSession117(token);
+        try{
+          const ss = await get(ref(db, `liveSessions/${token}`));
+          upsertSession117(token, ss.val());
+        }catch(e){ try{ recordError('fix117LoadSelectedLiveSession', e); }catch(_){} }
+      }, e => { try{ recordError('fix117SelectedLiveOwner', e); }catch(_){} });
+    }catch(e){ try{ recordError('fix117SubscribeSelected', e); }catch(_){} }
+  }
+
+  const oldGetSessionStatus = typeof getSessionStatus === 'function' ? getSessionStatus : null;
+  getSessionStatus = function(session){
+    const st = status117(session);
+    if(st === 'paused') return 'paused';
+    return oldGetSessionStatus ? oldGetSessionStatus(session) : st;
+  };
+  getSessionStatusLabel = function(status){
+    if(status === 'paused') return 'пауза';
+    if(status === 'active') return 'активна';
+    if(status === 'ended') return 'завершена';
+    return 'истекла';
+  };
+  if(typeof mygpsLivePatchStatusLabel === 'function'){
+    mygpsLivePatchStatusLabel = function(status, meta){
+      if(isPaused117(meta) && !isEnded117(meta)) return '<span class="tag idle">пауза</span>';
+      if(status === 'active') return '<span class="tag online">активна</span>';
+      if(status === 'paused') return '<span class="tag idle">пауза</span>';
+      if(status === 'ended') return '<span class="tag offline">завершена</span>';
+      return '<span class="tag offline">истекла</span>';
+    };
+  }
+
+  updateActiveSessionNotice = function(){
+    const box = qs('activeSessionNotice');
+    if(!box) return;
+    const entry = currentEntry117();
+    if(!entry){ box.classList.add('hidden'); box.innerHTML=''; return; }
+    const [token, session] = entry;
+    const meta = metaOf(session);
+    const st = status117(session);
+    const ms = remainingMs117(meta);
+    const url = buildShareUrl(token);
+    createdShareUrl = url;
+    box.classList.remove('hidden');
+    if(st === 'paused'){
+      box.innerHTML = `<strong>Live-сессия на паузе</strong><div style="margin-top:6px">Осталось: <b>${fmtRemainingCompact(ms)}</b></div><div style="margin-top:6px" class="mono">${esc117(url)}</div>`;
+    }else{
+      box.innerHTML = `<strong>Live-сессия активна</strong><div style="margin-top:6px">Осталось: <b>${fmtRemainingCompact(ms)}</b></div><div style="margin-top:6px" class="mono">${esc117(url)}</div>`;
+    }
+  };
+
+  updateActiveSessionToast = function(){
+    const host = getToastHost();
+    applyToastPosition();
+    let el = document.getElementById('activeSessionToast');
+    const entry = currentEntry117();
+    const createBtn = qs('createShareBtn');
+    if(!entry){
+      if(el){ clearInterval(el._timer); el.remove(); }
+      if(createBtn){ createBtn.disabled=false; createBtn.textContent='Создать live-ссылку'; }
+      return;
+    }
+    const [token, session] = entry;
+    const meta = metaOf(session);
+    const st = status117(session);
+    const ms = remainingMs117(meta);
+    if(createBtn){ createBtn.disabled=true; createBtn.textContent='Есть активная ссылка'; }
+    if(!el){
+      el = document.createElement('div');
+      el.id = 'activeSessionToast';
+      el.style.pointerEvents='auto'; el.style.display='flex'; el.style.flexDirection='column'; el.style.gap='8px';
+      el.style.padding='12px 14px'; el.style.borderRadius='14px'; el.style.background='#2563eb'; el.style.color='#fff';
+      el.style.boxShadow='0 10px 28px rgba(0,0,0,.28)'; el.style.fontWeight='600'; el.style.lineHeight='1.35'; el.style.wordBreak='break-word';
+      host.appendChild(el);
+    }
+    const title = st === 'paused' ? 'Live-сессия на паузе' : 'Live-сессия активна';
+    el.innerHTML = `<div style="font-weight:800">${title}</div><div id="activeSessionToastTime" style="font-size:13px;opacity:.95">Осталось: ${formatRemainingMs(ms)}</div>`;
+    clearInterval(el._timer);
+    el._token = token;
+    el._timer = setInterval(()=>{
+      const current = allSessions?.[el._token];
+      const cMeta = metaOf(current);
+      const cStatus = status117(current);
+      if(!current || !['active','paused'].includes(cStatus)){
+        clearInterval(el._timer); el.remove();
+        if(createBtn){ createBtn.disabled=false; createBtn.textContent='Создать live-ссылку'; }
+        safeCall(renderSessions); safeCall(updateActiveSessionNotice);
+        return;
+      }
+      const left = remainingMs117(cMeta);
+      const timeEl = document.getElementById('activeSessionToastTime');
+      const titleEl = el.querySelector('div');
+      if(titleEl) titleEl.textContent = cStatus === 'paused' ? 'Live-сессия на паузе' : 'Live-сессия активна';
+      if(timeEl) timeEl.textContent = `Осталось: ${formatRemainingMs(left)}`;
+      if(left <= 0 && cStatus !== 'paused'){
+        clearInterval(el._timer); el.remove();
+        if(createBtn){ createBtn.disabled=false; createBtn.textContent='Создать live-ссылку'; }
+        safeCall(renderSessions); safeCall(updateActiveSessionNotice);
+      }
+    }, 1000);
+  };
+
+  const oldRefreshAfterLocal117 = typeof refreshSessionsUiAfterLocalChange === 'function' ? refreshSessionsUiAfterLocalChange : null;
+  refreshSessionsUiAfterLocalChange = function(){
+    if(oldRefreshAfterLocal117) oldRefreshAfterLocal117();
+    refresh117();
+  };
+
+  document.addEventListener('change', ev => {
+    if(ev.target && ev.target.id === 'userSelect') setTimeout(subscribeSelected117, 50);
+  }, true);
+  window.addEventListener('focus', () => setTimeout(subscribeSelected117, 250));
+  document.addEventListener('visibilitychange', () => { if(!document.hidden) setTimeout(subscribeSelected117, 250); });
+  window.addEventListener('load', () => setTimeout(()=>{ subscribeSelected117(); refresh117(); }, 1200));
+  setInterval(()=>{ subscribeSelected117(); safeCall(updateActiveSessionNotice); safeCall(updateActiveSessionToast); }, 3000);
+})();
+/* === /Admin fix_117 === */
+
+
 /* === Admin fix_72: update check, route filter, diagnostics, replay events, cleanup === */
 .postUpdateGrid,.routeFilterGrid,.cleanupSettingsGrid,.diagGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:12px}
 .postUpdateCard,.routeFilterCard,.cleanupSettingCard,.replayEventCard{padding:12px 14px;border-radius:16px;border:1px solid var(--border);background:rgba(255,255,255,.035);line-height:1.45}
@@ -6409,8 +6600,14 @@ async function createLiveSession(){
     qs("shareLinkText").textContent = createdShareUrl;
     qs("shareExpiresText").textContent = fmtTime(expiresAt);
     qs("shareResultBox").classList.remove("hidden");
-    await loadSessions();
-    updateActiveSessionNotice();
+    // fix_117: update local UI immediately; do not wait for page refresh/realtime roundtrip.
+    if(!allSessions || typeof allSessions !== "object") allSessions = {};
+    allSessions[token] = payload;
+    try{ renderSessions(); }catch(e){}
+    try{ updateActiveSessionNotice(); }catch(e){}
+    try{ updateActiveSessionToast(); }catch(e){}
+    try{ refreshSessionsUiAfterLocalChange(); }catch(e){}
+    loadSessions().catch(e=>recordError("loadSessionsAfterCreateLiveSession", e));
     showToast("Live-ссылка создана","success");
   }catch(e){
     recordError("createLiveSession", e); showToast("Создание live-ссылки: "+errText(e),"error",3600);
@@ -11631,7 +11828,7 @@ window.addEventListener('load', ()=>{ mygpsLivePatchInstallUi(); setTimeout(()=>
 
 
 /* === Admin fix_72: update check, route filter, diagnostics, replay events, cleanup === */
-const ADMIN_FIX70_VERSION = "fix_110";
+const ADMIN_FIX70_VERSION = "fix_117";
 function fix70Qs(id){ return document.getElementById(id); }
 function fix70Esc(v){ return String(v ?? "").replace(/[&<>'"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c])); }
 function fix70Badge(text, kind="ok"){ return `<span class="postUpdateBadge ${kind}">${fix70Esc(text)}</span>`; }
