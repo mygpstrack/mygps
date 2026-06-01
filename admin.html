@@ -12860,6 +12860,186 @@ document.addEventListener('click', ev=>{
   if(dl){ ev.preventDefault(); downloadSecurityReport(); return; }
 }, true);
 // === /Admin fix_110 ===
+
+
+// === Admin fix_121: live timer UI for admin-created sessions without refresh ===
+(function(){
+  if(window.__mygpsFix121Installed) return;
+  window.__mygpsFix121Installed = true;
+
+  const fix121State = { uid:'', token:'', ownerUnsub:null, liveUnsub:null, sessionUnsub:null };
+  const fix121PrevGetActive = typeof getSelectedActiveSessionEntry === 'function' ? getSelectedActiveSessionEntry : null;
+  const fix121PrevCreateLive = typeof createLiveSession === 'function' ? createLiveSession : null;
+
+  function fix121Uid(){ return selectedUid || qs('userSelect')?.value || ''; }
+  function fix121TokenFromLive(live){ return String(live?.sessionId || live?.activeSessionId || live?.liveSessionId || live?.token || '').trim(); }
+  function fix121Status(meta){
+    const now = Date.now();
+    const status = String(meta?.status || meta?.linkStatus || '').toLowerCase();
+    const expiresAt = Number(meta?.expiresAt || 0);
+    const paused = !!meta?.paused || status === 'paused' || status === 'pause';
+    const stopped = status === 'stopped' || status === 'ended' || status === 'expired' || meta?.active === false;
+    const active = !stopped && !!meta?.active && (paused || !expiresAt || expiresAt > now);
+    const leftMs = paused ? Math.max(0, Number(meta?.remainingMs || 0)) : Math.max(0, expiresAt ? expiresAt - now : Number(meta?.remainingMs || 0));
+    return { active, paused, stopped, leftMs, expiresAt };
+  }
+  function fix121SessionFromLive(uid, live){
+    if(!uid || !live) return null;
+    const token = fix121TokenFromLive(live);
+    if(!token) return null;
+    const st = fix121Status({ active: live.active, paused: live.paused, status: live.status, linkStatus: live.linkStatus, expiresAt: live.expiresAt, remainingMs: live.remainingMs });
+    if(!st.active) return null;
+    return [token, {
+      meta: {
+        ownerUid: uid,
+        active: true,
+        paused: st.paused,
+        status: st.paused ? 'paused' : 'active',
+        linkStatus: st.paused ? 'paused' : 'active',
+        createdAt: Number(live.createdAt || live.startedAt || live.updatedAt || Date.now()),
+        startedAt: Number(live.startedAt || live.createdAt || 0),
+        expiresAt: Number(live.expiresAt || 0),
+        remainingMs: st.leftMs,
+        liveUrl: live.liveUrl || live.link || buildShareUrl(token),
+        link: live.link || live.liveUrl || buildShareUrl(token)
+      },
+      public: { lastPoint: live.lastPoint || live.point || null },
+      viewStats: (allSessions?.[token]?.viewStats || {})
+    }];
+  }
+  function fix121SessionActive(entry, uid){
+    if(!entry) return false;
+    const meta = getSessionRoot(entry[1])?.meta || {};
+    if(uid && meta.ownerUid && meta.ownerUid !== uid) return false;
+    return fix121Status(meta).active;
+  }
+  function fix121FindEntry(){
+    const uid = fix121Uid();
+    const live = uid ? (liveByUid?.[uid] || null) : null;
+    const liveToken = fix121TokenFromLive(live);
+    const liveState = live ? fix121Status({ active: live.active, paused: live.paused, status: live.status, linkStatus: live.linkStatus, expiresAt: live.expiresAt, remainingMs: live.remainingMs }) : null;
+
+    // If live/<uid> explicitly says stopped/ended, do not let stale allSessions keep the timer running.
+    if(live && liveToken && liveState?.stopped) return null;
+
+    // Prefer live/<uid> for admin-created links because loadSessions() is low-traffic and may not include random token keys.
+    if(live && liveState?.active){
+      const fromSession = liveToken && allSessions?.[liveToken] ? [liveToken, allSessions[liveToken]] : null;
+      if(fix121SessionActive(fromSession, uid)) return fromSession;
+      const pseudo = fix121SessionFromLive(uid, live);
+      if(pseudo) return pseudo;
+    }
+
+    const ownerToken = uid ? String(window.liveOwnersByUid?.[uid]?.activeSessionId || '').trim() : '';
+    if(ownerToken && allSessions?.[ownerToken]){
+      const ownerEntry = [ownerToken, allSessions[ownerToken]];
+      if(fix121SessionActive(ownerEntry, uid)) return ownerEntry;
+    }
+
+    if(fix121PrevGetActive){
+      const prev = fix121PrevGetActive();
+      if(fix121SessionActive(prev, uid)) return prev;
+    }
+    return null;
+  }
+
+  getSelectedActiveSessionEntry = fix121FindEntry;
+
+  function fix121Paint(){
+    try{ updateActiveSessionNotice?.(); }catch(e){ try{ recordError('fix121Notice', e); }catch(_){} }
+    try{ updateActiveSessionToast?.(); }catch(e){ try{ recordError('fix121Toast', e); }catch(_){} }
+    const entry = fix121FindEntry();
+    const btn = qs('createShareBtn');
+    if(btn){
+      if(entry){ btn.disabled = true; btn.textContent = 'Есть активная ссылка'; }
+      else { btn.disabled = false; btn.textContent = 'Создать live-ссылку'; }
+    }
+  }
+
+  function fix121UpsertSession(token, val){
+    token = String(token || '').trim();
+    if(!token) return;
+    if(!allSessions || typeof allSessions !== 'object') allSessions = {};
+    if(val) allSessions[token] = val; else delete allSessions[token];
+    fix121Paint();
+  }
+  function fix121AttachSession(token){
+    token = String(token || '').trim();
+    if(fix121State.token === token && fix121State.sessionUnsub) return;
+    if(fix121State.sessionUnsub){ try{ fix121State.sessionUnsub(); }catch(e){} fix121State.sessionUnsub = null; }
+    fix121State.token = token;
+    if(!token){ fix121Paint(); return; }
+    try{
+      fix121State.sessionUnsub = onValue(ref(db, `liveSessions/${token}`), snap => fix121UpsertSession(token, snap.val()), e => { try{ recordError('fix121SessionListener', e); }catch(_){} });
+    }catch(e){ try{ recordError('fix121AttachSession', e); }catch(_){} }
+  }
+  function fix121Subscribe(){
+    const uid = fix121Uid();
+    if(fix121State.uid === uid && (fix121State.ownerUnsub || fix121State.liveUnsub || !uid)) return;
+    if(fix121State.ownerUnsub){ try{ fix121State.ownerUnsub(); }catch(e){} fix121State.ownerUnsub = null; }
+    if(fix121State.liveUnsub){ try{ fix121State.liveUnsub(); }catch(e){} fix121State.liveUnsub = null; }
+    if(fix121State.sessionUnsub){ try{ fix121State.sessionUnsub(); }catch(e){} fix121State.sessionUnsub = null; fix121State.token = ''; }
+    fix121State.uid = uid;
+    if(!uid){ fix121Paint(); return; }
+    try{
+      fix121State.ownerUnsub = onValue(ref(db, `liveOwners/${uid}/activeSessionId`), snap => {
+        if(!window.liveOwnersByUid || typeof window.liveOwnersByUid !== 'object') window.liveOwnersByUid = {};
+        if(!window.liveOwnersByUid[uid]) window.liveOwnersByUid[uid] = {};
+        window.liveOwnersByUid[uid].activeSessionId = String(snap.val() || '').trim();
+        fix121AttachSession(window.liveOwnersByUid[uid].activeSessionId);
+        fix121Paint();
+      }, e => { try{ recordError('fix121OwnerListener', e); }catch(_){} });
+      fix121State.liveUnsub = onValue(ref(db, `live/${uid}`), snap => {
+        const live = snap.val() || null;
+        if(!liveByUid || typeof liveByUid !== 'object') liveByUid = {};
+        if(live) liveByUid[uid] = live; else delete liveByUid[uid];
+        const token = fix121TokenFromLive(live);
+        if(token) fix121AttachSession(token);
+        fix121Paint();
+      }, e => { try{ recordError('fix121LiveListener', e); }catch(_){} });
+    }catch(e){ try{ recordError('fix121Subscribe', e); }catch(_){} }
+  }
+
+  async function fix121Hydrate(uid){
+    uid = uid || fix121Uid();
+    if(!uid) return;
+    try{
+      const liveSnap = await get(ref(db, `live/${uid}`));
+      const live = liveSnap.val() || null;
+      if(!liveByUid || typeof liveByUid !== 'object') liveByUid = {};
+      if(live) liveByUid[uid] = live;
+      let token = fix121TokenFromLive(live);
+      if(!token){
+        const ownerSnap = await get(ref(db, `liveOwners/${uid}/activeSessionId`));
+        token = String(ownerSnap.val() || '').trim();
+      }
+      if(token){
+        const sessSnap = await get(ref(db, `liveSessions/${token}`));
+        fix121UpsertSession(token, sessSnap.val());
+        fix121AttachSession(token);
+      }else{
+        fix121Paint();
+      }
+    }catch(e){ try{ recordError('fix121Hydrate', e); }catch(_){} fix121Paint(); }
+  }
+
+  if(fix121PrevCreateLive){
+    createLiveSession = async function(...args){
+      const beforeUid = fix121Uid();
+      await fix121PrevCreateLive.apply(this, args);
+      const uid = fix121Uid() || beforeUid;
+      // Do not wait for full liveSessions list. Read only this user's live control/session and paint immediately.
+      await fix121Hydrate(uid);
+      fix121Paint();
+      setTimeout(()=>{ fix121Hydrate(uid); fix121Paint(); }, 350);
+      setTimeout(()=>{ fix121Hydrate(uid); fix121Paint(); }, 1200);
+    };
+  }
+
+  document.addEventListener('change', ev => { if(ev.target?.id === 'userSelect') setTimeout(()=>{ fix121Subscribe(); fix121Hydrate(); }, 0); }, true);
+  window.addEventListener('load', () => { setTimeout(()=>{ fix121Subscribe(); fix121Hydrate(); fix121Paint(); }, 700); setInterval(()=>{ fix121Subscribe(); fix121Paint(); }, 1000); });
+})();
+// === /Admin fix_121 ===
 </script>
 
 
