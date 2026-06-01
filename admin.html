@@ -2026,6 +2026,107 @@ setTimeout(fix71Install,1800);
 setTimeout(fix71Install,3500);
 /* === /Admin fix_72 === */
 
+
+/* === Admin fix_112: robust live create/sync countdown === */
+(function(){
+  const byId = (id) => document.getElementById(id);
+  const safeCall = (fn, name) => { try { if (typeof fn === 'function') fn(); } catch(e){ try{ recordError?.(name || 'fix112', e); }catch(_){} } };
+  const nowMs = () => Date.now();
+  function selected(){ return (typeof selectedUid !== 'undefined' && selectedUid) ? selectedUid : (byId('userSelect')?.value || ''); }
+  function metaStatus(meta){
+    const now = nowMs();
+    const active = meta?.active === true;
+    const paused = meta?.paused === true || String(meta?.status||'').toLowerCase() === 'paused' || String(meta?.linkStatus||'').toLowerCase() === 'paused';
+    const expiresAt = Number(meta?.expiresAt || 0);
+    if(paused && active && expiresAt > now) return 'paused';
+    if(active && expiresAt > now) return 'active';
+    if(!active && expiresAt > now) return 'ended';
+    return 'expired';
+  }
+  function rootOf(session){
+    try { return typeof getSessionRoot === 'function' ? getSessionRoot(session) : (session || {}); } catch(e){ return session || {}; }
+  }
+  function activeEntry(){
+    const uid = selected();
+    const now = nowMs();
+    const ownerToken = uid ? (window.liveOwnersByUid?.[uid]?.activeSessionId || '') : '';
+    if(ownerToken && allSessions?.[ownerToken]){
+      const r = rootOf(allSessions[ownerToken]);
+      const m = r?.meta || {};
+      if(m.active === true && Number(m.expiresAt || 0) > now) return [ownerToken, r];
+    }
+    return Object.entries(allSessions || {})
+      .filter(([token]) => token !== '_init')
+      .map(([token, session]) => [token, rootOf(session)])
+      .filter(([token, root]) => {
+        const m = root?.meta || {};
+        return (!uid || m.ownerUid === uid) && m.active === true && Number(m.expiresAt || 0) > now;
+      })
+      .sort((a,b)=>Number(b[1]?.meta?.createdAt||0)-Number(a[1]?.meta?.createdAt||0))[0] || null;
+  }
+  window.fix112RefreshLiveCreateUi = function(){
+    const createBtn = byId('createShareBtn');
+    const notice = byId('activeSessionNotice');
+    const entry = activeEntry();
+    if(createBtn){
+      createBtn.disabled = !!entry;
+      createBtn.textContent = entry ? 'Есть активная ссылка' : 'Создать live-ссылку';
+    }
+    if(notice){
+      if(!entry){
+        notice.classList.add('hidden');
+        notice.innerHTML = '';
+      }else{
+        const [token, root] = entry;
+        const meta = root?.meta || {};
+        const st = metaStatus(meta);
+        const left = meta.paused ? Number(meta.remainingMs || 0) : Math.max(0, Number(meta.expiresAt || 0) - Date.now());
+        const fmt = (typeof fmtRemainingCompact === 'function') ? fmtRemainingCompact : (ms)=>{
+          const sec = Math.max(0, Math.floor(Number(ms||0)/1000));
+          return Math.floor(sec/60)+'м '+String(sec%60).padStart(2,'0')+'с';
+        };
+        const url = (typeof buildShareUrl === 'function') ? buildShareUrl(token) : token;
+        notice.classList.remove('hidden');
+        notice.innerHTML = `<strong>${st === 'paused' ? 'Live-сессия на паузе' : 'Live-сессия активна'}</strong><div style="margin-top:6px">Осталось: <b>${fmt(left)}</b></div><div style="margin-top:6px" class="mono">${url}</div>`;
+      }
+    }
+  };
+  const oldNotice = (typeof updateActiveSessionNotice === 'function') ? updateActiveSessionNotice : null;
+  updateActiveSessionNotice = function(){
+    try { window.fix112RefreshLiveCreateUi(); } catch(e){ try{ recordError?.('fix112UpdateNotice', e); }catch(_){} if(oldNotice) oldNotice(); }
+  };
+  const oldRender = (typeof renderSessions === 'function') ? renderSessions : null;
+  if(oldRender){
+    renderSessions = function(){
+      const res = oldRender.apply(this, arguments);
+      setTimeout(()=>window.fix112RefreshLiveCreateUi?.(), 0);
+      return res;
+    };
+  }
+  const oldCreate = (typeof createLiveSession === 'function') ? createLiveSession : null;
+  if(oldCreate){
+    createLiveSession = async function(){
+      const res = await oldCreate.apply(this, arguments);
+      try{
+        const uid = selected();
+        if(uid){
+          const ownerSnap = await get(ref(db, `liveOwners/${uid}/activeSessionId`));
+          const token = String(ownerSnap.val() || '');
+          if(token){
+            const sSnap = await get(ref(db, `liveSessions/${token}`));
+            if(!allSessions || typeof allSessions !== 'object') allSessions = {};
+            if(sSnap.exists()) allSessions[token] = sSnap.val();
+          }
+        }
+      }catch(e){ try{ recordError?.('fix112CreateRefresh', e); }catch(_){} }
+      window.fix112RefreshLiveCreateUi();
+      return res;
+    };
+  }
+  setInterval(()=>window.fix112RefreshLiveCreateUi?.(), 1000);
+})();
+/* === /Admin fix_112 === */
+
 </script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js">
 function setupJournalQuickFilters(){
@@ -2053,6 +2154,107 @@ function setupJournalQuickFilters(){
 }
 
 window.addEventListener("load", setupJournalQuickFilters);
+
+
+/* === Admin fix_112: robust live create/sync countdown === */
+(function(){
+  const byId = (id) => document.getElementById(id);
+  const safeCall = (fn, name) => { try { if (typeof fn === 'function') fn(); } catch(e){ try{ recordError?.(name || 'fix112', e); }catch(_){} } };
+  const nowMs = () => Date.now();
+  function selected(){ return (typeof selectedUid !== 'undefined' && selectedUid) ? selectedUid : (byId('userSelect')?.value || ''); }
+  function metaStatus(meta){
+    const now = nowMs();
+    const active = meta?.active === true;
+    const paused = meta?.paused === true || String(meta?.status||'').toLowerCase() === 'paused' || String(meta?.linkStatus||'').toLowerCase() === 'paused';
+    const expiresAt = Number(meta?.expiresAt || 0);
+    if(paused && active && expiresAt > now) return 'paused';
+    if(active && expiresAt > now) return 'active';
+    if(!active && expiresAt > now) return 'ended';
+    return 'expired';
+  }
+  function rootOf(session){
+    try { return typeof getSessionRoot === 'function' ? getSessionRoot(session) : (session || {}); } catch(e){ return session || {}; }
+  }
+  function activeEntry(){
+    const uid = selected();
+    const now = nowMs();
+    const ownerToken = uid ? (window.liveOwnersByUid?.[uid]?.activeSessionId || '') : '';
+    if(ownerToken && allSessions?.[ownerToken]){
+      const r = rootOf(allSessions[ownerToken]);
+      const m = r?.meta || {};
+      if(m.active === true && Number(m.expiresAt || 0) > now) return [ownerToken, r];
+    }
+    return Object.entries(allSessions || {})
+      .filter(([token]) => token !== '_init')
+      .map(([token, session]) => [token, rootOf(session)])
+      .filter(([token, root]) => {
+        const m = root?.meta || {};
+        return (!uid || m.ownerUid === uid) && m.active === true && Number(m.expiresAt || 0) > now;
+      })
+      .sort((a,b)=>Number(b[1]?.meta?.createdAt||0)-Number(a[1]?.meta?.createdAt||0))[0] || null;
+  }
+  window.fix112RefreshLiveCreateUi = function(){
+    const createBtn = byId('createShareBtn');
+    const notice = byId('activeSessionNotice');
+    const entry = activeEntry();
+    if(createBtn){
+      createBtn.disabled = !!entry;
+      createBtn.textContent = entry ? 'Есть активная ссылка' : 'Создать live-ссылку';
+    }
+    if(notice){
+      if(!entry){
+        notice.classList.add('hidden');
+        notice.innerHTML = '';
+      }else{
+        const [token, root] = entry;
+        const meta = root?.meta || {};
+        const st = metaStatus(meta);
+        const left = meta.paused ? Number(meta.remainingMs || 0) : Math.max(0, Number(meta.expiresAt || 0) - Date.now());
+        const fmt = (typeof fmtRemainingCompact === 'function') ? fmtRemainingCompact : (ms)=>{
+          const sec = Math.max(0, Math.floor(Number(ms||0)/1000));
+          return Math.floor(sec/60)+'м '+String(sec%60).padStart(2,'0')+'с';
+        };
+        const url = (typeof buildShareUrl === 'function') ? buildShareUrl(token) : token;
+        notice.classList.remove('hidden');
+        notice.innerHTML = `<strong>${st === 'paused' ? 'Live-сессия на паузе' : 'Live-сессия активна'}</strong><div style="margin-top:6px">Осталось: <b>${fmt(left)}</b></div><div style="margin-top:6px" class="mono">${url}</div>`;
+      }
+    }
+  };
+  const oldNotice = (typeof updateActiveSessionNotice === 'function') ? updateActiveSessionNotice : null;
+  updateActiveSessionNotice = function(){
+    try { window.fix112RefreshLiveCreateUi(); } catch(e){ try{ recordError?.('fix112UpdateNotice', e); }catch(_){} if(oldNotice) oldNotice(); }
+  };
+  const oldRender = (typeof renderSessions === 'function') ? renderSessions : null;
+  if(oldRender){
+    renderSessions = function(){
+      const res = oldRender.apply(this, arguments);
+      setTimeout(()=>window.fix112RefreshLiveCreateUi?.(), 0);
+      return res;
+    };
+  }
+  const oldCreate = (typeof createLiveSession === 'function') ? createLiveSession : null;
+  if(oldCreate){
+    createLiveSession = async function(){
+      const res = await oldCreate.apply(this, arguments);
+      try{
+        const uid = selected();
+        if(uid){
+          const ownerSnap = await get(ref(db, `liveOwners/${uid}/activeSessionId`));
+          const token = String(ownerSnap.val() || '');
+          if(token){
+            const sSnap = await get(ref(db, `liveSessions/${token}`));
+            if(!allSessions || typeof allSessions !== 'object') allSessions = {};
+            if(sSnap.exists()) allSessions[token] = sSnap.val();
+          }
+        }
+      }catch(e){ try{ recordError?.('fix112CreateRefresh', e); }catch(_){} }
+      window.fix112RefreshLiveCreateUi();
+      return res;
+    };
+  }
+  setInterval(()=>window.fix112RefreshLiveCreateUi?.(), 1000);
+})();
+/* === /Admin fix_112 === */
 
 </script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js">
@@ -2082,6 +2284,107 @@ function setupJournalQuickFilters(){
 
 window.addEventListener("load", setupJournalQuickFilters);
 
+
+/* === Admin fix_112: robust live create/sync countdown === */
+(function(){
+  const byId = (id) => document.getElementById(id);
+  const safeCall = (fn, name) => { try { if (typeof fn === 'function') fn(); } catch(e){ try{ recordError?.(name || 'fix112', e); }catch(_){} } };
+  const nowMs = () => Date.now();
+  function selected(){ return (typeof selectedUid !== 'undefined' && selectedUid) ? selectedUid : (byId('userSelect')?.value || ''); }
+  function metaStatus(meta){
+    const now = nowMs();
+    const active = meta?.active === true;
+    const paused = meta?.paused === true || String(meta?.status||'').toLowerCase() === 'paused' || String(meta?.linkStatus||'').toLowerCase() === 'paused';
+    const expiresAt = Number(meta?.expiresAt || 0);
+    if(paused && active && expiresAt > now) return 'paused';
+    if(active && expiresAt > now) return 'active';
+    if(!active && expiresAt > now) return 'ended';
+    return 'expired';
+  }
+  function rootOf(session){
+    try { return typeof getSessionRoot === 'function' ? getSessionRoot(session) : (session || {}); } catch(e){ return session || {}; }
+  }
+  function activeEntry(){
+    const uid = selected();
+    const now = nowMs();
+    const ownerToken = uid ? (window.liveOwnersByUid?.[uid]?.activeSessionId || '') : '';
+    if(ownerToken && allSessions?.[ownerToken]){
+      const r = rootOf(allSessions[ownerToken]);
+      const m = r?.meta || {};
+      if(m.active === true && Number(m.expiresAt || 0) > now) return [ownerToken, r];
+    }
+    return Object.entries(allSessions || {})
+      .filter(([token]) => token !== '_init')
+      .map(([token, session]) => [token, rootOf(session)])
+      .filter(([token, root]) => {
+        const m = root?.meta || {};
+        return (!uid || m.ownerUid === uid) && m.active === true && Number(m.expiresAt || 0) > now;
+      })
+      .sort((a,b)=>Number(b[1]?.meta?.createdAt||0)-Number(a[1]?.meta?.createdAt||0))[0] || null;
+  }
+  window.fix112RefreshLiveCreateUi = function(){
+    const createBtn = byId('createShareBtn');
+    const notice = byId('activeSessionNotice');
+    const entry = activeEntry();
+    if(createBtn){
+      createBtn.disabled = !!entry;
+      createBtn.textContent = entry ? 'Есть активная ссылка' : 'Создать live-ссылку';
+    }
+    if(notice){
+      if(!entry){
+        notice.classList.add('hidden');
+        notice.innerHTML = '';
+      }else{
+        const [token, root] = entry;
+        const meta = root?.meta || {};
+        const st = metaStatus(meta);
+        const left = meta.paused ? Number(meta.remainingMs || 0) : Math.max(0, Number(meta.expiresAt || 0) - Date.now());
+        const fmt = (typeof fmtRemainingCompact === 'function') ? fmtRemainingCompact : (ms)=>{
+          const sec = Math.max(0, Math.floor(Number(ms||0)/1000));
+          return Math.floor(sec/60)+'м '+String(sec%60).padStart(2,'0')+'с';
+        };
+        const url = (typeof buildShareUrl === 'function') ? buildShareUrl(token) : token;
+        notice.classList.remove('hidden');
+        notice.innerHTML = `<strong>${st === 'paused' ? 'Live-сессия на паузе' : 'Live-сессия активна'}</strong><div style="margin-top:6px">Осталось: <b>${fmt(left)}</b></div><div style="margin-top:6px" class="mono">${url}</div>`;
+      }
+    }
+  };
+  const oldNotice = (typeof updateActiveSessionNotice === 'function') ? updateActiveSessionNotice : null;
+  updateActiveSessionNotice = function(){
+    try { window.fix112RefreshLiveCreateUi(); } catch(e){ try{ recordError?.('fix112UpdateNotice', e); }catch(_){} if(oldNotice) oldNotice(); }
+  };
+  const oldRender = (typeof renderSessions === 'function') ? renderSessions : null;
+  if(oldRender){
+    renderSessions = function(){
+      const res = oldRender.apply(this, arguments);
+      setTimeout(()=>window.fix112RefreshLiveCreateUi?.(), 0);
+      return res;
+    };
+  }
+  const oldCreate = (typeof createLiveSession === 'function') ? createLiveSession : null;
+  if(oldCreate){
+    createLiveSession = async function(){
+      const res = await oldCreate.apply(this, arguments);
+      try{
+        const uid = selected();
+        if(uid){
+          const ownerSnap = await get(ref(db, `liveOwners/${uid}/activeSessionId`));
+          const token = String(ownerSnap.val() || '');
+          if(token){
+            const sSnap = await get(ref(db, `liveSessions/${token}`));
+            if(!allSessions || typeof allSessions !== 'object') allSessions = {};
+            if(sSnap.exists()) allSessions[token] = sSnap.val();
+          }
+        }
+      }catch(e){ try{ recordError?.('fix112CreateRefresh', e); }catch(_){} }
+      window.fix112RefreshLiveCreateUi();
+      return res;
+    };
+  }
+  setInterval(()=>window.fix112RefreshLiveCreateUi?.(), 1000);
+})();
+/* === /Admin fix_112 === */
+
 </script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js">
 function setupJournalQuickFilters(){
@@ -2109,6 +2412,107 @@ function setupJournalQuickFilters(){
 }
 
 window.addEventListener("load", setupJournalQuickFilters);
+
+
+/* === Admin fix_112: robust live create/sync countdown === */
+(function(){
+  const byId = (id) => document.getElementById(id);
+  const safeCall = (fn, name) => { try { if (typeof fn === 'function') fn(); } catch(e){ try{ recordError?.(name || 'fix112', e); }catch(_){} } };
+  const nowMs = () => Date.now();
+  function selected(){ return (typeof selectedUid !== 'undefined' && selectedUid) ? selectedUid : (byId('userSelect')?.value || ''); }
+  function metaStatus(meta){
+    const now = nowMs();
+    const active = meta?.active === true;
+    const paused = meta?.paused === true || String(meta?.status||'').toLowerCase() === 'paused' || String(meta?.linkStatus||'').toLowerCase() === 'paused';
+    const expiresAt = Number(meta?.expiresAt || 0);
+    if(paused && active && expiresAt > now) return 'paused';
+    if(active && expiresAt > now) return 'active';
+    if(!active && expiresAt > now) return 'ended';
+    return 'expired';
+  }
+  function rootOf(session){
+    try { return typeof getSessionRoot === 'function' ? getSessionRoot(session) : (session || {}); } catch(e){ return session || {}; }
+  }
+  function activeEntry(){
+    const uid = selected();
+    const now = nowMs();
+    const ownerToken = uid ? (window.liveOwnersByUid?.[uid]?.activeSessionId || '') : '';
+    if(ownerToken && allSessions?.[ownerToken]){
+      const r = rootOf(allSessions[ownerToken]);
+      const m = r?.meta || {};
+      if(m.active === true && Number(m.expiresAt || 0) > now) return [ownerToken, r];
+    }
+    return Object.entries(allSessions || {})
+      .filter(([token]) => token !== '_init')
+      .map(([token, session]) => [token, rootOf(session)])
+      .filter(([token, root]) => {
+        const m = root?.meta || {};
+        return (!uid || m.ownerUid === uid) && m.active === true && Number(m.expiresAt || 0) > now;
+      })
+      .sort((a,b)=>Number(b[1]?.meta?.createdAt||0)-Number(a[1]?.meta?.createdAt||0))[0] || null;
+  }
+  window.fix112RefreshLiveCreateUi = function(){
+    const createBtn = byId('createShareBtn');
+    const notice = byId('activeSessionNotice');
+    const entry = activeEntry();
+    if(createBtn){
+      createBtn.disabled = !!entry;
+      createBtn.textContent = entry ? 'Есть активная ссылка' : 'Создать live-ссылку';
+    }
+    if(notice){
+      if(!entry){
+        notice.classList.add('hidden');
+        notice.innerHTML = '';
+      }else{
+        const [token, root] = entry;
+        const meta = root?.meta || {};
+        const st = metaStatus(meta);
+        const left = meta.paused ? Number(meta.remainingMs || 0) : Math.max(0, Number(meta.expiresAt || 0) - Date.now());
+        const fmt = (typeof fmtRemainingCompact === 'function') ? fmtRemainingCompact : (ms)=>{
+          const sec = Math.max(0, Math.floor(Number(ms||0)/1000));
+          return Math.floor(sec/60)+'м '+String(sec%60).padStart(2,'0')+'с';
+        };
+        const url = (typeof buildShareUrl === 'function') ? buildShareUrl(token) : token;
+        notice.classList.remove('hidden');
+        notice.innerHTML = `<strong>${st === 'paused' ? 'Live-сессия на паузе' : 'Live-сессия активна'}</strong><div style="margin-top:6px">Осталось: <b>${fmt(left)}</b></div><div style="margin-top:6px" class="mono">${url}</div>`;
+      }
+    }
+  };
+  const oldNotice = (typeof updateActiveSessionNotice === 'function') ? updateActiveSessionNotice : null;
+  updateActiveSessionNotice = function(){
+    try { window.fix112RefreshLiveCreateUi(); } catch(e){ try{ recordError?.('fix112UpdateNotice', e); }catch(_){} if(oldNotice) oldNotice(); }
+  };
+  const oldRender = (typeof renderSessions === 'function') ? renderSessions : null;
+  if(oldRender){
+    renderSessions = function(){
+      const res = oldRender.apply(this, arguments);
+      setTimeout(()=>window.fix112RefreshLiveCreateUi?.(), 0);
+      return res;
+    };
+  }
+  const oldCreate = (typeof createLiveSession === 'function') ? createLiveSession : null;
+  if(oldCreate){
+    createLiveSession = async function(){
+      const res = await oldCreate.apply(this, arguments);
+      try{
+        const uid = selected();
+        if(uid){
+          const ownerSnap = await get(ref(db, `liveOwners/${uid}/activeSessionId`));
+          const token = String(ownerSnap.val() || '');
+          if(token){
+            const sSnap = await get(ref(db, `liveSessions/${token}`));
+            if(!allSessions || typeof allSessions !== 'object') allSessions = {};
+            if(sSnap.exists()) allSessions[token] = sSnap.val();
+          }
+        }
+      }catch(e){ try{ recordError?.('fix112CreateRefresh', e); }catch(_){} }
+      window.fix112RefreshLiveCreateUi();
+      return res;
+    };
+  }
+  setInterval(()=>window.fix112RefreshLiveCreateUi?.(), 1000);
+})();
+/* === /Admin fix_112 === */
 
 </script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js">
@@ -2138,6 +2542,107 @@ function setupJournalQuickFilters(){
 
 window.addEventListener("load", setupJournalQuickFilters);
 
+
+/* === Admin fix_112: robust live create/sync countdown === */
+(function(){
+  const byId = (id) => document.getElementById(id);
+  const safeCall = (fn, name) => { try { if (typeof fn === 'function') fn(); } catch(e){ try{ recordError?.(name || 'fix112', e); }catch(_){} } };
+  const nowMs = () => Date.now();
+  function selected(){ return (typeof selectedUid !== 'undefined' && selectedUid) ? selectedUid : (byId('userSelect')?.value || ''); }
+  function metaStatus(meta){
+    const now = nowMs();
+    const active = meta?.active === true;
+    const paused = meta?.paused === true || String(meta?.status||'').toLowerCase() === 'paused' || String(meta?.linkStatus||'').toLowerCase() === 'paused';
+    const expiresAt = Number(meta?.expiresAt || 0);
+    if(paused && active && expiresAt > now) return 'paused';
+    if(active && expiresAt > now) return 'active';
+    if(!active && expiresAt > now) return 'ended';
+    return 'expired';
+  }
+  function rootOf(session){
+    try { return typeof getSessionRoot === 'function' ? getSessionRoot(session) : (session || {}); } catch(e){ return session || {}; }
+  }
+  function activeEntry(){
+    const uid = selected();
+    const now = nowMs();
+    const ownerToken = uid ? (window.liveOwnersByUid?.[uid]?.activeSessionId || '') : '';
+    if(ownerToken && allSessions?.[ownerToken]){
+      const r = rootOf(allSessions[ownerToken]);
+      const m = r?.meta || {};
+      if(m.active === true && Number(m.expiresAt || 0) > now) return [ownerToken, r];
+    }
+    return Object.entries(allSessions || {})
+      .filter(([token]) => token !== '_init')
+      .map(([token, session]) => [token, rootOf(session)])
+      .filter(([token, root]) => {
+        const m = root?.meta || {};
+        return (!uid || m.ownerUid === uid) && m.active === true && Number(m.expiresAt || 0) > now;
+      })
+      .sort((a,b)=>Number(b[1]?.meta?.createdAt||0)-Number(a[1]?.meta?.createdAt||0))[0] || null;
+  }
+  window.fix112RefreshLiveCreateUi = function(){
+    const createBtn = byId('createShareBtn');
+    const notice = byId('activeSessionNotice');
+    const entry = activeEntry();
+    if(createBtn){
+      createBtn.disabled = !!entry;
+      createBtn.textContent = entry ? 'Есть активная ссылка' : 'Создать live-ссылку';
+    }
+    if(notice){
+      if(!entry){
+        notice.classList.add('hidden');
+        notice.innerHTML = '';
+      }else{
+        const [token, root] = entry;
+        const meta = root?.meta || {};
+        const st = metaStatus(meta);
+        const left = meta.paused ? Number(meta.remainingMs || 0) : Math.max(0, Number(meta.expiresAt || 0) - Date.now());
+        const fmt = (typeof fmtRemainingCompact === 'function') ? fmtRemainingCompact : (ms)=>{
+          const sec = Math.max(0, Math.floor(Number(ms||0)/1000));
+          return Math.floor(sec/60)+'м '+String(sec%60).padStart(2,'0')+'с';
+        };
+        const url = (typeof buildShareUrl === 'function') ? buildShareUrl(token) : token;
+        notice.classList.remove('hidden');
+        notice.innerHTML = `<strong>${st === 'paused' ? 'Live-сессия на паузе' : 'Live-сессия активна'}</strong><div style="margin-top:6px">Осталось: <b>${fmt(left)}</b></div><div style="margin-top:6px" class="mono">${url}</div>`;
+      }
+    }
+  };
+  const oldNotice = (typeof updateActiveSessionNotice === 'function') ? updateActiveSessionNotice : null;
+  updateActiveSessionNotice = function(){
+    try { window.fix112RefreshLiveCreateUi(); } catch(e){ try{ recordError?.('fix112UpdateNotice', e); }catch(_){} if(oldNotice) oldNotice(); }
+  };
+  const oldRender = (typeof renderSessions === 'function') ? renderSessions : null;
+  if(oldRender){
+    renderSessions = function(){
+      const res = oldRender.apply(this, arguments);
+      setTimeout(()=>window.fix112RefreshLiveCreateUi?.(), 0);
+      return res;
+    };
+  }
+  const oldCreate = (typeof createLiveSession === 'function') ? createLiveSession : null;
+  if(oldCreate){
+    createLiveSession = async function(){
+      const res = await oldCreate.apply(this, arguments);
+      try{
+        const uid = selected();
+        if(uid){
+          const ownerSnap = await get(ref(db, `liveOwners/${uid}/activeSessionId`));
+          const token = String(ownerSnap.val() || '');
+          if(token){
+            const sSnap = await get(ref(db, `liveSessions/${token}`));
+            if(!allSessions || typeof allSessions !== 'object') allSessions = {};
+            if(sSnap.exists()) allSessions[token] = sSnap.val();
+          }
+        }
+      }catch(e){ try{ recordError?.('fix112CreateRefresh', e); }catch(_){} }
+      window.fix112RefreshLiveCreateUi();
+      return res;
+    };
+  }
+  setInterval(()=>window.fix112RefreshLiveCreateUi?.(), 1000);
+})();
+/* === /Admin fix_112 === */
+
 </script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js">
 function setupJournalQuickFilters(){
@@ -2165,6 +2670,107 @@ function setupJournalQuickFilters(){
 }
 
 window.addEventListener("load", setupJournalQuickFilters);
+
+
+/* === Admin fix_112: robust live create/sync countdown === */
+(function(){
+  const byId = (id) => document.getElementById(id);
+  const safeCall = (fn, name) => { try { if (typeof fn === 'function') fn(); } catch(e){ try{ recordError?.(name || 'fix112', e); }catch(_){} } };
+  const nowMs = () => Date.now();
+  function selected(){ return (typeof selectedUid !== 'undefined' && selectedUid) ? selectedUid : (byId('userSelect')?.value || ''); }
+  function metaStatus(meta){
+    const now = nowMs();
+    const active = meta?.active === true;
+    const paused = meta?.paused === true || String(meta?.status||'').toLowerCase() === 'paused' || String(meta?.linkStatus||'').toLowerCase() === 'paused';
+    const expiresAt = Number(meta?.expiresAt || 0);
+    if(paused && active && expiresAt > now) return 'paused';
+    if(active && expiresAt > now) return 'active';
+    if(!active && expiresAt > now) return 'ended';
+    return 'expired';
+  }
+  function rootOf(session){
+    try { return typeof getSessionRoot === 'function' ? getSessionRoot(session) : (session || {}); } catch(e){ return session || {}; }
+  }
+  function activeEntry(){
+    const uid = selected();
+    const now = nowMs();
+    const ownerToken = uid ? (window.liveOwnersByUid?.[uid]?.activeSessionId || '') : '';
+    if(ownerToken && allSessions?.[ownerToken]){
+      const r = rootOf(allSessions[ownerToken]);
+      const m = r?.meta || {};
+      if(m.active === true && Number(m.expiresAt || 0) > now) return [ownerToken, r];
+    }
+    return Object.entries(allSessions || {})
+      .filter(([token]) => token !== '_init')
+      .map(([token, session]) => [token, rootOf(session)])
+      .filter(([token, root]) => {
+        const m = root?.meta || {};
+        return (!uid || m.ownerUid === uid) && m.active === true && Number(m.expiresAt || 0) > now;
+      })
+      .sort((a,b)=>Number(b[1]?.meta?.createdAt||0)-Number(a[1]?.meta?.createdAt||0))[0] || null;
+  }
+  window.fix112RefreshLiveCreateUi = function(){
+    const createBtn = byId('createShareBtn');
+    const notice = byId('activeSessionNotice');
+    const entry = activeEntry();
+    if(createBtn){
+      createBtn.disabled = !!entry;
+      createBtn.textContent = entry ? 'Есть активная ссылка' : 'Создать live-ссылку';
+    }
+    if(notice){
+      if(!entry){
+        notice.classList.add('hidden');
+        notice.innerHTML = '';
+      }else{
+        const [token, root] = entry;
+        const meta = root?.meta || {};
+        const st = metaStatus(meta);
+        const left = meta.paused ? Number(meta.remainingMs || 0) : Math.max(0, Number(meta.expiresAt || 0) - Date.now());
+        const fmt = (typeof fmtRemainingCompact === 'function') ? fmtRemainingCompact : (ms)=>{
+          const sec = Math.max(0, Math.floor(Number(ms||0)/1000));
+          return Math.floor(sec/60)+'м '+String(sec%60).padStart(2,'0')+'с';
+        };
+        const url = (typeof buildShareUrl === 'function') ? buildShareUrl(token) : token;
+        notice.classList.remove('hidden');
+        notice.innerHTML = `<strong>${st === 'paused' ? 'Live-сессия на паузе' : 'Live-сессия активна'}</strong><div style="margin-top:6px">Осталось: <b>${fmt(left)}</b></div><div style="margin-top:6px" class="mono">${url}</div>`;
+      }
+    }
+  };
+  const oldNotice = (typeof updateActiveSessionNotice === 'function') ? updateActiveSessionNotice : null;
+  updateActiveSessionNotice = function(){
+    try { window.fix112RefreshLiveCreateUi(); } catch(e){ try{ recordError?.('fix112UpdateNotice', e); }catch(_){} if(oldNotice) oldNotice(); }
+  };
+  const oldRender = (typeof renderSessions === 'function') ? renderSessions : null;
+  if(oldRender){
+    renderSessions = function(){
+      const res = oldRender.apply(this, arguments);
+      setTimeout(()=>window.fix112RefreshLiveCreateUi?.(), 0);
+      return res;
+    };
+  }
+  const oldCreate = (typeof createLiveSession === 'function') ? createLiveSession : null;
+  if(oldCreate){
+    createLiveSession = async function(){
+      const res = await oldCreate.apply(this, arguments);
+      try{
+        const uid = selected();
+        if(uid){
+          const ownerSnap = await get(ref(db, `liveOwners/${uid}/activeSessionId`));
+          const token = String(ownerSnap.val() || '');
+          if(token){
+            const sSnap = await get(ref(db, `liveSessions/${token}`));
+            if(!allSessions || typeof allSessions !== 'object') allSessions = {};
+            if(sSnap.exists()) allSessions[token] = sSnap.val();
+          }
+        }
+      }catch(e){ try{ recordError?.('fix112CreateRefresh', e); }catch(_){} }
+      window.fix112RefreshLiveCreateUi();
+      return res;
+    };
+  }
+  setInterval(()=>window.fix112RefreshLiveCreateUi?.(), 1000);
+})();
+/* === /Admin fix_112 === */
 
 </script>
 
@@ -12804,6 +13410,107 @@ document.addEventListener('click', ev=>{
 }, true);
 // === /Admin fix_110 ===
 
+
+/* === Admin fix_112: robust live create/sync countdown === */
+(function(){
+  const byId = (id) => document.getElementById(id);
+  const safeCall = (fn, name) => { try { if (typeof fn === 'function') fn(); } catch(e){ try{ recordError?.(name || 'fix112', e); }catch(_){} } };
+  const nowMs = () => Date.now();
+  function selected(){ return (typeof selectedUid !== 'undefined' && selectedUid) ? selectedUid : (byId('userSelect')?.value || ''); }
+  function metaStatus(meta){
+    const now = nowMs();
+    const active = meta?.active === true;
+    const paused = meta?.paused === true || String(meta?.status||'').toLowerCase() === 'paused' || String(meta?.linkStatus||'').toLowerCase() === 'paused';
+    const expiresAt = Number(meta?.expiresAt || 0);
+    if(paused && active && expiresAt > now) return 'paused';
+    if(active && expiresAt > now) return 'active';
+    if(!active && expiresAt > now) return 'ended';
+    return 'expired';
+  }
+  function rootOf(session){
+    try { return typeof getSessionRoot === 'function' ? getSessionRoot(session) : (session || {}); } catch(e){ return session || {}; }
+  }
+  function activeEntry(){
+    const uid = selected();
+    const now = nowMs();
+    const ownerToken = uid ? (window.liveOwnersByUid?.[uid]?.activeSessionId || '') : '';
+    if(ownerToken && allSessions?.[ownerToken]){
+      const r = rootOf(allSessions[ownerToken]);
+      const m = r?.meta || {};
+      if(m.active === true && Number(m.expiresAt || 0) > now) return [ownerToken, r];
+    }
+    return Object.entries(allSessions || {})
+      .filter(([token]) => token !== '_init')
+      .map(([token, session]) => [token, rootOf(session)])
+      .filter(([token, root]) => {
+        const m = root?.meta || {};
+        return (!uid || m.ownerUid === uid) && m.active === true && Number(m.expiresAt || 0) > now;
+      })
+      .sort((a,b)=>Number(b[1]?.meta?.createdAt||0)-Number(a[1]?.meta?.createdAt||0))[0] || null;
+  }
+  window.fix112RefreshLiveCreateUi = function(){
+    const createBtn = byId('createShareBtn');
+    const notice = byId('activeSessionNotice');
+    const entry = activeEntry();
+    if(createBtn){
+      createBtn.disabled = !!entry;
+      createBtn.textContent = entry ? 'Есть активная ссылка' : 'Создать live-ссылку';
+    }
+    if(notice){
+      if(!entry){
+        notice.classList.add('hidden');
+        notice.innerHTML = '';
+      }else{
+        const [token, root] = entry;
+        const meta = root?.meta || {};
+        const st = metaStatus(meta);
+        const left = meta.paused ? Number(meta.remainingMs || 0) : Math.max(0, Number(meta.expiresAt || 0) - Date.now());
+        const fmt = (typeof fmtRemainingCompact === 'function') ? fmtRemainingCompact : (ms)=>{
+          const sec = Math.max(0, Math.floor(Number(ms||0)/1000));
+          return Math.floor(sec/60)+'м '+String(sec%60).padStart(2,'0')+'с';
+        };
+        const url = (typeof buildShareUrl === 'function') ? buildShareUrl(token) : token;
+        notice.classList.remove('hidden');
+        notice.innerHTML = `<strong>${st === 'paused' ? 'Live-сессия на паузе' : 'Live-сессия активна'}</strong><div style="margin-top:6px">Осталось: <b>${fmt(left)}</b></div><div style="margin-top:6px" class="mono">${url}</div>`;
+      }
+    }
+  };
+  const oldNotice = (typeof updateActiveSessionNotice === 'function') ? updateActiveSessionNotice : null;
+  updateActiveSessionNotice = function(){
+    try { window.fix112RefreshLiveCreateUi(); } catch(e){ try{ recordError?.('fix112UpdateNotice', e); }catch(_){} if(oldNotice) oldNotice(); }
+  };
+  const oldRender = (typeof renderSessions === 'function') ? renderSessions : null;
+  if(oldRender){
+    renderSessions = function(){
+      const res = oldRender.apply(this, arguments);
+      setTimeout(()=>window.fix112RefreshLiveCreateUi?.(), 0);
+      return res;
+    };
+  }
+  const oldCreate = (typeof createLiveSession === 'function') ? createLiveSession : null;
+  if(oldCreate){
+    createLiveSession = async function(){
+      const res = await oldCreate.apply(this, arguments);
+      try{
+        const uid = selected();
+        if(uid){
+          const ownerSnap = await get(ref(db, `liveOwners/${uid}/activeSessionId`));
+          const token = String(ownerSnap.val() || '');
+          if(token){
+            const sSnap = await get(ref(db, `liveSessions/${token}`));
+            if(!allSessions || typeof allSessions !== 'object') allSessions = {};
+            if(sSnap.exists()) allSessions[token] = sSnap.val();
+          }
+        }
+      }catch(e){ try{ recordError?.('fix112CreateRefresh', e); }catch(_){} }
+      window.fix112RefreshLiveCreateUi();
+      return res;
+    };
+  }
+  setInterval(()=>window.fix112RefreshLiveCreateUi?.(), 1000);
+})();
+/* === /Admin fix_112 === */
+
 </script>
 
 
@@ -12999,6 +13706,107 @@ window.applyReadOnlyMode = applyReadOnlyMode;
 
 
 
+
+/* === Admin fix_112: robust live create/sync countdown === */
+(function(){
+  const byId = (id) => document.getElementById(id);
+  const safeCall = (fn, name) => { try { if (typeof fn === 'function') fn(); } catch(e){ try{ recordError?.(name || 'fix112', e); }catch(_){} } };
+  const nowMs = () => Date.now();
+  function selected(){ return (typeof selectedUid !== 'undefined' && selectedUid) ? selectedUid : (byId('userSelect')?.value || ''); }
+  function metaStatus(meta){
+    const now = nowMs();
+    const active = meta?.active === true;
+    const paused = meta?.paused === true || String(meta?.status||'').toLowerCase() === 'paused' || String(meta?.linkStatus||'').toLowerCase() === 'paused';
+    const expiresAt = Number(meta?.expiresAt || 0);
+    if(paused && active && expiresAt > now) return 'paused';
+    if(active && expiresAt > now) return 'active';
+    if(!active && expiresAt > now) return 'ended';
+    return 'expired';
+  }
+  function rootOf(session){
+    try { return typeof getSessionRoot === 'function' ? getSessionRoot(session) : (session || {}); } catch(e){ return session || {}; }
+  }
+  function activeEntry(){
+    const uid = selected();
+    const now = nowMs();
+    const ownerToken = uid ? (window.liveOwnersByUid?.[uid]?.activeSessionId || '') : '';
+    if(ownerToken && allSessions?.[ownerToken]){
+      const r = rootOf(allSessions[ownerToken]);
+      const m = r?.meta || {};
+      if(m.active === true && Number(m.expiresAt || 0) > now) return [ownerToken, r];
+    }
+    return Object.entries(allSessions || {})
+      .filter(([token]) => token !== '_init')
+      .map(([token, session]) => [token, rootOf(session)])
+      .filter(([token, root]) => {
+        const m = root?.meta || {};
+        return (!uid || m.ownerUid === uid) && m.active === true && Number(m.expiresAt || 0) > now;
+      })
+      .sort((a,b)=>Number(b[1]?.meta?.createdAt||0)-Number(a[1]?.meta?.createdAt||0))[0] || null;
+  }
+  window.fix112RefreshLiveCreateUi = function(){
+    const createBtn = byId('createShareBtn');
+    const notice = byId('activeSessionNotice');
+    const entry = activeEntry();
+    if(createBtn){
+      createBtn.disabled = !!entry;
+      createBtn.textContent = entry ? 'Есть активная ссылка' : 'Создать live-ссылку';
+    }
+    if(notice){
+      if(!entry){
+        notice.classList.add('hidden');
+        notice.innerHTML = '';
+      }else{
+        const [token, root] = entry;
+        const meta = root?.meta || {};
+        const st = metaStatus(meta);
+        const left = meta.paused ? Number(meta.remainingMs || 0) : Math.max(0, Number(meta.expiresAt || 0) - Date.now());
+        const fmt = (typeof fmtRemainingCompact === 'function') ? fmtRemainingCompact : (ms)=>{
+          const sec = Math.max(0, Math.floor(Number(ms||0)/1000));
+          return Math.floor(sec/60)+'м '+String(sec%60).padStart(2,'0')+'с';
+        };
+        const url = (typeof buildShareUrl === 'function') ? buildShareUrl(token) : token;
+        notice.classList.remove('hidden');
+        notice.innerHTML = `<strong>${st === 'paused' ? 'Live-сессия на паузе' : 'Live-сессия активна'}</strong><div style="margin-top:6px">Осталось: <b>${fmt(left)}</b></div><div style="margin-top:6px" class="mono">${url}</div>`;
+      }
+    }
+  };
+  const oldNotice = (typeof updateActiveSessionNotice === 'function') ? updateActiveSessionNotice : null;
+  updateActiveSessionNotice = function(){
+    try { window.fix112RefreshLiveCreateUi(); } catch(e){ try{ recordError?.('fix112UpdateNotice', e); }catch(_){} if(oldNotice) oldNotice(); }
+  };
+  const oldRender = (typeof renderSessions === 'function') ? renderSessions : null;
+  if(oldRender){
+    renderSessions = function(){
+      const res = oldRender.apply(this, arguments);
+      setTimeout(()=>window.fix112RefreshLiveCreateUi?.(), 0);
+      return res;
+    };
+  }
+  const oldCreate = (typeof createLiveSession === 'function') ? createLiveSession : null;
+  if(oldCreate){
+    createLiveSession = async function(){
+      const res = await oldCreate.apply(this, arguments);
+      try{
+        const uid = selected();
+        if(uid){
+          const ownerSnap = await get(ref(db, `liveOwners/${uid}/activeSessionId`));
+          const token = String(ownerSnap.val() || '');
+          if(token){
+            const sSnap = await get(ref(db, `liveSessions/${token}`));
+            if(!allSessions || typeof allSessions !== 'object') allSessions = {};
+            if(sSnap.exists()) allSessions[token] = sSnap.val();
+          }
+        }
+      }catch(e){ try{ recordError?.('fix112CreateRefresh', e); }catch(_){} }
+      window.fix112RefreshLiveCreateUi();
+      return res;
+    };
+  }
+  setInterval(()=>window.fix112RefreshLiveCreateUi?.(), 1000);
+})();
+/* === /Admin fix_112 === */
+
 </script>
 
 
@@ -13103,23 +13911,23 @@ window.applyReadOnlyMode = applyReadOnlyMode;
 })();
 
 
-/* === Admin fix_111: live countdown/realtime sync for admin-created and app-created links === */
-let fix111OwnerUnsub = null;
-let fix111SessionUnsub = null;
-let fix111LiveControlUnsub = null;
-let fix111WatchedUid = '';
-let fix111WatchedToken = '';
-let fix111ActiveUiTimer = null;
+/* === Admin fix_112: live countdown/realtime sync for admin-created and app-created links === */
+let fix112OwnerUnsub = null;
+let fix112SessionUnsub = null;
+let fix112LiveControlUnsub = null;
+let fix112WatchedUid = '';
+let fix112WatchedToken = '';
+let fix112ActiveUiTimer = null;
 
-function fix111SafeString(v){ return String(v ?? '').trim(); }
-function fix111SelectedUid(){ return fix111SafeString(selectedUid || qs('userSelect')?.value || ''); }
-function fix111SafeToken(v){ const s = fix111SafeString(v); return /^[A-Za-z0-9_-]{16,128}$/.test(s) ? s : ''; }
-function fix111SessionRoot(token){ return token && allSessions ? getSessionRoot(allSessions[token]) : null; }
-function fix111LiveControl(uid){ return uid ? (liveByUid?.[uid] || null) : null; }
-function fix111ControlToken(control){ return fix111SafeToken(control?.activeSessionId || control?.sessionId || control?.liveSessionId || control?.token || ''); }
-function fix111MetaFromControl(uid, control){
+function fix112SafeString(v){ return String(v ?? '').trim(); }
+function fix112SelectedUid(){ return fix112SafeString(selectedUid || document.getElementById('userSelect')?.value || ''); }
+function fix112SafeToken(v){ const s = fix112SafeString(v); return /^[A-Za-z0-9_-]{16,128}$/.test(s) ? s : ''; }
+function fix112SessionRoot(token){ return token && allSessions ? getSessionRoot(allSessions[token]) : null; }
+function fix112LiveControl(uid){ return uid ? (liveByUid?.[uid] || null) : null; }
+function fix112ControlToken(control){ return fix112SafeToken(control?.activeSessionId || control?.sessionId || control?.liveSessionId || control?.token || ''); }
+function fix112MetaFromControl(uid, control){
   if(!uid || !control) return null;
-  const token = fix111ControlToken(control);
+  const token = fix112ControlToken(control);
   if(!token) return null;
   return {
     active: control.active === true,
@@ -13134,7 +13942,7 @@ function fix111MetaFromControl(uid, control){
     liveUrl: control.liveUrl || control.link || control.url || buildShareUrl(token)
   };
 }
-function fix111MetaState(meta){
+function fix112MetaState(meta){
   const now = Date.now();
   const active = meta?.active === true;
   const paused = active && meta?.paused === true;
@@ -13146,13 +13954,13 @@ function fix111MetaState(meta){
   if(paused) return {active:true, paused:true, leftMs:Math.max(0, remainingMs || Math.max(0, expiresAt - now)), expired:false};
   return {active: expiresAt > now, paused:false, leftMs:Math.max(0, expiresAt - now), expired: expiresAt > 0 && expiresAt <= now};
 }
-function fix111MergedSessionFor(uid, token){
-  token = fix111SafeToken(token);
+function fix112MergedSessionFor(uid, token){
+  token = fix112SafeToken(token);
   if(!uid || !token) return null;
-  const root = fix111SessionRoot(token);
-  const control = fix111LiveControl(uid);
-  const controlToken = fix111ControlToken(control);
-  const controlMeta = controlToken === token ? fix111MetaFromControl(uid, control) : null;
+  const root = fix112SessionRoot(token);
+  const control = fix112LiveControl(uid);
+  const controlToken = fix112ControlToken(control);
+  const controlMeta = controlToken === token ? fix112MetaFromControl(uid, control) : null;
   if(root){
     const cloned = { ...root, meta:{ ...(root.meta || {}) } };
     if(controlMeta){
@@ -13167,114 +13975,216 @@ function fix111MergedSessionFor(uid, token){
   if(controlMeta) return { meta: controlMeta, public:{ lastPoint: control?.lastPoint || control?.point || null } };
   return null;
 }
-function fix111FindSelectedActiveEntry(){
-  const uid = fix111SelectedUid();
+function fix112FindSelectedActiveEntry(){
+  const uid = fix112SelectedUid();
   if(!uid) return null;
-  const control = fix111LiveControl(uid);
-  const ownerToken = fix111SafeToken(window.liveOwnersByUid?.[uid]?.activeSessionId || window.liveOwnersByUid?.[uid]?.sessionId || window.liveOwnersByUid?.[uid]?.token || '');
-  const controlToken = fix111ControlToken(control);
-  const candidates = [ownerToken, controlToken, fix111WatchedToken].filter(Boolean);
+  const control = fix112LiveControl(uid);
+  const ownerToken = fix112SafeToken(window.liveOwnersByUid?.[uid]?.activeSessionId || window.liveOwnersByUid?.[uid]?.sessionId || window.liveOwnersByUid?.[uid]?.token || '');
+  const controlToken = fix112ControlToken(control);
+  const candidates = [ownerToken, controlToken, fix112WatchedToken].filter(Boolean);
   for(const token of candidates){
-    const session = fix111MergedSessionFor(uid, token);
-    const st = fix111MetaState(session?.meta || {});
+    const session = fix112MergedSessionFor(uid, token);
+    const st = fix112MetaState(session?.meta || {});
     if(st.active) return [token, session];
   }
   const entries = Object.entries(allSessions || {}).filter(([token]) => token !== '_init');
   const entry = entries
     .map(([token, session]) => [token, getSessionRoot(session)])
-    .filter(([token, session]) => (session?.meta?.ownerUid === uid) && fix111MetaState(session?.meta || {}).active)
+    .filter(([token, session]) => (session?.meta?.ownerUid === uid) && fix112MetaState(session?.meta || {}).active)
     .sort((a,b)=>Number(b[1]?.meta?.createdAt||0)-Number(a[1]?.meta?.createdAt||0))[0] || null;
   return entry;
 }
 
-const fix111OldGetSelectedActiveSessionEntry = typeof getSelectedActiveSessionEntry === 'function' ? getSelectedActiveSessionEntry : null;
+const fix112OldGetSelectedActiveSessionEntry = typeof getSelectedActiveSessionEntry === 'function' ? getSelectedActiveSessionEntry : null;
 getSelectedActiveSessionEntry = function(){
-  return fix111FindSelectedActiveEntry() || (fix111OldGetSelectedActiveSessionEntry ? fix111OldGetSelectedActiveSessionEntry.apply(this, arguments) : null);
+  return fix112FindSelectedActiveEntry() || (fix112OldGetSelectedActiveSessionEntry ? fix112OldGetSelectedActiveSessionEntry.apply(this, arguments) : null);
 };
 
-function fix111PaintLiveUi(){
-  try{ updateActiveSessionNotice?.(); }catch(e){ recordError?.('fix111Notice', e); }
-  try{ updateActiveSessionToast?.(); }catch(e){ recordError?.('fix111Toast', e); }
-  try{ renderSessions?.(); }catch(e){ recordError?.('fix111RenderSessions', e); }
+function fix112PaintLiveUi(){
+  try{ updateActiveSessionNotice?.(); }catch(e){ recordError?.('fix112Notice', e); }
+  try{ updateActiveSessionToast?.(); }catch(e){ recordError?.('fix112Toast', e); }
+  try{ renderSessions?.(); }catch(e){ recordError?.('fix112RenderSessions', e); }
   try{ updateNowFromAvailableSources?.(); }catch(e){}
 }
-function fix111SubscribeSession(token){
-  token = fix111SafeToken(token);
-  if(token === fix111WatchedToken) return;
-  if(fix111SessionUnsub){ try{ fix111SessionUnsub(); }catch(e){} fix111SessionUnsub = null; }
-  fix111WatchedToken = token || '';
-  if(!token){ fix111PaintLiveUi(); return; }
-  fix111SessionUnsub = onValue(ref(db, `liveSessions/${token}`), snap => {
+function fix112SubscribeSession(token){
+  token = fix112SafeToken(token);
+  if(token === fix112WatchedToken) return;
+  if(fix112SessionUnsub){ try{ fix112SessionUnsub(); }catch(e){} fix112SessionUnsub = null; }
+  fix112WatchedToken = token || '';
+  if(!token){ fix112PaintLiveUi(); return; }
+  fix112SessionUnsub = onValue(ref(db, `liveSessions/${token}`), snap => {
     const val = snap.val();
     if(!allSessions || typeof allSessions !== 'object') allSessions = {};
     if(val) allSessions[token] = val;
     else delete allSessions[token];
-    fix111PaintLiveUi();
-  }, e => recordError?.('fix111LiveSessionSync', e));
+    fix112PaintLiveUi();
+  }, e => recordError?.('fix112LiveSessionSync', e));
 }
-function fix111SubscribeSelectedLive(){
-  const uid = fix111SelectedUid();
-  if(uid === fix111WatchedUid) return;
-  if(fix111OwnerUnsub){ try{ fix111OwnerUnsub(); }catch(e){} fix111OwnerUnsub = null; }
-  if(fix111LiveControlUnsub){ try{ fix111LiveControlUnsub(); }catch(e){} fix111LiveControlUnsub = null; }
-  if(fix111SessionUnsub){ try{ fix111SessionUnsub(); }catch(e){} fix111SessionUnsub = null; }
-  fix111WatchedUid = uid;
-  fix111WatchedToken = '';
-  if(!uid){ fix111PaintLiveUi(); return; }
-  fix111OwnerUnsub = onValue(ref(db, `liveOwners/${uid}/activeSessionId`), snap => {
+function fix112SubscribeSelectedLive(){
+  const uid = fix112SelectedUid();
+  if(uid === fix112WatchedUid) return;
+  if(fix112OwnerUnsub){ try{ fix112OwnerUnsub(); }catch(e){} fix112OwnerUnsub = null; }
+  if(fix112LiveControlUnsub){ try{ fix112LiveControlUnsub(); }catch(e){} fix112LiveControlUnsub = null; }
+  if(fix112SessionUnsub){ try{ fix112SessionUnsub(); }catch(e){} fix112SessionUnsub = null; }
+  fix112WatchedUid = uid;
+  fix112WatchedToken = '';
+  if(!uid){ fix112PaintLiveUi(); return; }
+  fix112OwnerUnsub = onValue(ref(db, `liveOwners/${uid}/activeSessionId`), snap => {
     if(!window.liveOwnersByUid) window.liveOwnersByUid = {};
     if(!window.liveOwnersByUid[uid]) window.liveOwnersByUid[uid] = {};
-    window.liveOwnersByUid[uid].activeSessionId = fix111SafeString(snap.val());
-    fix111SubscribeSession(fix111SafeString(snap.val()));
-  }, e => recordError?.('fix111LiveOwnerSync', e));
-  fix111LiveControlUnsub = onValue(ref(db, `live/${uid}`), snap => {
+    window.liveOwnersByUid[uid].activeSessionId = fix112SafeString(snap.val());
+    fix112SubscribeSession(fix112SafeString(snap.val()));
+  }, e => recordError?.('fix112LiveOwnerSync', e));
+  fix112LiveControlUnsub = onValue(ref(db, `live/${uid}`), snap => {
     if(!liveByUid || typeof liveByUid !== 'object') liveByUid = {};
     liveByUid[uid] = snap.val() || {};
-    const token = fix111ControlToken(liveByUid[uid]);
-    if(token && !fix111WatchedToken) fix111SubscribeSession(token);
-    fix111PaintLiveUi();
-  }, e => recordError?.('fix111LiveControlSync', e));
+    const token = fix112ControlToken(liveByUid[uid]);
+    if(token && !fix112WatchedToken) fix112SubscribeSession(token);
+    fix112PaintLiveUi();
+  }, e => recordError?.('fix112LiveControlSync', e));
 }
 
-const fix111OldCreateLiveSession = typeof createLiveSession === 'function' ? createLiveSession : null;
-if(fix111OldCreateLiveSession){
+const fix112OldCreateLiveSession = typeof createLiveSession === 'function' ? createLiveSession : null;
+if(fix112OldCreateLiveSession){
   createLiveSession = async function(){
-    const r = await fix111OldCreateLiveSession.apply(this, arguments);
+    const r = await fix112OldCreateLiveSession.apply(this, arguments);
     try{
-      const uid = fix111SelectedUid();
+      const uid = fix112SelectedUid();
       if(uid){
         const ownerSnap = await get(ref(db, `liveOwners/${uid}/activeSessionId`));
-        const token = fix111SafeToken(ownerSnap.val());
+        const token = fix112SafeToken(ownerSnap.val());
         if(token){
           const sSnap = await get(ref(db, `liveSessions/${token}`));
           if(!allSessions || typeof allSessions !== 'object') allSessions = {};
           if(sSnap.exists()) allSessions[token] = sSnap.val();
-          fix111SubscribeSession(token);
+          fix112SubscribeSession(token);
         }
       }
-      fix111PaintLiveUi();
-    }catch(e){ recordError?.('fix111CreateLiveAfterSync', e); }
+      fix112PaintLiveUi();
+    }catch(e){ recordError?.('fix112CreateLiveAfterSync', e); }
     return r;
   };
 }
 
-const fix111OldUserSelectChange = qs('userSelect')?.onchange;
-if(qs('userSelect')){
-  qs('userSelect').onchange = function(ev){
-    const r = fix111OldUserSelectChange ? fix111OldUserSelectChange.call(this, ev) : undefined;
-    setTimeout(fix111SubscribeSelectedLive, 0);
+const fix112UserSelectEl = document.getElementById('userSelect');
+const fix112OldUserSelectChange = fix112UserSelectEl?.onchange || null;
+if(fix112UserSelectEl){
+  fix112UserSelectEl.onchange = function(ev){
+    const r = fix112OldUserSelectChange ? fix112OldUserSelectChange.call(this, ev) : undefined;
+    setTimeout(fix112SubscribeSelectedLive, 0);
     return r;
   };
 }
 window.addEventListener('load', () => {
-  setTimeout(fix111SubscribeSelectedLive, 1200);
-  clearInterval(fix111ActiveUiTimer);
-  fix111ActiveUiTimer = setInterval(() => {
-    fix111SubscribeSelectedLive();
-    fix111PaintLiveUi();
+  setTimeout(fix112SubscribeSelectedLive, 1200);
+  clearInterval(fix112ActiveUiTimer);
+  fix112ActiveUiTimer = setInterval(() => {
+    fix112SubscribeSelectedLive();
+    fix112PaintLiveUi();
   }, 1000);
 });
-/* === /Admin fix_111 === */
+/* === /Admin fix_112 === */
+
+
+/* === Admin fix_112: robust live create/sync countdown === */
+(function(){
+  const byId = (id) => document.getElementById(id);
+  const safeCall = (fn, name) => { try { if (typeof fn === 'function') fn(); } catch(e){ try{ recordError?.(name || 'fix112', e); }catch(_){} } };
+  const nowMs = () => Date.now();
+  function selected(){ return (typeof selectedUid !== 'undefined' && selectedUid) ? selectedUid : (byId('userSelect')?.value || ''); }
+  function metaStatus(meta){
+    const now = nowMs();
+    const active = meta?.active === true;
+    const paused = meta?.paused === true || String(meta?.status||'').toLowerCase() === 'paused' || String(meta?.linkStatus||'').toLowerCase() === 'paused';
+    const expiresAt = Number(meta?.expiresAt || 0);
+    if(paused && active && expiresAt > now) return 'paused';
+    if(active && expiresAt > now) return 'active';
+    if(!active && expiresAt > now) return 'ended';
+    return 'expired';
+  }
+  function rootOf(session){
+    try { return typeof getSessionRoot === 'function' ? getSessionRoot(session) : (session || {}); } catch(e){ return session || {}; }
+  }
+  function activeEntry(){
+    const uid = selected();
+    const now = nowMs();
+    const ownerToken = uid ? (window.liveOwnersByUid?.[uid]?.activeSessionId || '') : '';
+    if(ownerToken && allSessions?.[ownerToken]){
+      const r = rootOf(allSessions[ownerToken]);
+      const m = r?.meta || {};
+      if(m.active === true && Number(m.expiresAt || 0) > now) return [ownerToken, r];
+    }
+    return Object.entries(allSessions || {})
+      .filter(([token]) => token !== '_init')
+      .map(([token, session]) => [token, rootOf(session)])
+      .filter(([token, root]) => {
+        const m = root?.meta || {};
+        return (!uid || m.ownerUid === uid) && m.active === true && Number(m.expiresAt || 0) > now;
+      })
+      .sort((a,b)=>Number(b[1]?.meta?.createdAt||0)-Number(a[1]?.meta?.createdAt||0))[0] || null;
+  }
+  window.fix112RefreshLiveCreateUi = function(){
+    const createBtn = byId('createShareBtn');
+    const notice = byId('activeSessionNotice');
+    const entry = activeEntry();
+    if(createBtn){
+      createBtn.disabled = !!entry;
+      createBtn.textContent = entry ? 'Есть активная ссылка' : 'Создать live-ссылку';
+    }
+    if(notice){
+      if(!entry){
+        notice.classList.add('hidden');
+        notice.innerHTML = '';
+      }else{
+        const [token, root] = entry;
+        const meta = root?.meta || {};
+        const st = metaStatus(meta);
+        const left = meta.paused ? Number(meta.remainingMs || 0) : Math.max(0, Number(meta.expiresAt || 0) - Date.now());
+        const fmt = (typeof fmtRemainingCompact === 'function') ? fmtRemainingCompact : (ms)=>{
+          const sec = Math.max(0, Math.floor(Number(ms||0)/1000));
+          return Math.floor(sec/60)+'м '+String(sec%60).padStart(2,'0')+'с';
+        };
+        const url = (typeof buildShareUrl === 'function') ? buildShareUrl(token) : token;
+        notice.classList.remove('hidden');
+        notice.innerHTML = `<strong>${st === 'paused' ? 'Live-сессия на паузе' : 'Live-сессия активна'}</strong><div style="margin-top:6px">Осталось: <b>${fmt(left)}</b></div><div style="margin-top:6px" class="mono">${url}</div>`;
+      }
+    }
+  };
+  const oldNotice = (typeof updateActiveSessionNotice === 'function') ? updateActiveSessionNotice : null;
+  updateActiveSessionNotice = function(){
+    try { window.fix112RefreshLiveCreateUi(); } catch(e){ try{ recordError?.('fix112UpdateNotice', e); }catch(_){} if(oldNotice) oldNotice(); }
+  };
+  const oldRender = (typeof renderSessions === 'function') ? renderSessions : null;
+  if(oldRender){
+    renderSessions = function(){
+      const res = oldRender.apply(this, arguments);
+      setTimeout(()=>window.fix112RefreshLiveCreateUi?.(), 0);
+      return res;
+    };
+  }
+  const oldCreate = (typeof createLiveSession === 'function') ? createLiveSession : null;
+  if(oldCreate){
+    createLiveSession = async function(){
+      const res = await oldCreate.apply(this, arguments);
+      try{
+        const uid = selected();
+        if(uid){
+          const ownerSnap = await get(ref(db, `liveOwners/${uid}/activeSessionId`));
+          const token = String(ownerSnap.val() || '');
+          if(token){
+            const sSnap = await get(ref(db, `liveSessions/${token}`));
+            if(!allSessions || typeof allSessions !== 'object') allSessions = {};
+            if(sSnap.exists()) allSessions[token] = sSnap.val();
+          }
+        }
+      }catch(e){ try{ recordError?.('fix112CreateRefresh', e); }catch(_){} }
+      window.fix112RefreshLiveCreateUi();
+      return res;
+    };
+  }
+  setInterval(()=>window.fix112RefreshLiveCreateUi?.(), 1000);
+})();
+/* === /Admin fix_112 === */
 
 </script>
 <!-- === /Admin fix_79 === -->
@@ -13336,6 +14246,107 @@ window.addEventListener('load', () => {
   });
 })();
 // === /Admin fix_110 ===
+
+/* === Admin fix_112: robust live create/sync countdown === */
+(function(){
+  const byId = (id) => document.getElementById(id);
+  const safeCall = (fn, name) => { try { if (typeof fn === 'function') fn(); } catch(e){ try{ recordError?.(name || 'fix112', e); }catch(_){} } };
+  const nowMs = () => Date.now();
+  function selected(){ return (typeof selectedUid !== 'undefined' && selectedUid) ? selectedUid : (byId('userSelect')?.value || ''); }
+  function metaStatus(meta){
+    const now = nowMs();
+    const active = meta?.active === true;
+    const paused = meta?.paused === true || String(meta?.status||'').toLowerCase() === 'paused' || String(meta?.linkStatus||'').toLowerCase() === 'paused';
+    const expiresAt = Number(meta?.expiresAt || 0);
+    if(paused && active && expiresAt > now) return 'paused';
+    if(active && expiresAt > now) return 'active';
+    if(!active && expiresAt > now) return 'ended';
+    return 'expired';
+  }
+  function rootOf(session){
+    try { return typeof getSessionRoot === 'function' ? getSessionRoot(session) : (session || {}); } catch(e){ return session || {}; }
+  }
+  function activeEntry(){
+    const uid = selected();
+    const now = nowMs();
+    const ownerToken = uid ? (window.liveOwnersByUid?.[uid]?.activeSessionId || '') : '';
+    if(ownerToken && allSessions?.[ownerToken]){
+      const r = rootOf(allSessions[ownerToken]);
+      const m = r?.meta || {};
+      if(m.active === true && Number(m.expiresAt || 0) > now) return [ownerToken, r];
+    }
+    return Object.entries(allSessions || {})
+      .filter(([token]) => token !== '_init')
+      .map(([token, session]) => [token, rootOf(session)])
+      .filter(([token, root]) => {
+        const m = root?.meta || {};
+        return (!uid || m.ownerUid === uid) && m.active === true && Number(m.expiresAt || 0) > now;
+      })
+      .sort((a,b)=>Number(b[1]?.meta?.createdAt||0)-Number(a[1]?.meta?.createdAt||0))[0] || null;
+  }
+  window.fix112RefreshLiveCreateUi = function(){
+    const createBtn = byId('createShareBtn');
+    const notice = byId('activeSessionNotice');
+    const entry = activeEntry();
+    if(createBtn){
+      createBtn.disabled = !!entry;
+      createBtn.textContent = entry ? 'Есть активная ссылка' : 'Создать live-ссылку';
+    }
+    if(notice){
+      if(!entry){
+        notice.classList.add('hidden');
+        notice.innerHTML = '';
+      }else{
+        const [token, root] = entry;
+        const meta = root?.meta || {};
+        const st = metaStatus(meta);
+        const left = meta.paused ? Number(meta.remainingMs || 0) : Math.max(0, Number(meta.expiresAt || 0) - Date.now());
+        const fmt = (typeof fmtRemainingCompact === 'function') ? fmtRemainingCompact : (ms)=>{
+          const sec = Math.max(0, Math.floor(Number(ms||0)/1000));
+          return Math.floor(sec/60)+'м '+String(sec%60).padStart(2,'0')+'с';
+        };
+        const url = (typeof buildShareUrl === 'function') ? buildShareUrl(token) : token;
+        notice.classList.remove('hidden');
+        notice.innerHTML = `<strong>${st === 'paused' ? 'Live-сессия на паузе' : 'Live-сессия активна'}</strong><div style="margin-top:6px">Осталось: <b>${fmt(left)}</b></div><div style="margin-top:6px" class="mono">${url}</div>`;
+      }
+    }
+  };
+  const oldNotice = (typeof updateActiveSessionNotice === 'function') ? updateActiveSessionNotice : null;
+  updateActiveSessionNotice = function(){
+    try { window.fix112RefreshLiveCreateUi(); } catch(e){ try{ recordError?.('fix112UpdateNotice', e); }catch(_){} if(oldNotice) oldNotice(); }
+  };
+  const oldRender = (typeof renderSessions === 'function') ? renderSessions : null;
+  if(oldRender){
+    renderSessions = function(){
+      const res = oldRender.apply(this, arguments);
+      setTimeout(()=>window.fix112RefreshLiveCreateUi?.(), 0);
+      return res;
+    };
+  }
+  const oldCreate = (typeof createLiveSession === 'function') ? createLiveSession : null;
+  if(oldCreate){
+    createLiveSession = async function(){
+      const res = await oldCreate.apply(this, arguments);
+      try{
+        const uid = selected();
+        if(uid){
+          const ownerSnap = await get(ref(db, `liveOwners/${uid}/activeSessionId`));
+          const token = String(ownerSnap.val() || '');
+          if(token){
+            const sSnap = await get(ref(db, `liveSessions/${token}`));
+            if(!allSessions || typeof allSessions !== 'object') allSessions = {};
+            if(sSnap.exists()) allSessions[token] = sSnap.val();
+          }
+        }
+      }catch(e){ try{ recordError?.('fix112CreateRefresh', e); }catch(_){} }
+      window.fix112RefreshLiveCreateUi();
+      return res;
+    };
+  }
+  setInterval(()=>window.fix112RefreshLiveCreateUi?.(), 1000);
+})();
+/* === /Admin fix_112 === */
+
 </script>
 
 </body></html>
