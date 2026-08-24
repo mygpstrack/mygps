@@ -1196,6 +1196,8 @@ body.admin-normal-mode .tab-btn[data-tab="securityPanel"]{display:none!important
             <h3>20. 🧠 Автоматический диагноз</h3>
             <div id="diag20Diagnosis" class="healthReason info">Запусти диагностику.</div>
             <div id="diag20Details" class="smallMuted" style="margin-top:8px">—</div>
+          </div>
+
           <!-- 21. GPS Event Timeline -->
           <div class="card" style="margin-top:10px">
             <h3>21. 🔬 GPS Event Timeline</h3>
@@ -1294,6 +1296,8 @@ body.admin-normal-mode .tab-btn[data-tab="securityPanel"]{display:none!important
             <h3>30. 🧠 Root Cause Engine 2.0</h3>
             <div id="diag30RootCause" class="healthReason info">Анализ выполняется…</div>
             <div id="diag30Evidence" class="smallMuted" style="margin-top:8px">—</div>
+          </div>
+
           <!-- 31. Health Alerts -->
           <div class="card" style="margin-top:10px">
             <h3>31. 🔔 Health Alerts</h3>
@@ -1377,6 +1381,8 @@ body.admin-normal-mode .tab-btn[data-tab="securityPanel"]{display:none!important
             <h3>40. 🚨 Critical Problem Dashboard</h3>
             <div id="diag40Dashboard" class="healthReason info">Проверка выполняется…</div>
             <div id="diag40Problems" class="smallMuted" style="margin-top:8px">—</div>
+          </div>
+
           <!-- 41. Configurable thresholds -->
           <div class="card" style="margin-top:10px">
             <h3>41. 🔔 Настраиваемые пороги</h3>
@@ -1490,15 +1496,9 @@ body.admin-normal-mode .tab-btn[data-tab="securityPanel"]{display:none!important
 
           </div>
 
-          </div>
-
-          </div>
-
-          </div>
         </div>
 
       </div>
-    </div>
 
     <div id="historyPanel" class="hidden">
       <div class="card">
@@ -14066,21 +14066,7 @@ window.applyReadOnlyMode = applyReadOnlyMode;
 import { getApps, getApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { getDatabase, ref, get, query, limitToLast, orderByChild } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
-let appH=null, dbH=null, authH=null;
-function ensureHealthFirebase(){
-  try{
-    const apps=getApps();
-    if(!apps.length) throw new Error('Firebase app ещё не инициализирован');
-    appH=getApp();
-    dbH=getDatabase(appH);
-    authH=getAuth(appH);
-    return true;
-  }catch(e){
-    console.warn('Health Firebase init:',e);
-    appH=null; dbH=null; authH=null;
-    return false;
-  }
-}
+const appH=getApps().length?getApp():null, dbH=appH?getDatabase(appH):null, authH=appH?getAuth(appH):null;
 let healthTimerH=null, healthBusyH=false;
 const H=id=>document.getElementById(id), txt=(id,v)=>{const e=H(id);if(e)e.textContent=v==null||v===''?'—':String(v)}, n=v=>{const x=Number(v);return Number.isFinite(x)?x:null};
 const ts=o=>n(o?.timestamp??o?.ts??o?.time??o?.createdAt)||0, age=t=>t?Math.max(0,Date.now()-t):Infinity;
@@ -14098,7 +14084,7 @@ function version(u,p,m){return u?.myGpsVersion||u?.mygpsVersion||u?.appVersion||
 async function refreshHealth(){
  if(healthBusyH)return;healthBusyH=true;
  try{
-  if(!ensureHealthFirebase())throw Error('Firebase app недоступен: приложение ещё не инициализировано');
+  if(!dbH)throw Error('Firebase app недоступен');
   const uid=H('userSelect')?.value||'';if(!uid)throw Error('Выбери пользователя');txt('healthUid',uid);
   const [uS,lS,oS,gS]=await Promise.all([get(ref(dbH,`users/${uid}`)),get(ref(dbH,`live/${uid}`)),get(ref(dbH,`liveOwners/${uid}/activeSessionId`)),get(query(ref(dbH,`gpsServiceLogs/${uid}`),orderByChild('ts'),limitToLast(80))).catch(()=>get(query(ref(dbH,`gpsServiceLogs/${uid}`),limitToLast(80))))]);
   const user=uS.val()||{},liveRoot=lS.val()||{},token=String(oS.val()||liveRoot.activeSessionId||liveRoot.sessionId||'').trim();
@@ -15035,13 +15021,9 @@ window.addEventListener("load",()=>{
     });
   }
 
-  setTimeout(()=>myGpsV7RunHealth("startup"),1200);
-  setTimeout(()=>myGpsV7RunHealth("startup-retry"),3000);
+  setTimeout(()=>myGpsV7RunHealth("startup"),800);
 });
 
-setInterval(()=>{
-  if(!dbH) ensureHealthFirebase();
-},2000);
 /* === /MyGps V7 === */
 
 </script>
@@ -15694,6 +15676,96 @@ setInterval(()=>{
 })();
 </script>
 
+
+<script id="mygps-health-v9-controller">
+(function(){
+  "use strict";
+  if(window.__mygpsHealthV9Controller)return;
+  window.__mygpsHealthV9Controller=true;
+  const map={
+    healthRefreshBtn:["refresh","Обновление диагностики"],
+    advRunUserTestBtn:["userTest","Проверка пользователя"],
+    diag22RecoveryBtn:["recovery","Проверка GPS recovery"],
+    diag23E2EBtn:["e2e","End-to-End тест"],
+    diag32CreateIncidentBtn:["incident","Создание отчёта"],
+    diag33SnapshotBtn:["snapshot","Сохранение Snapshot"],
+    diag37StressBtn:["stress","Profile Stress Test"],
+    diag38SleepBtn:["sleep","Smart Sleep Test"],
+    diag41SaveBtn:["saveThresholds","Сохранение порогов"],
+    diag43RefreshBtn:["allUsers","Обновление мониторинга пользователей"]
+  };
+  const q=id=>document.getElementById(id);
+  function status(msg,kind="info"){
+    let e=q("healthV9ActionStatus");
+    if(!e){
+      e=document.createElement("div"); e.id="healthV9ActionStatus";
+      e.className="healthReason info"; e.style.marginTop="8px";
+      const tools=document.querySelector("#healthPanel .healthTools");
+      if(tools)tools.appendChild(e);
+    }
+    if(e){e.className="healthReason "+kind;e.textContent=msg;}
+  }
+  document.addEventListener("click",ev=>{
+    const b=ev.target?.closest?.("button");if(!b)return;
+    const m=map[b.id];if(!m)return;
+    setTimeout(()=>{
+      const fn=window.__mygpsDiagActions?.[m[0]];
+      if(typeof fn!=="function"){status(m[1]+": функция не инициализирована","danger");return;}
+      try{
+        const r=fn();
+        if(r?.then)r.then(()=>status(m[1]+": завершено","ok")).catch(e=>status(m[1]+": ошибка — "+(e?.message||e),"danger"));
+        else status(m[1]+": завершено","ok");
+      }catch(e){status(m[1]+": ошибка — "+(e?.message||e),"danger");}
+    },250);
+  },false);
+
+  document.addEventListener("click",ev=>{
+    const b=ev.target?.closest?.("#advErrorsOnlyBtn");
+    if(b){
+      setTimeout(()=>{
+        const tab=document.querySelector('.tab-btn[data-tab="gpsLogPanel"]');
+        if(tab)tab.click();
+      },0);
+      return;
+    }
+    const f=ev.target?.closest?.(".diag44Filter");if(!f)return;
+    const fn=window.__mygpsDiagActions?.filter;
+    if(typeof fn==="function")fn(b.dataset.filter||"all");
+  },false);
+
+  function markUnavailable(){
+    const p=q("healthPanel");if(!p)return;
+    p.querySelectorAll('[id^="diag"],[id^="adv"]').forEach(e=>{
+      if(e.children.length)return;
+      if(e.textContent.trim()==="—")e.textContent="нет данных от MyGps";
+    });
+  }
+  document.addEventListener("DOMContentLoaded",markUnavailable);
+  window.addEventListener("load",()=>setTimeout(markUnavailable,800));
+})();
+</script>
+
 </body></html>
 
 <!-- fix_115: removed broken non-module fix112 live-sync block; active live timer uses stable module sync. -->
+/* === V9 diagnostic action API === */
+window.__mygpsDiagActions = {
+  refresh: typeof refreshHealth==="function" ? refreshHealth : null,
+  advanced: typeof advRefreshHealth==="function" ? advRefreshHealth : null,
+  userTest: typeof advRunUserTest==="function" ? advRunUserTest : null,
+  recovery: typeof runDiag22==="function" ? runDiag22 : null,
+  e2e: typeof runDiag23==="function" ? runDiag23 : null,
+  incident: typeof d32==="function" ? d32 : null,
+  snapshot: typeof d33==="function" ? d33 : null,
+  stress: typeof d37==="function" ? d37 : null,
+  sleep: typeof d38==="function" ? d38 : null,
+  saveThresholds: typeof diag41Save==="function" ? diag41Save : null,
+  allUsers: typeof diag43==="function" ? diag43 : null,
+  filter: typeof diag44Apply==="function" ? diag44Apply : null,
+  json: typeof diag46Json==="function" ? diag46Json : null,
+  csv: typeof diag46Csv==="function" ? diag46Csv : null,
+  txt: typeof diag46Txt==="function" ? diag46Txt : null
+};
+/* === /V9 diagnostic action API === */
+
+
