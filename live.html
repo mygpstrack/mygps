@@ -1,0 +1,1123 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>MyGpsLive</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/x-icon" href="icons/mygpslive.ico">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/mygpslive-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/mygpslive-192.png">
+<link rel="apple-touch-icon" href="icons/mygpslive-180.png">
+<meta name="theme-color" content="#0b1220">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+<style>
+:root{
+  --bg:#0b1220;
+  --panel:rgba(0,0,0,.75);
+  --panel-card:rgba(255,255,255,.05);
+  --line:rgba(255,255,255,.10);
+  --text:#fff;
+  --muted:#cbd5e1;
+  --green:#22c55e;
+  --yellow:#f59e0b;
+  --red:#ef4444;
+  --gray:#94a3b8;
+  --blue:#3b82f6;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+#map{position:absolute;inset:0;z-index:1}
+.top{
+  position:fixed;top:10px;left:10px;right:10px;
+  display:grid;grid-template-columns:1fr 1fr;gap:8px;z-index:1000;
+  transition:opacity .2s ease, transform .2s ease;
+}
+.top.hidden{
+  opacity:0;
+  transform:translateY(-8px);
+  pointer-events:none;
+}
+.miniBtn{
+  border:none;
+  border-radius:12px;
+  background:rgba(15,23,42,.88);
+  color:#fff;
+  font-size:12px;
+  font-weight:800;
+  padding:8px 12px;
+  width:auto;
+  min-height:38px;
+  box-shadow:0 8px 20px rgba(0,0,0,.24);
+  border:1px solid var(--line);
+}
+.miniBtn:hover{filter:brightness(1.05)}
+.panelMiniBtn{
+  flex:0 0 auto;
+  width:auto;
+  min-width:120px;
+}
+.time-normal{color:var(--text)}
+.time-warn{color:var(--yellow)}
+.time-danger{color:var(--red)}
+.card{
+  background:rgba(0,0,0,.62);
+  padding:10px;border-radius:12px;
+  font-size:13px;text-align:center;
+  backdrop-filter:blur(10px);
+  border:1px solid var(--line);
+  box-shadow:0 10px 26px rgba(0,0,0,.24);
+}
+.card b{font-size:15px;line-height:1.15}
+.bottom{
+  position:fixed;left:10px;right:10px;bottom:10px;
+  background:var(--panel);
+  border-radius:18px;padding:10px;
+  z-index:1000;border:1px solid var(--line);
+  box-shadow:0 -10px 30px rgba(0,0,0,.32);
+  backdrop-filter:blur(12px);
+  transition:transform .2s ease, opacity .2s ease;
+}
+.bottom.full{max-height:55vh;overflow:auto}
+.bottom.collapsed{
+  background:transparent;
+  border:none;
+  box-shadow:none;
+  backdrop-filter:none;
+  padding:0;
+}
+.panelHeader{
+  display:flex;
+  gap:8px;
+  align-items:center;
+}
+.panelHeader button{flex:1}
+.bottom.collapsed .details{display:none !important}
+.bottom.collapsed .panelHeader{
+  justify-content:flex-end;
+}
+button{
+  width:100%;padding:10px;border:none;
+  border-radius:10px;background:#1f2937;color:#fff;
+  font-size:14px;font-weight:bold;cursor:pointer;
+}
+.details{display:none;margin-top:10px;font-size:13px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.box{
+  background:var(--panel-card);
+  padding:8px;border-radius:10px;
+  line-height:1.35;border:1px solid var(--line);
+}
+.followBtn{margin-top:10px;background:#14532d}
+.followBtn.off{background:#7f1d1d}
+.alert{
+  position:fixed;top:30%;left:50%;
+  transform:translateX(-50%);
+  background:rgba(0,0,0,.78);
+  padding:14px 16px;border-radius:14px;display:none;z-index:2000;
+  border:1px solid rgba(255,255,255,.12);
+  box-shadow:0 12px 34px rgba(0,0,0,.35);
+  min-width:280px;max-width:88vw;text-align:center;font-weight:800;
+}
+.alert small{display:block;margin-top:6px;color:var(--muted);font-size:12px;font-weight:700}
+.end-overlay{
+  position:fixed;inset:0;z-index:3000;display:none;align-items:center;justify-content:center;
+  background:radial-gradient(circle at top,#111827,#020617 70%);
+  padding:22px;
+}
+.end-card{
+  width:min(92vw,420px);
+  background:rgba(15,23,42,.92);
+  border:1px solid rgba(255,255,255,.12);
+  border-radius:24px;padding:26px 20px;text-align:center;
+  box-shadow:0 18px 50px rgba(0,0,0,.38)
+}
+.end-icon{font-size:52px;line-height:1}
+.end-title{font-size:28px;font-weight:900;margin-top:12px}
+.end-text{font-size:15px;color:var(--muted);margin-top:10px;line-height:1.5}
+.marker-wrap{
+  width:24px;
+  height:24px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.marker-arrow{
+  width:0;height:0;
+  border-left:10px solid transparent;
+  border-right:10px solid transparent;
+  border-bottom:22px solid var(--green);
+  transform-origin:50% 50%;
+}
+.marker-circle{
+  width:16px;height:16px;border-radius:50%;
+  border:3px solid white;
+}
+.leaflet-control-attribution{
+  opacity:.18;
+  font-size:10px;
+  background:rgba(0,0,0,.10) !important;
+  color:#d1d5db !important;
+  padding:2px 6px !important;
+  border-radius:10px 0 0 0;
+}
+.leaflet-control-attribution a{color:#d1d5db !important;text-decoration:none}
+@media (max-width: 768px){
+  .bottom{left:8px;right:8px;bottom:8px}
+  .top{left:8px;right:8px;top:8px}
+}
+
+/* MyGpsLive PWA launch splash */
+#mygpsliveLaunchSplash{
+  position:fixed;
+  inset:0;
+  z-index:999999;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:#fff;
+  opacity:1;
+  transition:opacity .45s ease, visibility .45s ease;
+}
+#mygpsliveLaunchSplash.hide{
+  opacity:0;
+  visibility:hidden;
+  pointer-events:none;
+}
+#mygpsliveLaunchSplash img{
+  width:min(82vw,720px);
+  height:auto;
+  display:block;
+  object-fit:contain;
+}
+@media (max-width:768px){
+  #mygpsliveLaunchSplash img{width:min(86vw,430px)}
+}
+
+</style>
+</head>
+<body>
+<div id="mygpsliveLaunchSplash" aria-label="MyGpsLive"><img src="icons/mygpslive-splash.png" alt="MyGpsLive"></div>
+<div id="map"></div>
+
+<div class="top" id="topInfoGrid">
+  <div class="card">Погода<br><b id="weather">—</b></div>
+  <div class="card">Локация<br><b id="location">—</b></div>
+  <div class="card">Статус<br><b id="status">—</b></div>
+  <div class="card">Скорость<br><b id="speed">—</b></div>
+  <div class="card">Обновлено<br><b id="updated">—</b></div>
+  <div class="card">Осталось<br><b id="time">—</b></div>
+</div>
+
+<div class="bottom" id="panel">
+  <div class="panelHeader">
+    <button onclick="togglePanel()" id="toggleBtn">Подробнее</button>
+    <button onclick="toggleTopInfo()" id="toggleTopInfoBtn" class="miniBtn panelMiniBtn">Скрыть инфо</button>
+  </div>
+
+  <div class="details" id="details">
+    <div class="grid">
+      <div class="box">Статус: <span id="d_status"></span></div>
+      <div class="box">Скорость: <span id="d_speed"></span></div>
+      <div class="box">Обновлено: <span id="d_updated"></span></div>
+      <div class="box">Осталось: <span id="d_time"></span></div>
+      <div class="box">GPS / Сигнал: <span id="d_bearing"></span></div>
+      <div class="box">Тип: <span id="d_type">—</span></div>
+      <div class="box">Координаты: <span id="d_coords"></span></div>
+      <div class="box">Сигнал: <span id="d_signal"></span></div>
+      <div class="box">Точность: <span id="d_tail"></span></div>
+            <div class="box">Возраст точки: <span id="d_age"></span></div>
+    </div>
+
+    <button class="followBtn" id="followBtn" onclick="toggleFollow()">🎯 Слежение: Вкл</button>
+  </div>
+</div>
+
+<div class="alert" id="alert"></div>
+
+<div class="end-overlay" id="endOverlay">
+  <div class="end-card">
+    <div class="end-icon">❌</div>
+    <div class="end-title">Трансляция завершена</div>
+    <div class="end-text" id="endText">Эта live-ссылка больше недоступна.</div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+import { getDatabase, ref, onValue, runTransaction, push, set } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
+
+const firebaseConfig={
+  apiKey:"AIzaSyCXNCY-IpkhAXb8jNPhN8gf2UdOfPBc5gM",
+  authDomain:"mygpslive-57196.firebaseapp.com",
+  databaseURL:"https://mygpslive-57196-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId:"mygpslive-57196",
+  storageBucket:"mygpslive-57196.firebasestorage.app",
+  messagingSenderId:"20781107701",
+  appId:"1:20781107701:web:bd47061b9aca13abbeb8bc",
+  measurementId:"G-BSCVNY9LH0"
+};
+
+const app=initializeApp(firebaseConfig);
+const db=getDatabase(app);
+
+const qs=id=>document.getElementById(id);
+const params=new URLSearchParams(location.search);
+
+const LIVE_TOKEN_RE = /^[A-Za-z0-9_-]{32,96}$/;
+function getLiveSessionToken(){
+  const raw = String(params.get("session") || params.get("token") || params.get("t") || "").trim();
+  if(!raw) return { token:"", ok:false, reason:"missing" };
+  if(!LIVE_TOKEN_RE.test(raw)) return { token:"", ok:false, reason:"invalid" };
+  return { token: raw, ok:true, reason:"ok" };
+}
+
+const sessionTokenInfo = getLiveSessionToken();
+const sessionId = sessionTokenInfo.ok ? sessionTokenInfo.token : "";
+
+function hideMyGpsLiveLaunchSplash(){
+  const splash=document.getElementById('mygpsliveLaunchSplash');
+  if(!splash) return;
+  splash.classList.add('hide');
+  setTimeout(()=>{ try{ splash.remove(); }catch(e){} }, 700);
+}
+window.addEventListener('load',()=>{ setTimeout(hideMyGpsLiveLaunchSplash, 2400); });
+setTimeout(hideMyGpsLiveLaunchSplash, 4200);
+
+
+const map=L.map('map').setView([56.95,24.1],13);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{crossOrigin:true}).addTo(map);
+
+let marker=null;
+let follow=true;
+let open=false;
+let tailPoints=[];
+let tailLine=L.polyline([], {color:'#3b82f6', weight:4, opacity:0.9}).addTo(map);
+let warnedFive=false;
+let warnedOne=false;
+let lastPoint=null;
+let displayPoint=null;
+let animationFrameId=null;
+let lastPausedState=null;
+let currentSessionMeta=null;
+let runtimeSettings = {
+  moveSpeedThresholdKmh: 3,
+  stopLongMinutes: 5,
+  offlineMinutes: 5,
+  junkAccuracyMeters: 100,
+  impossibleSpeedKmh: 250
+};
+let topInfoHidden = localStorage.getItem('live_top_info_hidden') === '1';
+let bottomPanelCollapsed = localStorage.getItem('live_bottom_panel_collapsed') === '1';
+let activeAlertTimer = null;
+let activeAlertInterval = null;
+let activeAlertTone = 'default';
+
+function applyTopInfoState(){
+  const top = document.getElementById('topInfoGrid');
+  const btn = document.getElementById('toggleTopInfoBtn');
+  if(!top || !btn) return;
+
+  if(topInfoHidden){
+    top.style.display = 'none';
+    btn.innerText = 'Показать инфо';
+  }else{
+    top.style.display = 'grid';
+    btn.innerText = 'Скрыть инфо';
+  }
+}
+function toggleTopInfo(){
+  topInfoHidden = !topInfoHidden;
+  localStorage.setItem('live_top_info_hidden', topInfoHidden ? '1' : '0');
+  applyTopInfoState();
+}
+window.toggleTopInfo = toggleTopInfo;
+
+function applyBottomPanelState(){
+  qs('panel').classList.toggle('collapsed', bottomPanelCollapsed);
+  qs('toggleBtn').innerText = open ? 'Скрыть' : 'Подробнее';
+  qs('details').style.display=open?'block':'none';
+  qs('panel').classList.toggle('full',open);
+}
+function toggleBottomPanel(){
+  bottomPanelCollapsed = !bottomPanelCollapsed;
+  localStorage.setItem('live_bottom_panel_collapsed', bottomPanelCollapsed ? '1' : '0');
+  applyBottomPanelState();
+}
+window.toggleBottomPanel = toggleBottomPanel;
+window.addEventListener('load', () => {
+  applyTopInfoState();
+  applyBottomPanelState();
+});
+
+function togglePanel(){
+  open=!open;
+  applyBottomPanelState();
+}
+window.togglePanel=togglePanel;
+
+function setFollowUi(){
+  const btn=qs('followBtn');
+  btn.innerText=follow?'🎯 Слежение: Вкл':'❌ Слежение: Выкл';
+  btn.classList.toggle('off',!follow);
+}
+
+function toggleFollow(){
+  follow=!follow;
+  setFollowUi();
+applyTopInfoState();
+applyBottomPanelState();
+  if(follow && displayPoint) map.panTo([displayPoint.lat,displayPoint.lng], {animate:true});
+}
+window.toggleFollow=toggleFollow;
+
+function hideAlert(){
+  const el=qs('alert');
+  if(!el) return;
+  clearTimeout(activeAlertTimer);
+  clearInterval(activeAlertInterval);
+  activeAlertTimer=null;
+  activeAlertInterval=null;
+  el.style.display='none';
+}
+
+function renderAlertContent(message, leftMs){
+  const timerText = leftMs == null ? '' : `<div style="margin-top:6px;font-size:18px">${fmtCountdown(leftMs)}</div>`;
+  return `${message}${timerText}<small>Предупреждение по времени ссылки</small>`;
+}
+
+function showAlert(text, tone='default', options={}){
+  const el=qs('alert');
+  if(!el) return;
+
+  const { liveCountdown=false, expiresAt=null } = options || {};
+  activeAlertTone = tone;
+
+  clearTimeout(activeAlertTimer);
+  clearInterval(activeAlertInterval);
+
+  const applyTone = () => {
+    el.style.background = activeAlertTone === 'danger' ? 'rgba(127,29,29,.92)' : 'rgba(0,0,0,.78)';
+    el.style.borderColor = activeAlertTone === 'danger' ? 'rgba(248,113,113,.55)' : 'rgba(255,255,255,.12)';
+  };
+
+  const updateContent = () => {
+    const leftMs = liveCountdown && expiresAt != null ? Math.max(0, Number(expiresAt) - Date.now()) : null;
+    el.innerHTML = renderAlertContent(text, leftMs);
+    applyTone();
+    el.style.display='block';
+  };
+
+  updateContent();
+
+  if(liveCountdown && expiresAt != null){
+    activeAlertInterval = setInterval(updateContent, 250);
+  }
+
+  activeAlertTimer = setTimeout(() => {
+    hideAlert();
+  }, 5000);
+}
+
+
+function showEnd(message){
+  qs('endText').textContent=message || 'Эта live-ссылка больше недоступна.';
+  qs('endOverlay').style.display='flex';
+}
+function hideEnd(){ qs('endOverlay').style.display='none'; }
+
+async function registerSessionOpen(meta = {}){
+  if(!sessionId) return;
+
+  const openKey = `live_open_registered_${sessionId}`;
+  if(sessionStorage.getItem(openKey) === '1') return;
+
+  const now = Date.now();
+  try{
+    const statsRef = ref(db, `liveSessions/${sessionId}/viewStats`);
+    await runTransaction(statsRef, current => {
+      const next = current || {};
+      return {
+        openCount: Number(next.openCount || 0) + 1,
+        firstOpenAt: next.firstOpenAt || now,
+        lastOpenAt: now
+      };
+    });
+
+    sessionStorage.setItem(openKey, '1');
+  }catch(e){
+    console.warn('registerSessionOpen error', e);
+  }
+}
+
+function relTime(ts){
+  if(!ts) return '—';
+  const sec=Math.max(0, Math.floor((Date.now()-ts)/1000));
+  if(sec<60) return sec+' сек';
+  const min=Math.floor(sec/60);
+  if(min<60) return min+' мин';
+  const h=Math.floor(min/60);
+  return h+' ч';
+}
+function fmtClock(ts){
+  if(!ts) return '—';
+  return new Date(ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+function fmtCountdown(ms){
+  if(ms<=0) return '0:00';
+  const sec=Math.floor(ms/1000), m=Math.floor(sec/60), s=sec%60;
+  return m+':'+String(s).padStart(2,'0');
+}
+
+function movementLabelRu(value){
+  const v = String(value || '').toLowerCase().trim();
+  if(!v || v === 'unknown') return '';
+  if(['moving','move','driving','walk','walking'].includes(v)) return 'едет';
+  if(['held','stopped','stop','idle','stationary','still','stop_short','long_stopped','longstopped'].includes(v)) return 'стоит';
+  if(['no_signal','nosignal','offline'].includes(v)) return 'нет сигнала';
+  return '';
+}
+
+function getPointAgeMs(p){
+  return p?.ts ? Math.max(0, Date.now() - Number(p.ts || 0)) : Number.POSITIVE_INFINITY;
+}
+
+function getLiveStopDurationMs(p, meta){
+  if(!p) return 0;
+  const ageMs = getPointAgeMs(p);
+  const baseStopMs = Number.isFinite(Number(p.stopDurationMs)) ? Math.max(0, Number(p.stopDurationMs)) : 0;
+  const movementState = String(p.movementState || '').toLowerCase();
+  const speed = Number(p.speed || 0);
+  const moveThreshold = Number(runtimeSettings?.moveSpeedThresholdKmh || 3);
+
+  if(meta?.paused) return baseStopMs + (Number.isFinite(ageMs) ? ageMs : 0);
+  if(['stopped','stop','idle','stop_short','long_stopped','longstopped','stop_long'].includes(movementState)){
+    return baseStopMs + (Number.isFinite(ageMs) ? ageMs : 0);
+  }
+
+  // Protection from stale "moving": if the point is not refreshed and speed is near zero,
+  // show stop/idle instead of keeping green forever.
+  if(['moving','move'].includes(movementState) && speed < moveThreshold && ageMs > 15_000){
+    return baseStopMs + ageMs;
+  }
+
+  return baseStopMs;
+}
+
+function formatAgeAndStop(p, meta){
+  const ageText = relTime(p?.ts) + ' назад';
+  const stopMs = getLiveStopDurationMs(p, meta);
+  const movementState = String(p?.movementState || '').toLowerCase();
+  const speed = Number(p?.speed || 0);
+  const moveThreshold = Number(runtimeSettings?.moveSpeedThresholdKmh || 3);
+  const shouldShowStop =
+    meta?.paused ||
+    ['stopped','stop','idle','stop_short','long_stopped','longstopped','stop_long'].includes(movementState) ||
+    (['moving','move'].includes(movementState) && speed < moveThreshold && getPointAgeMs(p) > 15_000);
+  return ageText + (shouldShowStop ? ` · простой ${fmtCountdown(stopMs)}` : '');
+}
+
+function checkTimeWarnings(leftMs, isPaused){
+  if(isPaused) return;
+  const expiresAt = currentSessionMeta?.expiresAt ? Number(currentSessionMeta.expiresAt) : null;
+  if(leftMs<=5*60*1000 && !warnedFive && leftMs>60*1000){
+    warnedFive=true;
+    showAlert('Время действия ссылки заканчивается через', 'default', { liveCountdown:true, expiresAt });
+  }
+  if(leftMs<=60*1000 && !warnedOne && leftMs>0){
+    warnedOne=true;
+    showAlert('Время действия ссылки заканчивается через', 'danger', { liveCountdown:true, expiresAt });
+  }
+}
+
+function distanceMeters(a,b){
+  const toRad=v=>v*Math.PI/180,R=6371000;
+  const dLat=toRad(b.lat-a.lat), dLon=toRad(b.lng-a.lng), lat1=toRad(a.lat), lat2=toRad(b.lat);
+  const x=Math.sin(dLat/2)**2+Math.sin(dLon/2)**2*Math.cos(lat1)*Math.cos(lat2);
+  return R*(2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x)));
+}
+function filterJumps(list){
+  const out=[];
+  for(const p of list){
+    if(!out.length){ out.push(p); continue; }
+    const prev=out[out.length-1];
+    const dt=Math.max(1,(p.ts-prev.ts)/1000);
+    const speedCalc=(distanceMeters(prev,p)/dt)*3.6;
+    if(speedCalc>250) continue;
+    out.push(p);
+  }
+  return out;
+}
+function smoothPoint(prev, cur){
+  if(!prev) return {...cur};
+  const alpha = 0.35;
+  return {
+    ...cur,
+    lat: prev.lat + (cur.lat - prev.lat) * alpha,
+    lng: prev.lng + (cur.lng - prev.lng) * alpha
+  };
+}
+
+function getMoveType(points, currentPoint){
+  const movementState = String(currentPoint?.movementState || '').toLowerCase();
+  if(['moving','move'].includes(movementState)) return 'Движение';
+  if(['stopped','stop','idle','stop_short'].includes(movementState)) return 'Остановка';
+  if(['long_stopped','longstopped','stop_long'].includes(movementState)) return 'Стоянка';
+  if(['no_signal','nosignal','offline'].includes(movementState)) return 'Нет сигнала';
+
+  const sample = (points && points.length ? points : [currentPoint])
+    .slice(-5)
+    .map(p => Number(p.speed || 0))
+    .filter(v => Number.isFinite(v));
+
+  if(!sample.length) return '—';
+
+  const avg = sample.reduce((a,b)=>a+b,0) / sample.length;
+
+  if(avg < 2) return 'Стоянка';
+  if(avg < 7) return 'Пешком';
+  if(avg < 50) return 'Авто';
+  return 'Мото';
+}
+
+function getStatusMeta(p, sessionMeta){
+  if(sessionMeta?.paused){
+    return {status:'⏸ Пауза', signal:'—', type:'paused', color:'#3b82f6'};
+  }
+
+  const ageMs = getPointAgeMs(p);
+  const speed = Number(p?.speed || 0);
+  const accuracy = Number(p?.accuracy || 0);
+
+  const moveThreshold = Number(runtimeSettings?.moveSpeedThresholdKmh || 3);
+  const stopLongMinutes = Number(runtimeSettings?.stopLongMinutes || 5);
+  const offlineMinutes = Number(runtimeSettings?.offlineMinutes || 5);
+  const junkAccuracyMeters = Number(runtimeSettings?.junkAccuracyMeters || 100);
+  const impossibleSpeedKmh = Number(runtimeSettings?.impossibleSpeedKmh || 250);
+
+  const offlineMs = offlineMinutes * 60 * 1000;
+  const stopLongMs = stopLongMinutes * 60 * 1000;
+
+  if(!p || !Number.isFinite(Number(p.ts || 0)) || ageMs > offlineMs){
+    return {status:'📡 Нет сигнала', signal:'Потерян', type:'offline', color:'#94a3b8'};
+  }
+
+  const movementState = String(p?.movementState || '').toLowerCase();
+  const isJunk = (accuracy > junkAccuracyMeters) || (speed > impossibleSpeedKmh);
+  const stopMs = getLiveStopDurationMs(p, sessionMeta);
+
+  if(['no_signal','nosignal','offline'].includes(movementState)){
+    return {status:'📡 Нет сигнала', signal:'Потерян', type:'offline', color:'#94a3b8'};
+  }
+
+  if(['long_stopped','longstopped','stop_long'].includes(movementState) || stopMs >= stopLongMs){
+    return {status:'🅿 Стоянка', signal:'Есть', type:'stop_long', color:'#ef4444'};
+  }
+
+  if(['stopped','stop','idle','stop_short'].includes(movementState)){
+    return {status:'⏸ Остановка', signal:'Есть', type:'stop_short', color:'#f59e0b'};
+  }
+
+  // Do not keep green forever if "moving" arrived once and then the point stopped updating.
+  if(['moving','move'].includes(movementState)){
+    if(!isJunk && speed >= moveThreshold){
+      return {status:'🚗 Движение', signal:'Есть', type:'moving', color:'#22c55e'};
+    }
+    if(ageMs > 15_000){
+      return {status:'⏸ Остановка', signal:'Есть', type:'stop_short', color:'#f59e0b'};
+    }
+  }
+
+  if(!isJunk && speed >= moveThreshold){
+    return {status:'🚗 Движение', signal:'Есть', type:'moving', color:'#22c55e'};
+  }
+
+  if(stopMs >= stopLongMs || ageMs >= stopLongMs){
+    return {status:'🅿 Стоянка', signal:'Есть', type:'stop_long', color:'#ef4444'};
+  }
+
+  return {status:'⏸ Остановка', signal:'Есть', type:'stop_short', color:'#f59e0b'};
+}
+
+function buildIconHtml(p, sessionMeta){
+  const meta=getStatusMeta(p, sessionMeta);
+  if(meta.type==='offline'){
+    return `<div class="marker-wrap"><div class="marker-circle" style="background:#94a3b8"></div></div>`;
+  }
+  if(meta.type==='moving'){
+    return `<div class="marker-wrap"><div class="marker-arrow" style="transform:rotate(${p.bearing||0}deg)"></div></div>`;
+  }
+  if(meta.type==='paused'){
+    return `<div class="marker-wrap"><div class="marker-circle" style="background:#3b82f6"></div></div>`;
+  }
+  const color=meta.type==='stop_long' ? '#ef4444' : '#f59e0b';
+  return `<div class="marker-wrap"><div class="marker-circle" style="background:${color}"></div></div>`;
+}
+
+function setMarkerIcon(p, sessionMeta){
+  const icon=L.divIcon({
+    html:buildIconHtml(p, sessionMeta),
+    className:'',
+    iconSize:[24,24],
+    iconAnchor:[12,12]
+  });
+  if(!marker){
+    marker=L.marker([p.lat,p.lng],{icon}).addTo(map);
+  }else{
+    marker.setIcon(icon);
+  }
+}
+
+function animateMarkerTo(target, sessionMeta){
+  if(!target) return;
+  if(!marker){
+    setMarkerIcon(target, sessionMeta);
+    marker=L.marker([target.lat,target.lng],{icon:L.divIcon({html:buildIconHtml(target, sessionMeta), className:''})}).addTo(map);
+    displayPoint = {...target};
+    return;
+  }
+
+  if(!displayPoint){
+    displayPoint = {...target};
+    marker.setLatLng([target.lat, target.lng]);
+    marker.setIcon(L.divIcon({html:buildIconHtml(target, sessionMeta), className:'', iconSize:[24,24], iconAnchor:[12,12]}));
+    return;
+  }
+
+  const start = {lat: displayPoint.lat, lng: displayPoint.lng};
+  const end = {lat: target.lat, lng: target.lng};
+  const duration = 900;
+  const started = performance.now();
+
+  if(animationFrameId) cancelAnimationFrame(animationFrameId);
+
+  function step(now){
+    const t = Math.min(1, (now - started) / duration);
+    const eased = 1 - Math.pow(1 - t, 3);
+    const lat = start.lat + (end.lat - start.lat) * eased;
+    const lng = start.lng + (end.lng - start.lng) * eased;
+    marker.setLatLng([lat,lng]);
+    marker.setIcon(L.divIcon({html:buildIconHtml(target, sessionMeta), className:'', iconSize:[24,24], iconAnchor:[12,12]}));
+    displayPoint = {...target, lat, lng};
+    if(t < 1){
+      animationFrameId=requestAnimationFrame(step);
+    }
+  }
+  animationFrameId=requestAnimationFrame(step);
+}
+
+function updateUi(p, expiresAt, sessionMeta, moveType){
+  const meta=getStatusMeta(p, sessionMeta);
+  const leftMs = sessionMeta?.paused
+    ? Math.max(0, Number(sessionMeta?.remainingMs || 0))
+    : (expiresAt ? Math.max(0, Number(expiresAt)-Date.now()) : 0);
+  const leftText=expiresAt || sessionMeta?.paused ? fmtCountdown(leftMs) : '—';
+
+  qs('status').innerText=meta.status;
+  qs('status').style.color=meta.color || '#fff';
+  qs('speed').innerText=(Number(p.speed||0)).toFixed(1)+' км/ч';
+  qs('updated').innerText=relTime(p.ts);
+  qs('time').innerText=leftText;
+  qs('time').className = leftMs <= 60000 ? 'time-danger' : (leftMs <= 300000 ? 'time-warn' : 'time-normal');
+
+  let gpsState='OK';
+  const ageMs = Date.now() - Number(p.ts || 0);
+  const accuracy = Number(p.accuracy || 0);
+  if(ageMs > Number(runtimeSettings?.offlineMinutes || 5) * 60 * 1000) gpsState='Нет сигнала';
+  else if(ageMs > 2 * 60 * 1000) gpsState='Точка старая';
+  else if(accuracy > Number(runtimeSettings?.junkAccuracyMeters || 100)) gpsState='Слабый';
+  else gpsState='OK';
+
+  qs('d_status').innerText=meta.status;
+  qs('d_status').style.color=meta.color || '#fff';
+  qs('d_speed').innerText=(Number(p.speed||0)).toFixed(1)+' км/ч' + (p.speedSource ? ' · ' + p.speedSource : '');
+  qs('d_updated').innerText=fmtClock(p.ts)+' ('+relTime(p.ts)+' назад)';
+  qs('d_time').innerText=leftText;
+  qs('d_bearing').innerText=gpsState;
+  qs('d_coords').innerText=Number(p.lat).toFixed(5)+', '+Number(p.lng).toFixed(5);
+  qs('d_signal').innerText=meta.signal;
+  qs('d_tail').innerText=accuracy>0 ? Math.round(accuracy)+' м' : '—';
+  qs('d_age').innerText=formatAgeAndStop(p, sessionMeta);
+  qs('d_type').innerText = moveType || '—';
+
+  checkTimeWarnings(leftMs, !!sessionMeta?.paused);
+  if(!sessionMeta?.paused && leftMs<=0 && expiresAt){
+    showEnd('Время действия ссылки истекло.');
+  }
+}
+
+function normalizePoint(p){
+  const speedRaw = p?.speedKmh ?? p?.speed_kmh ?? p?.speedSmoothedKmh ?? p?.speed ?? p?.speedRawKmh ?? p?.speed_raw_kmh ?? 0;
+  return {
+    lat:Number(p?.latitude ?? p?.lat),
+    lng:Number(p?.longitude ?? p?.lon ?? p?.lng),
+    speed:Number(speedRaw),
+    speedSource:String(p?.speedSource ?? p?.speed_source ?? '').trim(),
+    movementState:String(p?.movementState ?? p?.movement_state ?? '').toLowerCase(),
+    stopDurationMs:Number(p?.stopDurationMs ?? p?.stop_duration_ms ?? NaN),
+    bearing:Number(p?.bearing ?? 0),
+    accuracy:Number(p?.accuracy ?? p?.acc ?? 0),
+    ts:Number(p?.timestamp ?? p?.ts ?? Date.now())
+  };
+}
+
+
+const LIVE_TAIL_MAX_POINTS = 10;
+const LIVE_TAIL_MAX_AGE_MS = 5 * 60 * 1000;
+
+function shortLiveTail(points, livePoint, meta = {}){
+  const now = Date.now();
+  const createdAt = Number(meta.createdAt || meta.startedAt || 0);
+  const liveTs = Number(livePoint?.ts || 0);
+  const minTs = Math.max(
+    createdAt || 0,
+    liveTs ? liveTs - LIVE_TAIL_MAX_AGE_MS : now - LIVE_TAIL_MAX_AGE_MS
+  );
+
+  return (points || [])
+    .filter(p => Number.isFinite(p?.lat) && Number.isFinite(p?.lng))
+    .filter(p => {
+      const ts = Number(p?.ts || 0);
+      if(!ts) return true;
+      return ts >= minTs;
+    })
+    .slice(-LIVE_TAIL_MAX_POINTS);
+}
+
+function applySession(data){
+  if(!data){ showEnd('Ссылка не найдена или была удалена.'); return; }
+  const meta=data.meta||{};
+  currentSessionMeta=meta;
+
+  if(lastPausedState!==null && lastPausedState!==!!meta.paused){
+    showAlert(meta.paused ? '⏸ Трансляция приостановлена' : '▶️ Трансляция продолжена');
+  }
+  lastPausedState=!!meta.paused;
+
+  if(meta.active===false){ showEnd('Эта трансляция была остановлена владельцем.'); return; }
+  if(!meta.paused && meta.expiresAt && Number(meta.expiresAt)<=Date.now()){ showEnd('Время действия ссылки истекло.'); return; }
+  hideEnd();
+
+  const recent = Object.values(data.public?.recentPoints || {})
+    .filter(Boolean)
+    .map(normalizePoint)
+    .sort((a,b)=>a.ts-b.ts);
+  const filtered = filterJumps(recent);
+
+  const fallbackPoint =
+    data.public?.lastPoint ||
+    data.lastPoint ||
+    data.live?.lastPoint ||
+    data.live ||
+    filtered[filtered.length-1] ||
+    null;
+
+  const point = fallbackPoint ? normalizePoint(fallbackPoint) : null;
+  if(!point || !Number.isFinite(point.lat) || !Number.isFinite(point.lng)) return;
+
+  const routePoints = [...filtered];
+  if(!routePoints.length || Number(routePoints[routePoints.length - 1].ts || 0) !== Number(point.ts || 0)){
+    routePoints.push(point);
+  }
+
+  const livePoint = routePoints[routePoints.length - 1];
+  lastPoint = {...livePoint};
+
+  const tailRoutePoints = shortLiveTail(routePoints, livePoint, meta);
+  tailPoints = tailRoutePoints.map(p=>[p.lat,p.lng]);
+  tailLine.setLatLngs(tailPoints);
+
+  setMarkerIcon(livePoint, meta);
+  if(!marker){
+    marker=L.marker([livePoint.lat,livePoint.lng],{icon:L.divIcon({html:buildIconHtml(livePoint, meta), className:'', iconSize:[24,24], iconAnchor:[12,12]})}).addTo(map);
+    displayPoint = {...livePoint};
+  }else{
+    animateMarkerTo(livePoint, meta);
+  }
+
+  const moveType = getMoveType(tailRoutePoints.length ? tailRoutePoints : routePoints, livePoint);
+  updateUi(livePoint, meta.expiresAt, meta, moveType);
+  fetchWeather(livePoint.lat, livePoint.lng);
+
+  if(follow) map.panTo([livePoint.lat, livePoint.lng], {animate:true});
+}
+
+map.on('dragstart',()=>{
+  follow=false;
+  setFollowUi();
+  clearTimeout(window._followTimer);
+  window._followTimer=setTimeout(()=>{
+    follow=true;
+    setFollowUi();
+    if(displayPoint) map.panTo([displayPoint.lat,displayPoint.lng], {animate:true});
+  },7000);
+});
+
+setFollowUi();
+
+
+let weatherCache=null;
+let locationCache=null;
+let lastWeatherFetch=0;
+let lastWeatherCoords=null;
+
+function windDir(deg){
+  const dirs=["С","СВ","В","ЮВ","Ю","ЮЗ","З","СЗ"];
+  return dirs[Math.round(deg/45)%8];
+}
+
+function distKm(a,b){
+  const toRad=v=>v*Math.PI/180, R=6371;
+  const dLat=toRad(b.lat-a.lat), dLon=toRad(b.lng-a.lng);
+  const lat1=toRad(a.lat), lat2=toRad(b.lat);
+  const x=Math.sin(dLat/2)**2+Math.sin(dLon/2)**2*Math.cos(lat1)*Math.cos(lat2);
+  return R*(2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x)));
+}
+
+async function fetchCityCountry(lat,lng){
+  try{
+    const r=await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=en`);
+    const j=await r.json();
+    const a=j.address||{};
+    const city=a.city || a.town || a.village || a.municipality || a.county || "";
+    const cc=(a.country_code || "").toUpperCase();
+    const text=[city, cc].filter(Boolean).join(", ");
+    if(text){
+      locationCache=text;
+      qs('location').innerText=text;
+    }else if(locationCache){
+      qs('location').innerText=locationCache;
+    }
+    return text;
+  }catch(e){
+    if(locationCache) qs('location').innerText=locationCache;
+    return locationCache || "";
+  }
+}
+
+async function fetchWeather(lat,lng){
+  const now=Date.now();
+  const curr={lat,lng};
+
+  if(lastWeatherCoords){
+    const d=distKm(lastWeatherCoords, curr);
+    if(d < 3 && now-lastWeatherFetch < 600000 && weatherCache){
+      qs("weather").innerText=weatherCache;
+      if(locationCache) qs("location").innerText=locationCache;
+      return;
+    }
+  }else if(now-lastWeatherFetch < 600000 && weatherCache){
+    qs("weather").innerText=weatherCache;
+    if(locationCache) qs("location").innerText=locationCache;
+    return;
+  }
+
+  try{
+    const res=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current_weather=true`);
+    const j=await res.json();
+    const w=j.current_weather;
+    if(!w) return;
+
+    const temp=Math.round(w.temperature);
+    const wind=Math.round(w.windspeed);
+    const dir=windDir(w.winddirection);
+    weatherCache=`+${temp}°C
+${dir} ветер ${wind} м/с`;
+    lastWeatherFetch=now;
+    lastWeatherCoords={lat,lng};
+    qs("weather").innerText=weatherCache;
+
+    await fetchCityCountry(lat,lng);
+  }catch(e){
+    if(weatherCache) qs("weather").innerText=weatherCache;
+    if(locationCache) qs("location").innerText=locationCache;
+  }
+}
+
+setInterval(() => {
+  if(!lastPoint) return;
+  const meta = getStatusMeta(lastPoint, currentSessionMeta);
+  qs('updated').innerText = relTime(lastPoint.ts);
+  qs('d_updated').innerText = fmtClock(lastPoint.ts)+' ('+relTime(lastPoint.ts)+' назад)';
+  qs('status').innerText = meta.status;
+  qs('status').style.color = meta.color || '#fff';
+  qs('d_status').innerText = meta.status;
+  qs('d_status').style.color = meta.color || '#fff';
+  qs('d_signal').innerText = meta.signal;
+  qs('d_age').innerText = formatAgeAndStop(lastPoint, currentSessionMeta);
+  if(marker){
+    marker.setIcon(L.divIcon({html:buildIconHtml(lastPoint, currentSessionMeta), className:'', iconSize:[24,24], iconAnchor:[12,12]}));
+  }
+
+  const leftMs = currentSessionMeta?.paused
+    ? Math.max(0, Number(currentSessionMeta?.remainingMs || 0))
+    : (currentSessionMeta?.expiresAt ? Math.max(0, Number(currentSessionMeta.expiresAt)-Date.now()) : null);
+
+  if(leftMs !== null){
+    const txt = fmtCountdown(leftMs);
+    qs('time').innerText = txt;
+    qs('d_time').innerText = txt;
+    qs('time').className = leftMs <= 60000 ? 'time-danger' : (leftMs <= 300000 ? 'time-warn' : 'time-normal');
+    checkTimeWarnings(leftMs, !!currentSessionMeta?.paused);
+    if(!currentSessionMeta?.paused && leftMs<=0){
+      showEnd('Время действия ссылки истекло.');
+    }
+  }
+}, 1000);
+
+
+
+let slimSessionMeta = null;
+let slimLastPoint = null;
+let slimRecentPoints = {};
+
+function applySlimSession(){
+  if(!slimSessionMeta){
+    applySession(null);
+    return;
+  }
+  applySession({
+    meta: slimSessionMeta || {},
+    public: {
+      lastPoint: slimLastPoint || null,
+      recentPoints: slimRecentPoints || {}
+    }
+  });
+}
+
+function rememberSlimPoint(point){
+  if(!point) return;
+  const p = normalizePoint(point);
+  if(!Number.isFinite(p.lat) || !Number.isFinite(p.lng)) return;
+
+  const key = String(p.ts || Date.now());
+  slimRecentPoints[key] = point;
+
+  const entries = Object.entries(slimRecentPoints)
+    .sort((a,b)=>Number(normalizePoint(a[1]).ts||0)-Number(normalizePoint(b[1]).ts||0))
+    .slice(-10);
+
+  slimRecentPoints = Object.fromEntries(entries);
+}
+
+if(!sessionId){
+  showEnd(sessionTokenInfo.reason === 'invalid'
+    ? 'Неверная live-ссылка: token имеет неправильный формат.'
+    : 'Неверная live-ссылка: нет session/token.');
+}else{
+  const metaRef = ref(db, `liveSessions/${sessionId}/meta`);
+  const lastPointRef = ref(db, `liveSessions/${sessionId}/public/lastPoint`);
+  let openRegistered = false;
+
+  onValue(metaRef, snap => {
+    const meta = snap.val();
+    slimSessionMeta = meta || null;
+    if(meta && !openRegistered){
+      openRegistered = true;
+      registerSessionOpen(meta);
+    }
+    applySlimSession();
+  }, err => {
+    console.error(err);
+    showEnd('Не удалось загрузить live meta.');
+  });
+
+  onValue(lastPointRef, snap => {
+    const point = snap.val();
+    slimLastPoint = point || null;
+    rememberSlimPoint(point);
+    applySlimSession();
+  }, err => {
+    console.error(err);
+    showEnd('Не удалось загрузить live точку.');
+  });
+}
+
+
+// === Unified weather Open-Meteo v81 ===
+function weatherCodeIcon(code){
+  code = Number(code);
+  if([0].includes(code)) return "☀️";
+  if([1,2,3].includes(code)) return "🌤️";
+  if([45,48].includes(code)) return "🌫️";
+  if([51,53,55,56,57,61,63,65,66,67,80,81,82].includes(code)) return "🌧️";
+  if([71,73,75,77,85,86].includes(code)) return "❄️";
+  if([95,96,99].includes(code)) return "⛈️";
+  return "☁️";
+}
+
+async function getUnifiedWeather(lat, lon){
+  lat = Number(lat);
+  lon = Number(lon);
+  if(!Number.isFinite(lat) || !Number.isFinite(lon)) throw new Error("bad coords");
+
+  const url =
+    "https://api.open-meteo.com/v1/forecast" +
+    "?latitude=" + encodeURIComponent(lat) +
+    "&longitude=" + encodeURIComponent(lon) +
+    "&current=temperature_2m,weather_code,wind_speed_10m,wind_direction_10m" +
+    "&timezone=auto" +
+    "&wind_speed_unit=ms";
+
+  const res = await fetch(url, { cache: "no-store" });
+  if(!res.ok) throw new Error("weather http " + res.status);
+
+  const json = await res.json();
+  const cur = json.current || {};
+  const temp = Math.round(Number(cur.temperature_2m));
+  const wind = Math.round(Number(cur.wind_speed_10m));
+  const windDeg = Number(cur.wind_direction_10m);
+  const code = Number(cur.weather_code);
+  const dirs = ["С", "СВ", "В", "ЮВ", "Ю", "ЮЗ", "З", "СЗ"];
+  const windDir = Number.isFinite(windDeg) ? dirs[Math.round(windDeg / 45) % 8] : "—";
+
+  return {
+    temp,
+    wind,
+    windDir,
+    windDeg,
+    code,
+    icon: weatherCodeIcon(code),
+    text: (Number.isFinite(temp) ? (temp > 0 ? "+" + temp : String(temp)) : "—") + "°C · " + windDir + " " + (Number.isFinite(wind) ? wind : "—") + " м/с"
+  };
+}
+
+async function updateLiveUnifiedWeatherFromPoint(p){
+  if(!p) return;
+  const lat = Number(p.latitude ?? p.lat);
+  const lon = Number(p.longitude ?? p.lng ?? p.lon);
+  try{
+    const w = await getUnifiedWeather(lat, lon);
+    const weatherEl = document.getElementById("weather");
+    if(weatherEl) weatherEl.textContent = w.text;
+  }catch(e){
+    const weatherEl = document.getElementById("weather");
+    if(weatherEl) weatherEl.textContent = "Погода недоступна";
+  }
+}
+
+let __liveUnifiedWeatherLastTs = 0;
+setInterval(() => {
+  try{
+    const p = typeof lastPoint !== "undefined" ? lastPoint : (typeof displayPoint !== "undefined" ? displayPoint : null);
+    const ts = Number(p && (p.timestamp || p.ts || p.time) || 0);
+    if(p && ts !== __liveUnifiedWeatherLastTs){
+      __liveUnifiedWeatherLastTs = ts;
+      updateLiveUnifiedWeatherFromPoint(p);
+    }
+  }catch(e){}
+}, 1500);
+
+// PWA registration for MyGpsLive
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js").catch(err => console.warn("Service worker registration failed", err));
+  });
+}
+
+
+// Security fix 105: live token validation, no full token URL in events
+</script>
+</body>
+</html>
