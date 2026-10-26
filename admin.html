@@ -8454,6 +8454,38 @@ body.mgps-v2-admin #mygpsV2Weather .weatherChip *{writing-mode:horizontal-tb!imp
 
 
 
+
+<style id="mygps-mobile-sidebar-layout-overlap-fix">
+/* Mobile menu fix: keep navigation scrollable and Firebase/logout footer in its own row. */
+@media(max-width:1100px){
+ body.mgps-v2-admin #mygpsV2Sidebar{
+  display:flex!important;flex-direction:column!important;
+  top:0!important;bottom:0!important;height:100vh!important;height:100dvh!important;
+  max-height:100vh!important;max-height:100dvh!important;
+  box-sizing:border-box!important;overflow:hidden!important;
+  padding-top:max(15px,env(safe-area-inset-top))!important;
+  padding-bottom:max(12px,env(safe-area-inset-bottom))!important;
+  gap:8px!important;
+ }
+ body.mgps-v2-admin #mygpsV2Sidebar .tabs{
+  flex:1 1 auto!important;min-height:0!important;height:auto!important;
+  overflow-x:hidden!important;overflow-y:auto!important;
+  overscroll-behavior:contain!important;-webkit-overflow-scrolling:touch!important;
+  padding-bottom:8px!important;
+ }
+ body.mgps-v2-admin #mygpsV2Sidebar .mgps-v2-side-footer{
+  position:relative!important;inset:auto!important;flex:0 0 auto!important;
+  width:100%!important;max-height:30vh!important;overflow-y:auto!important;
+  box-sizing:border-box!important;margin-top:0!important;
+  padding-bottom:env(safe-area-inset-bottom)!important;
+  background:inherit!important;z-index:2!important;
+ }
+ body.mgps-v2-admin #mygpsV2Sidebar #mgpsSidebarLogout{
+  position:relative!important;flex:0 0 auto!important;margin-top:8px!important;
+ }
+}
+</style>
+
 </body>
 </html>`);
   reportWin.document.close();
@@ -17861,6 +17893,38 @@ body.mgps-v2-admin .mgps-v2-side-footer .mgps-fb-status-text{display:block!impor
  let tries=0;const timer=setInterval(()=>{tries++;applyRoleControls();moveManagementTab();ensureFooter();if(role()||tries>40)clearInterval(timer)},500);
 })();
 </script>
+
+<style id="mygps-mobile-sidebar-layout-overlap-fix">
+/* Mobile menu fix: keep navigation scrollable and Firebase/logout footer in its own row. */
+@media(max-width:1100px){
+ body.mgps-v2-admin #mygpsV2Sidebar{
+  display:flex!important;flex-direction:column!important;
+  top:0!important;bottom:0!important;height:100vh!important;height:100dvh!important;
+  max-height:100vh!important;max-height:100dvh!important;
+  box-sizing:border-box!important;overflow:hidden!important;
+  padding-top:max(15px,env(safe-area-inset-top))!important;
+  padding-bottom:max(12px,env(safe-area-inset-bottom))!important;
+  gap:8px!important;
+ }
+ body.mgps-v2-admin #mygpsV2Sidebar .tabs{
+  flex:1 1 auto!important;min-height:0!important;height:auto!important;
+  overflow-x:hidden!important;overflow-y:auto!important;
+  overscroll-behavior:contain!important;-webkit-overflow-scrolling:touch!important;
+  padding-bottom:8px!important;
+ }
+ body.mgps-v2-admin #mygpsV2Sidebar .mgps-v2-side-footer{
+  position:relative!important;inset:auto!important;flex:0 0 auto!important;
+  width:100%!important;max-height:30vh!important;overflow-y:auto!important;
+  box-sizing:border-box!important;margin-top:0!important;
+  padding-bottom:env(safe-area-inset-bottom)!important;
+  background:inherit!important;z-index:2!important;
+ }
+ body.mgps-v2-admin #mygpsV2Sidebar #mgpsSidebarLogout{
+  position:relative!important;flex:0 0 auto!important;margin-top:8px!important;
+ }
+}
+</style>
+
 </body></html>
 
 <!-- fix_115: removed broken non-module fix112 live-sync block; active live timer uses stable module sync. -->
